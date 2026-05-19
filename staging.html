@@ -66,6 +66,12 @@
     --accent-bg:rgba(59,158,255,0.1);
     --accent-bg-strong:rgba(59,158,255,0.18);
     --accent-border:rgba(59,158,255,0.35);
+    --success-bg:rgba(52,211,153,0.15);
+    --warning-bg:rgba(251,191,36,0.18);
+    --info-bg:rgba(96,165,250,0.15);
+    --danger-bg:rgba(248,113,113,0.12);
+    --shadow-md: 0 4px 12px rgba(15,23,42,0.06), 0 1px 3px rgba(15,23,42,0.04);
+    --shadow-lg: 0 10px 30px rgba(15,23,42,0.08), 0 2px 6px rgba(15,23,42,0.04);
   }
 }
 *{box-sizing:border-box}
@@ -84,26 +90,43 @@ button:active{transform:scale(0.97)}
 button:disabled{opacity:0.4;cursor:not-allowed}
 button.primary{background:var(--accent-grad);color:#fff;border-color:transparent;
   box-shadow:0 2px 8px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,0.2);font-weight:600}
-button.primary:hover{filter:brightness(1.08);box-shadow:0 4px 16px var(--accent-glow);transform:translateY(-1px)}
-button.danger{background:var(--danger);color:#fff;border-color:transparent;}
+button.primary:hover{filter:brightness(1.08);box-shadow:0 4px 16px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,0.25);transform:translateY(-1px)}
+button.danger{background:var(--danger);color:#fff;border-color:transparent;box-shadow:0 2px 8px rgba(248,113,113,0.35);font-weight:600}
+button.danger:hover{filter:brightness(1.1)}
+button.ghost-danger{color:var(--danger);border-color:var(--danger);background:transparent}
+button.ghost-danger:hover{background:var(--danger-bg)}
 input,textarea,select{font-family:inherit;font-size:14px;background:var(--bg-elev);color:var(--text);
   border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:11px 14px;width:100%;
   transition:all 0.18s ease;letter-spacing:-0.005em}
 input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-bg)}
+input[type="number"]{-moz-appearance:textfield}
+input[type="number"]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+input[type="checkbox"]{width:auto;margin:0;accent-color:var(--accent)}
+input[type="date"]{color-scheme:dark}
+@media (prefers-color-scheme:light){input[type="date"]{color-scheme:light}}
 .card{background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow-sm)}
 .muted{color:var(--text-muted)}.dim{color:var(--text-dim)}.mono{font-family:var(--font-mono)}
 .row{display:flex;align-items:center;gap:10px}.spacer{flex:1}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;flex-shrink:0}
 .badge{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:var(--radius-pill);
   font-size:12px;font-weight:500;letter-spacing:-0.005em}
+.admin-pill{background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-border);
+  padding:2px 8px;border-radius:var(--radius-pill);font-size:10px;font-weight:600;
+  text-transform:uppercase;letter-spacing:0.06em;font-family:var(--font-mono)}
 .toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(10px);
   background:var(--bg-elev-3);color:var(--text);padding:12px 22px;border-radius:var(--radius-pill);
-  border:1px solid var(--border-accent);box-shadow:var(--shadow-lg);
+  border:1px solid var(--border-accent);box-shadow:var(--shadow-lg), 0 0 0 4px rgba(59,158,255,0.08);
   font-size:13px;font-weight:500;z-index:500;opacity:0;pointer-events:none;
   transition:all 0.3s cubic-bezier(0.34,1.56,0.64,1);letter-spacing:-0.005em}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .loader{display:inline-block;width:16px;height:16px;border:2px solid var(--border-strong);
   border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+.sync-pill{display:inline-flex;align-items:center;gap:7px;font-size:11px;color:var(--text-muted);
+  background:var(--bg-elev-2);border:1px solid var(--border);padding:5px 11px;border-radius:var(--radius-pill);
+  font-family:var(--font-mono);letter-spacing:0.02em}
+.sync-pill .pulse{width:6px;height:6px;border-radius:50%;background:var(--success);animation:pulse-ring 2s infinite}
+@keyframes pulse-ring{0%{box-shadow:0 0 0 0 rgba(52,211,153,0.5)}70%{box-shadow:0 0 0 6px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
 .modal-backdrop{position:fixed;inset:0;background:rgba(5,10,25,0.7);backdrop-filter:blur(8px);
   -webkit-backdrop-filter:blur(8px);z-index:400;display:flex;align-items:center;justify-content:center;
   padding:16px;animation:fadeIn 0.2s ease}
@@ -112,63 +135,86 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);
   animation:slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1)}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes slideUp{from{opacity:0;transform:translateY(20px) scale(0.96)}to{opacity:1;transform:translateY(0) scale(1)}}
-
-/* Unified 2D Shimmering Elegance */
-.shimmering-banner {
-  background: linear-gradient(120deg, var(--bg-elev-2) 0%, var(--accent-bg-strong) 50%, var(--bg-elev-2) 100%);
-  background-size: 200% auto;
-  animation: fluidShimmer 4s linear infinite;
-  border: 1px solid var(--accent-border);
-  border-radius: var(--radius-sm);
-  padding: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  color: var(--text);
-  box-shadow: var(--shadow-sm);
-}
-@keyframes fluidShimmer {
-  to { background-position: 200% center; }
-}
-
+.muscle-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+.muscle-chip{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;
+  background:var(--bg-elev-2);border-radius:var(--radius-sm);font-size:13px;cursor:pointer;user-select:none;
+  border:1px solid transparent;transition:all 0.15s ease}
+.muscle-chip:hover{background:var(--bg-elev-3)}
+.muscle-chip.primary{background:var(--accent-bg-strong);color:var(--accent);border-color:var(--accent-border)}
+.muscle-chip.secondary{background:var(--warning-bg);color:var(--warning);border-color:var(--warning)}
+.alt-row{display:flex;gap:6px;align-items:center;margin-bottom:6px}.alt-row input{flex:1}
 .tab-bar{display:flex;background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius);
   padding:4px;gap:4px;margin-bottom:16px}
 .tab-bar button{flex:1;padding:9px 12px;border:none;background:transparent;font-size:13px;
   color:var(--text-muted);border-radius:8px;transition:all 0.2s ease;letter-spacing:-0.005em}
 .tab-bar button:hover{color:var(--text);background:var(--bg-elev-2)}
-.tab-bar button.active{background:var(--accent-grad);color:#fff;font-weight:600;}
-
-.day-card, .exercise-card { background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius);
+.tab-bar button.active{background:var(--accent-grad);color:#fff;font-weight:600;box-shadow:0 2px 8px var(--accent-glow)}
+.day-card{background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius);
   padding:14px 16px;margin-bottom:10px;display:block;width:100%;text-align:left;font:inherit;color:inherit;
-  cursor:pointer;transition:all 0.2s ease; position:relative; overflow:hidden;}
-.day-card:hover, .exercise-card:hover { border-color:var(--border-accent); transform:translateY(-1px); }
+  cursor:pointer;transition:all 0.2s ease;position:relative;overflow:hidden}
+.day-card::before{content:'';position:absolute;inset:0;background:var(--accent-grad-soft);
+  opacity:0;transition:opacity 0.25s;pointer-events:none}
+.day-card:hover{border-color:var(--border-accent);transform:translateY(-1px);box-shadow:var(--shadow-md)}
+.day-card:hover::before{opacity:1}
+.day-card:active{transform:translateY(0)}
+.exercise-card{background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:12px 14px;margin-bottom:8px;display:block;width:100%;text-align:left;font:inherit;color:inherit;
+  cursor:pointer;transition:all 0.18s ease}
+.exercise-card:hover{background:var(--bg-elev-2);border-color:var(--border-strong)}
+.icon-tile{width:42px;height:42px;border-radius:12px;background:var(--accent-bg);border:1px solid var(--accent-border);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--accent)}
 .user-pill{display:inline-flex;align-items:center;gap:7px;padding:5px 12px 5px 6px;
   border-radius:var(--radius-pill);font-size:13px;background:var(--bg-elev);border:1px solid var(--border);
-  font-weight:500;cursor:pointer;transition:all 0.15s;}
-.user-pill:hover{background:var(--accent-bg); border-color:var(--accent-border);}
+  font-weight:500;cursor:pointer;transition:all 0.15s;font-family:inherit}
+.user-pill:hover{background:var(--bg-elev-2);border-color:var(--border-strong)}
+.section-label{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.1em;
+  color:var(--text-dim);margin-bottom:10px;font-weight:500}
+.set-row{margin-bottom:8px;padding:10px;background:var(--bg-elev-2);border:1px solid var(--border);
+  border-radius:var(--radius-sm);transition:all 0.15s ease}
+.set-row:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.user-dots{display:flex;gap:3px;align-items:center}
+.user-dots .dot{width:8px;height:8px;transition:all 0.2s}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:var(--text-dim)}
+::selection{background:var(--accent-bg-strong);color:var(--text)}
 .history-entry{padding:12px;background:var(--bg-elev-2);border:1px solid var(--border);
-  border-radius:var(--radius-sm);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;}
-.action-btn { background:transparent; border:none; padding:4px; color:var(--text-muted); font-size:16px; border-radius:4px;}
-.action-btn:hover { color:var(--text); background:var(--border-strong);}
-.read-only-mask { opacity: 0.6; pointer-events: none; }
+  border-radius:var(--radius-sm);margin-bottom:6px;transition:all 0.15s}
+.history-entry:hover{border-color:var(--border-strong)}
+.banner{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:var(--radius-sm);
+  font-size:13px;margin-bottom:14px}
+.banner i{font-size:16px;flex-shrink:0;margin-top:1px}
+.banner-info{background:var(--info-bg);color:var(--info);border:1px solid rgba(96,165,250,0.25)}
+.banner-warning{background:var(--warning-bg);color:var(--warning);border:1px solid rgba(251,191,36,0.25)}
+.stat-card{background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius);
+  padding:16px;box-shadow:var(--shadow-sm);transition:all 0.2s}
+.stat-card:hover{border-color:var(--border-strong)}
+.stat-value{font-size:24px;font-weight:600;font-family:var(--font-mono);letter-spacing:-0.02em}
+.stat-label{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim)}
+.chart-bar-rect{transition:all 0.4s cubic-bezier(0.34,1.56,0.64,1)}
+.chart-bar-rect:hover{filter:brightness(1.15)}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.fade-in{animation:fadeInUp 0.4s ease backwards}
 </style>
 </head>
 <body>
-<div id="app">
-  <div style="text-align:center;padding:60px 20px;color:var(--text-muted);font-size:14px;">
-    <div class="loader" style="margin:0 auto 14px;"></div>
-    <div>Cargando Isla...</div>
-  </div>
-</div>
+<div id="app"><div style="text-align:center;padding:60px 20px;color:var(--text-muted);font-size:14px;">
+  <div class="loader" style="margin:0 auto 14px;"></div>
+  <div>Cargando…</div>
+</div></div>
 <div id="toast" class="toast"></div>
 <div id="modalRoot"></div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, getDocs, updateDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import {
+  getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, getDocs
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
-// ====== FIREBASE CONFIG ======
+// ============================================================
+// FIREBASE CONFIG
+// ============================================================
 const firebaseConfig = {
   apiKey: "AIzaSyCtBoM682hSEh2Og7PHbsO7wDGHwqiCiKU",
   authDomain: "progreso-de-rutinas.firebaseapp.com",
@@ -177,223 +223,2223 @@ const firebaseConfig = {
   messagingSenderId: "1080289668591",
   appId: "1:1080289668591:web:f902974b98717bc71b1a1a"
 };
-
-const fbApp = initializeApp(firebaseConfig);
-const db = getFirestore(fbApp);
-
-// ====== STATE & GROUPS ======
-const state = {
-  currentGroup: localStorage.getItem('currentGroup') || "jazmin-y-buddy-2026",
-  joinedGroups: JSON.parse(localStorage.getItem('joinedGroups') || '["jazmin-y-buddy-2026"]'),
-  users: [], currentUser: localStorage.getItem('currentUser') || null,
-  spectatorId: null, logs: [],
-  view: 'home', routineSource: 'shared', // 'shared' or 'personal'
-  dailyDate: new Date().toISOString().split('T')[0] // Format: YYYY-MM-DD
-};
-
+const DEFAULT_GROUP = "jazmin-y-buddy-2026";
+const LS_GROUP = 'gym_current_group_v3';
+const LS_GROUPS = 'gym_joined_groups_v3';
+// ============================================================
+// ADMIN — solo este nombre (sin distinguir mayúsculas) puede eliminar usuarios
+// y cambiar la contraseña de invitación.
 const ADMIN_NAME = "Jazmin";
+// Contraseña de invitación inicial. Se puede cambiar desde la app (admin only).
+const INVITATION_PASSWORD_DEFAULT = "gym2026";
+// ============================================================
 
-// ====== ROUTINE STRUCTURE (7 DAYS) ======
-const DAY_ORDER = ['lunes','martes','miercoles','jueves','viernes','sabado','domingo'];
-const DEFAULT_ROUTINE = {
-  lunes: {label:'Lunes',focus:'Descanso / Full Body',icon:'ti-barbell',exercises:[]},
-  martes: {label:'Martes',focus:'Pierna (Cuádriceps)',icon:'ti-run',exercises:[]},
-  miercoles: {label:'Miércoles',focus:'Espalda / Bíceps',icon:'ti-stretching',exercises:[]},
-  jueves: {label:'Jueves',focus:'Pierna (Femoral)',icon:'ti-run',exercises:[]},
-  viernes: {label:'Viernes',focus:'Pecho / Hombro',icon:'ti-stretching',exercises:[]},
-  sabado: {label:'Sábado',focus:'Full Body',icon:'ti-barbell',exercises:[]},
-  domingo: {label:'Domingo',focus:'Descanso Activo',icon:'ti-walk',exercises:[]}
+let db; let firebaseReady = false;
+try {
+  const fbApp = initializeApp(firebaseConfig);
+  db = getFirestore(fbApp);
+  firebaseReady = !firebaseConfig.apiKey.startsWith("REEMPLAZA");
+} catch (e) { console.error("Firebase init error:", e); }
+
+// ====== MUSCLES ======
+const MUSCLES = {
+  chest:{label:'Pecho'}, abs:{label:'Abdominales'}, obliques:{label:'Oblicuos'},
+  quads:{label:'Cuádriceps'}, adductors:{label:'Aductores'}, bicepsF:{label:'Bíceps'},
+  forearmsF:{label:'Antebrazos'}, shouldersF:{label:'Deltoides ant.'}, neckF:{label:'Cuello'},
+  calvesF:{label:'Tibiales'}, upperBack:{label:'Trapecio'}, lats:{label:'Dorsal ancho'},
+  midBack:{label:'Romboides'}, lowerBack:{label:'Lumbar'}, triceps:{label:'Tríceps'},
+  forearmsB:{label:'Antebrazos (post)'}, shouldersB:{label:'Deltoides post.'},
+  glutes:{label:'Glúteos'}, hamstrings:{label:'Femorales'}, calves:{label:'Pantorrillas'},
+  abductors:{label:'Abductores'}
 };
+const MUSCLE_IDS = Object.keys(MUSCLES);
+
+const DAY_ORDER = ['lunes','martes','miercoles','jueves','viernes','sabado','domingo'];
+
+const DEFAULT_ROUTINE = {
+  lunes:{label:'Lunes',focus:'Descanso / rutina libre',icon:'ti-moon',exercises:[]},
+  martes:{label:'Martes',focus:'Pierna (Cuádriceps)',icon:'ti-run',exercises:[
+    {name:'Hack Squat',video:'how to do hack squat machine',primary:['quads','glutes'],secondary:['hamstrings','calves','lowerBack'],alts:['Sentadilla con barra','Prensa inclinada','Sentadilla búlgara con mancuernas']},
+    {name:'Prensa (Pies en medio)',video:'leg press feet middle technique',primary:['quads'],secondary:['glutes','hamstrings','adductors'],alts:['Hack squat','Sentadilla goblet','Sentadilla libre']},
+    {name:'Zancada en prensa (Unilateral)',video:'single leg press unilateral',primary:['quads','glutes'],secondary:['hamstrings','adductors','calves'],alts:['Zancadas con mancuernas','Sentadilla búlgara','Step-ups con peso']},
+    {name:'Abductores (Afuera)',video:'hip abductor machine outer',primary:['abductors','glutes'],secondary:[],alts:['Abducción con banda','Patada lateral en polea','Side-lying leg raises']},
+    {name:'Extensión de cuádriceps (Hasta fallo)',video:'leg extension machine quads',primary:['quads'],secondary:[],alts:['Sentadilla sissy','Sentadilla en pared','Zancadas estáticas']},
+    {name:'Pantorrilla',video:'calf raise machine standing',primary:['calves'],secondary:[],alts:['Pantorrilla en prensa','Pantorrilla sentado','Pantorrilla con mancuerna a una pierna']}
+  ]},
+  miercoles:{label:'Miércoles',focus:'Espalda / Bíceps',icon:'ti-stretching',exercises:[
+    {name:'Máquina remo (Amplitud)',video:'seated cable row wide grip',primary:['lats','midBack'],secondary:['bicepsF','shouldersB','forearmsF'],alts:['Remo con barra inclinado','Remo con mancuerna','Remo en máquina con agarre ancho']},
+    {name:'Barra T (Densidad)',video:'T-bar row technique',primary:['midBack','lats'],secondary:['bicepsF','shouldersB','lowerBack'],alts:['Remo Pendlay','Remo con mancuerna pesado','Remo en máquina densidad']},
+    {name:'Jalón Barra Larga / Torito (Amplitud)',video:'lat pulldown wide grip',primary:['lats'],secondary:['bicepsF','midBack','shouldersB','forearmsF'],alts:['Dominadas asistidas','Jalón en máquina con agarre ancho','Pull-over en polea']},
+    {name:'Jalón Cerrado (Densidad V)',video:'close grip V handle lat pulldown',primary:['lats','midBack'],secondary:['bicepsF','forearmsF'],alts:['Dominadas con agarre supino','Remo bajo en V','Jalón neutro']},
+    {name:'Unilateral (Codos a la costilla) - Densidad',video:'single arm dumbbell row elbow to rib',primary:['lats','midBack'],secondary:['bicepsF','shouldersB','obliques'],alts:['Remo Meadows','Remo en polea unilateral','Remo Kroc']},
+    {name:'Bíceps Predicador',video:'preacher curl technique',primary:['bicepsF'],secondary:['forearmsF'],alts:['Curl en banco Scott con barra Z','Curl concentrado','Curl predicador en máquina']},
+    {name:'Bíceps Polea / Mancuernas',video:'bicep cable curl dumbbell',primary:['bicepsF'],secondary:['forearmsF','shouldersF'],alts:['Curl martillo','Curl con barra Z','Curl 21s']}
+  ]},
+  jueves:{label:'Jueves',focus:'Pierna (Femoral)',icon:'ti-run',exercises:[
+    {name:'Hip Thrust',video:'hip thrust barbell technique',primary:['glutes'],secondary:['hamstrings','quads','lowerBack'],alts:['Hip thrust en máquina','Puente de glúteo con mancuerna','Empuje de cadera unilateral']},
+    {name:'Curl Femoral',video:'lying leg curl hamstring',primary:['hamstrings'],secondary:['calves','glutes'],alts:['Curl femoral sentado','Curl nórdico','Curl femoral de pie']},
+    {name:'Peso Muerto',video:'romanian deadlift technique',primary:['hamstrings','glutes','lowerBack'],secondary:['lats','forearmsF','upperBack'],alts:['Peso muerto rumano con mancuernas','Peso muerto con kettlebell','Buenos días con barra']},
+    {name:'Sentadilla Sumo',video:'sumo squat dumbbell',primary:['glutes','adductors','quads'],secondary:['hamstrings','lowerBack'],alts:['Sentadilla goblet ancha','Peso muerto sumo','Sentadilla sumo con kettlebell']},
+    {name:'Patada de Glúteos',video:'glute kickback cable machine',primary:['glutes'],secondary:['hamstrings','lowerBack'],alts:['Patada de glúteo en polea','Patada con banda','Patada en cuadrupedia']},
+    {name:'Abductores (Adentro)',video:'adductor machine inner thigh',primary:['adductors'],secondary:[],alts:['Sentadilla copa con piernas anchas','Abducción de cadera con banda','Sentadilla cosaco']},
+    {name:'Espalda baja / Glúteos (Hiperextensión)',video:'hyperextension lower back glutes',primary:['lowerBack','glutes'],secondary:['hamstrings'],alts:['Buenos días','Hip thrust','Reverse hyper']}
+  ]},
+  viernes:{label:'Viernes',focus:'Pecho / Hombro / Tríceps',icon:'ti-barbell',exercises:[
+    {name:'Banco inclinado (Barra)',video:'incline bench press barbell',primary:['chest','shouldersF'],secondary:['triceps'],alts:['Banco inclinado con mancuernas','Press inclinado en máquina Smith','Press inclinado en máquina']},
+    {name:'Prensa de pecho en máquina',video:'chest press machine technique',primary:['chest'],secondary:['shouldersF','triceps'],alts:['Press de banca con barra','Press con mancuernas plano','Fondos en paralelas']},
+    {name:'Apertura de pecho abierto (Pájaro)',video:'pec deck chest fly',primary:['chest'],secondary:['shouldersF'],alts:['Aperturas con mancuernas','Cruce de poleas','Apertura en banco inclinado']},
+    {name:'Press militar en máquina',video:'shoulder press machine',primary:['shouldersF'],secondary:['triceps','upperBack'],alts:['Press militar con mancuernas','Press Arnold','Press de pie con barra']},
+    {name:'Elevación lateral en polea',video:'cable lateral raise shoulder',primary:['shouldersF'],secondary:['upperBack'],alts:['Elevación lateral con mancuernas','Elevación lateral en máquina','Elevación lateral con bandas']},
+    {name:'Elevación posterior en máquina (Pájaro, codos doblados)',video:'reverse pec deck rear delt',primary:['shouldersB'],secondary:['midBack','upperBack'],alts:['Pájaro con mancuernas inclinado','Face pull en polea','Apertura inversa en polea']},
+    {name:'Jalón tríceps polea V',video:'tricep pushdown V bar',primary:['triceps'],secondary:['forearmsB'],alts:['Jalón con cuerda','Jalón con barra recta','Patada de tríceps']},
+    {name:'Extensión de tríceps por encima de la cabeza',video:'overhead tricep extension cable',primary:['triceps'],secondary:['shouldersF'],alts:['Francés con mancuerna','Extensión con barra Z acostado (skullcrusher)','Extensión por encima con cuerda']},
+    {name:'Fondo de banco',video:'bench dips technique',primary:['triceps','chest'],secondary:['shouldersF'],alts:['Fondos en paralelas','Press cerrado en banco','Patada de tríceps']}
+  ]},
+  sabado:{label:'Sábado',focus:'Full Body',icon:'ti-bolt',exercises:[
+    {name:'Sentadilla con barra',video:'back squat technique',primary:['quads','glutes'],secondary:['hamstrings','lowerBack','calves','abs'],alts:['Sentadilla goblet','Hack squat','Prensa de piernas']},
+    {name:'Press de banca',video:'bench press flat barbell',primary:['chest'],secondary:['triceps','shouldersF'],alts:['Press con mancuernas','Press en máquina','Fondos']},
+    {name:'Peso muerto',video:'conventional deadlift technique',primary:['hamstrings','glutes','lowerBack'],secondary:['lats','upperBack','forearmsF','quads'],alts:['Peso muerto rumano','Peso muerto con trap bar','Peso muerto sumo']},
+    {name:'Dominadas / Jalón al pecho',video:'pull ups lat pulldown',primary:['lats'],secondary:['bicepsF','midBack','shouldersB','forearmsF'],alts:['Jalón al pecho','Dominadas asistidas','Remo invertido']},
+    {name:'Press militar',video:'overhead press standing',primary:['shouldersF'],secondary:['triceps','upperBack','abs'],alts:['Press militar con mancuernas','Press en máquina','Press Arnold']},
+    {name:'Curl de bíceps + Tríceps en polea',video:'bicep curl tricep pushdown superset',primary:['bicepsF','triceps'],secondary:['forearmsF','forearmsB'],alts:['Curl martillo + francés','Curl predicador + jalón cuerda','Curl Z + extensión sobre cabeza']}
+  ]},
+  domingo:{label:'Domingo',focus:'Descanso / rutina libre',icon:'ti-sun',exercises:[]}
+};
+
+// ====== STATE ======
+const state = {
+  view: 'home',
+  currentGroup: loadCurrentGroup(),
+  joinedGroups: loadJoinedGroups(),
+  currentUser: null,
+  currentDay: null,
+  currentExerciseIdx: null,
+  compareMode: 'week',
+  logs: {},
+  users: [],
+  sharedRoutine: null,
+  personalRoutines: {},
+  routineSource: {},      // { dayKey: 'shared'|'personal' }
+  invitationPassword: '',
+  groupConfig: {},
+  dailyDate: new Date().toISOString().slice(0,10),
+  editingSession: null,
+  setupStep: null,
+  pendingUserId: null,
+  pendingNewName: null,
+  showAlts: false,
+  showMuscles: false,
+  syncing: false,
+  modalOpen: null,
+};
+const root = document.getElementById('app');
+const modalRoot = document.getElementById('modalRoot');
+const LS_ME = 'gym_me_v2';
+const LS_AUTH = 'gym_auth_v2';
+const LS_SOURCE = 'gym_routinesource_v2'; // per-day choice (per device)
+
+// ====== GROUP HELPERS ======
+function groupPath(){ return state.currentGroup || DEFAULT_GROUP; }
+function groupLocalKey(base, groupId = groupPath()){ return groupId === DEFAULT_GROUP ? base : base + ':' + groupId; }
+function loadCurrentGroup(){ return localStorage.getItem(LS_GROUP) || DEFAULT_GROUP; }
+function saveCurrentGroup(groupId){ localStorage.setItem(LS_GROUP, groupId); }
+function loadJoinedGroups(){
+  try {
+    const groups = JSON.parse(localStorage.getItem(LS_GROUPS) || 'null');
+    return Array.isArray(groups) && groups.length ? Array.from(new Set([DEFAULT_GROUP, ...groups])) : [DEFAULT_GROUP];
+  } catch { return [DEFAULT_GROUP]; }
+}
+function saveJoinedGroups(groups){ localStorage.setItem(LS_GROUPS, JSON.stringify(Array.from(new Set([DEFAULT_GROUP, ...groups])))); }
+function rememberGroup(groupId){ state.joinedGroups = Array.from(new Set([DEFAULT_GROUP, ...state.joinedGroups, groupId])); saveJoinedGroups(state.joinedGroups); }
+function forgetGroup(groupId){ state.joinedGroups = state.joinedGroups.filter(g => g !== groupId); saveJoinedGroups(state.joinedGroups); }
+function slugGroupName(name){ return String(name || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,48); }
+function normalizeRoutine(routine){ return { ...DEFAULT_ROUTINE, ...(routine || {}) }; }
+function defaultGroupConfig(groupId = groupPath()){
+  return { invitationPassword: INVITATION_PASSWORD_DEFAULT, groupName: groupId, createdBy: null, adminIds: [], createdAt: Date.now() };
+}
+function normalizeGroupConfig(cfg, groupId = groupPath()){
+  return { ...defaultGroupConfig(groupId), ...(cfg || {}), invitationPassword: (cfg && cfg.invitationPassword) || INVITATION_PASSWORD_DEFAULT };
+}
+// ====== STORAGE ======
+async function loadConfig(){
+  if (!firebaseReady) return normalizeGroupConfig(JSON.parse(localStorage.getItem(groupLocalKey('config'))||'null'));
+  try {
+    const snap = await getDoc(doc(db,'salas',groupPath(),'meta','config'));
+    return normalizeGroupConfig(snap.exists() ? snap.data() : null);
+  } catch(e){ console.error(e); return defaultGroupConfig(); }
+}
+async function saveConfig(cfg){
+  const merged = normalizeGroupConfig({ ...state.groupConfig, ...cfg });
+  state.groupConfig = merged;
+  state.invitationPassword = merged.invitationPassword;
+  if (!firebaseReady){ localStorage.setItem(groupLocalKey('config'), JSON.stringify(merged)); return; }
+  try { await setDoc(doc(db,'salas',groupPath(),'meta','config'), merged); }
+  catch(e){ console.error(e); toast('Error al guardar config'); }
+}
+async function loadUsers(){
+  if (!firebaseReady) return JSON.parse(localStorage.getItem(groupLocalKey('users'))||'[]');
+  try {
+    const snap = await getDoc(doc(db,'salas',groupPath(),'meta','users'));
+    return snap.exists() ? (snap.data().users || []) : [];
+  } catch(e){ console.error(e); return []; }
+}
+async function saveUsers(users){
+  if (!firebaseReady){ localStorage.setItem(groupLocalKey('users'), JSON.stringify(users)); return; }
+  state.syncing = true;
+  try { await setDoc(doc(db,'salas',groupPath(),'meta','users'), { users }); }
+  catch(e){ console.error(e); toast('Error al guardar'); }
+  state.syncing = false;
+}
+async function loadSharedRoutine(){
+  if (!firebaseReady){
+    const r = JSON.parse(localStorage.getItem(groupLocalKey('sharedRoutine'))||'null');
+    if (r) return normalizeRoutine(r);
+    localStorage.setItem(groupLocalKey('sharedRoutine'), JSON.stringify(normalizeRoutine(DEFAULT_ROUTINE)));
+    return normalizeRoutine(DEFAULT_ROUTINE);
+  }
+  try {
+    const snap = await getDoc(doc(db,'salas',groupPath(),'routines','shared'));
+    if (snap.exists() && snap.data().routine) return normalizeRoutine(snap.data().routine);
+    await setDoc(doc(db,'salas',groupPath(),'routines','shared'), { routine: normalizeRoutine(DEFAULT_ROUTINE) });
+    return normalizeRoutine(DEFAULT_ROUTINE);
+  } catch(e){ console.error(e); return normalizeRoutine(DEFAULT_ROUTINE); }
+}
+async function saveSharedRoutine(routine){
+  if (!firebaseReady){ localStorage.setItem(groupLocalKey('sharedRoutine'), JSON.stringify(routine)); return; }
+  state.syncing = true;
+  try { await setDoc(doc(db,'salas',groupPath(),'routines','shared'), { routine }); }
+  catch(e){ console.error(e); toast('Error al guardar rutina'); }
+  state.syncing = false;
+}
+async function loadAllPersonalRoutines(){
+  if (!firebaseReady){
+    const out = {}; const users = JSON.parse(localStorage.getItem(groupLocalKey('users'))||'[]');
+    for (const u of users){ const r = localStorage.getItem(groupLocalKey('routine:'+u.id)); if (r) out[u.id] = JSON.parse(r); }
+    return out;
+  }
+  try {
+    const out = {};
+    const snap = await getDocs(collection(db,'salas',groupPath(),'personalRoutines'));
+    snap.forEach(d => { out[d.id] = d.data().routine || {}; });
+    return out;
+  } catch(e){ console.error(e); return {}; }
+}
+async function savePersonalRoutine(userId, routine){
+  if (!firebaseReady){ localStorage.setItem(groupLocalKey('routine:'+userId), JSON.stringify(routine)); return; }
+  state.syncing = true;
+  try { await setDoc(doc(db,'salas',groupPath(),'personalRoutines',userId), { routine }); }
+  catch(e){ console.error(e); toast('Error al guardar rutina personal'); }
+  state.syncing = false;
+}
+async function loadAllLogs(){
+  if (!firebaseReady){
+    const out = {}; const users = JSON.parse(localStorage.getItem(groupLocalKey('users'))||'[]');
+    for (const u of users){ out[u.id] = JSON.parse(localStorage.getItem(groupLocalKey('logs:'+u.id))||'{}'); }
+    return out;
+  }
+  try {
+    const out = {};
+    const snap = await getDocs(collection(db,'salas',groupPath(),'logs'));
+    snap.forEach(d => { out[d.id] = d.data(); });
+    return out;
+  } catch(e){ console.error(e); return {}; }
+}
+async function saveUserLogs(userId, logs){
+  if (!firebaseReady){ localStorage.setItem(groupLocalKey('logs:'+userId), JSON.stringify(logs)); return; }
+  state.syncing = true;
+  try { await setDoc(doc(db,'salas',groupPath(),'logs',userId), logs); }
+  catch(e){ console.error(e); toast('Error al guardar'); }
+  state.syncing = false;
+}
+async function deleteUserLogsDoc(userId){
+  if (!firebaseReady){ localStorage.removeItem(groupLocalKey('logs:'+userId)); return; }
+  try { await deleteDoc(doc(db,'salas',groupPath(),'logs',userId)); }
+  catch(e){ console.error(e); toast('Error al eliminar entrenos'); }
+}
+async function deletePersonalRoutineDoc(userId){
+  if (!firebaseReady){ localStorage.removeItem(groupLocalKey('routine:'+userId)); return; }
+  try { await deleteDoc(doc(db,'salas',groupPath(),'personalRoutines',userId)); }
+  catch(e){ console.error(e); }
+}
+function loadMe(){ return localStorage.getItem(groupLocalKey(LS_ME)) || (groupPath() === DEFAULT_GROUP ? localStorage.getItem(LS_ME) : null); }
+function saveMe(id){ localStorage.setItem(groupLocalKey(LS_ME), id); if (groupPath() === DEFAULT_GROUP) localStorage.setItem(LS_ME, id); }
+function clearMe(){ localStorage.removeItem(groupLocalKey(LS_ME)); if (groupPath() === DEFAULT_GROUP) localStorage.removeItem(LS_ME); }
+function authValid(){
+  try {
+    const a = JSON.parse(localStorage.getItem(groupLocalKey(LS_AUTH)) || (groupPath() === DEFAULT_GROUP ? localStorage.getItem(LS_AUTH) : 'null'));
+    if (!a || !a.userId || !a.ts || (a.groupId && a.groupId !== groupPath())) return false;
+    const days = (Date.now() - a.ts) / (1000*60*60*24);
+    return days < 30 && a.userId === state.currentUser;
+  } catch { return false; }
+}
+function setAuth(userId){ const v = JSON.stringify({ userId, groupId: groupPath(), ts: Date.now() }); localStorage.setItem(groupLocalKey(LS_AUTH), v); if (groupPath() === DEFAULT_GROUP) localStorage.setItem(LS_AUTH, v); }
+function clearAuth(){ localStorage.removeItem(groupLocalKey(LS_AUTH)); if (groupPath() === DEFAULT_GROUP) localStorage.removeItem(LS_AUTH); }
+function loadRoutineSource(){
+  try { return JSON.parse(localStorage.getItem(groupLocalKey(LS_SOURCE))||'{}'); } catch { return {}; }
+}
+function saveRoutineSource(src){
+  localStorage.setItem(groupLocalKey(LS_SOURCE), JSON.stringify(src));
+}
+
+function blankRoutine(){
+  const out = {};
+  for (const day of DAY_ORDER){
+    const base = DEFAULT_ROUTINE[day] || { label: day, focus: '', icon:'ti-barbell', exercises: [] };
+    out[day] = { ...base, exercises: [] };
+  }
+  return out;
+}
+async function loadGroupState(){
+  const cfg = await loadConfig();
+  state.groupConfig = cfg;
+  state.invitationPassword = cfg.invitationPassword || INVITATION_PASSWORD_DEFAULT;
+  if (firebaseReady && !cfg.createdAt){
+    await saveConfig(defaultGroupConfig());
+  }
+  state.users = await loadUsers();
+  state.sharedRoutine = normalizeRoutine(await loadSharedRoutine());
+  state.personalRoutines = await loadAllPersonalRoutines();
+  state.logs = await loadAllLogs();
+  state.routineSource = loadRoutineSource();
+}
+function chooseInitialViewForGroup(){
+  const meId = loadMe();
+  if (meId && state.users.find(u=>u.id===meId) && authValid()){
+    state.currentUser = meId; state.view = 'home'; state.setupStep = null;
+  } else if (state.users.length === 0){
+    state.currentUser = null; state.setupStep = 'newUser'; state.view = 'setup';
+  } else if (meId && state.users.find(u=>u.id===meId)){
+    state.currentUser = null; state.pendingUserId = meId; state.setupStep = 'enterPin'; state.view = 'setup';
+  } else {
+    state.currentUser = null; state.setupStep = 'pickUser'; state.view = 'setup';
+  }
+}
+async function reloadGroup(){
+  unsubs.forEach(u => u && u());
+  unsubs = [];
+  await loadGroupState();
+  chooseInitialViewForGroup();
+  subscribeRealtime();
+  render();
+}
+async function switchGroup(groupId){
+  if (!groupId) return;
+  state.currentGroup = groupId;
+  saveCurrentGroup(groupId);
+  rememberGroup(groupId);
+  state.currentDay = null;
+  state.currentExerciseIdx = null;
+  state.editingSession = null;
+  state.showAlts = false;
+  state.showMuscles = false;
+  await reloadGroup();
+}
+async function createGroup(groupId, groupName, invitationPassword, routineMode){
+  let me = state.users.find(u => u.id === state.currentUser);
+  if (!me && window._pendingGroupCreator) me = window._pendingGroupCreator;
+  if (!me){ toast('Crea tu perfil de admin para crear el grupo'); return; }
+  const safeId = slugGroupName(groupId || groupName);
+  if (!safeId){ toast('Nombre de grupo inválido'); return; }
+  const config = {
+    ...defaultGroupConfig(safeId),
+    groupName: groupName || safeId,
+    invitationPassword,
+    createdBy: me.id,
+    adminIds: [me.id],
+    createdAt: Date.now()
+  };
+  let routine = normalizeRoutine(DEFAULT_ROUTINE);
+  if (routineMode === 'blank') routine = blankRoutine();
+  if (routineMode === 'copy-current') routine = JSON.parse(JSON.stringify(state.sharedRoutine || DEFAULT_ROUTINE));
+  if (!firebaseReady){
+    localStorage.setItem(groupLocalKey('config', safeId), JSON.stringify(config));
+    localStorage.setItem(groupLocalKey('users', safeId), JSON.stringify([{ ...me }]));
+    localStorage.setItem(groupLocalKey('sharedRoutine', safeId), JSON.stringify(routine));
+  } else {
+    await setDoc(doc(db,'salas',safeId,'meta','config'), config);
+    await setDoc(doc(db,'salas',safeId,'meta','users'), { users: [{ ...me }] });
+    await setDoc(doc(db,'salas',safeId,'routines','shared'), { routine });
+  }
+  window._pendingGroupCreator = null;
+  rememberGroup(safeId);
+  state.currentGroup = safeId;
+  saveCurrentGroup(safeId);
+  saveMe(me.id);
+  setAuth(me.id);
+  await reloadGroup();
+  toast('Grupo creado');
+}
+async function joinGroup(groupId, password){
+  const safeId = slugGroupName(groupId);
+  if (!safeId){ toast('Escribe el código del grupo'); return; }
+  let cfg = null;
+  if (!firebaseReady){
+    cfg = JSON.parse(localStorage.getItem(groupLocalKey('config', safeId)) || 'null');
+  } else {
+    const snap = await getDoc(doc(db,'salas',safeId,'meta','config'));
+    cfg = snap.exists() ? snap.data() : null;
+  }
+  if (!cfg){ toast('No encontré ese grupo'); return; }
+  if ((cfg.invitationPassword || INVITATION_PASSWORD_DEFAULT) !== password){ toast('Contraseña incorrecta'); return; }
+  rememberGroup(safeId);
+  await switchGroup(safeId);
+  toast('Grupo agregado');
+}
+async function deleteCurrentGroup(){
+  if (groupPath() === DEFAULT_GROUP){ toast('El grupo original está protegido'); return; }
+  if (!isAdmin()){ toast('Solo admin'); return; }
+  const gid = groupPath();
+  if (!firebaseReady){
+    localStorage.removeItem(groupLocalKey('config', gid));
+    localStorage.removeItem(groupLocalKey('users', gid));
+    localStorage.removeItem(groupLocalKey('sharedRoutine', gid));
+  } else {
+    for (const col of ['logs','personalRoutines']){
+      const snap = await getDocs(collection(db,'salas',gid,col));
+      for (const d of snap.docs) await deleteDoc(d.ref);
+    }
+    await deleteDoc(doc(db,'salas',gid,'meta','config'));
+    await deleteDoc(doc(db,'salas',gid,'meta','users'));
+    await deleteDoc(doc(db,'salas',gid,'routines','shared'));
+  }
+  forgetGroup(gid);
+  await switchGroup(DEFAULT_GROUP);
+  toast('Grupo eliminado');
+}
 
 // ====== HELPERS ======
-const $ = id => document.getElementById(id);
-const toast = msg => {
-  const el = $('toast'); el.textContent = msg; el.classList.add('show');
-  setTimeout(()=>el.classList.remove('show'), 3000);
+const exerciseKey = (d,i) => d+':'+i;
+const today = () => new Date().toISOString().slice(0,10);
+const userColor = (i) => ['#f97316','#22c55e','#3b82f6','#a855f7','#ec4899','#eab308','#06b6d4','#84cc16'][i % 8];
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function sha(s){
+  if (!s) return '';
+  const b = new TextEncoder().encode(s);
+  const h = await crypto.subtle.digest('SHA-256', b);
+  return Array.from(new Uint8Array(h)).map(x => x.toString(16).padStart(2,'0')).join('');
+}
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(()=> el.classList.remove('show'), 1800);
+}
+function isAdmin(){
+  const me = state.users.find(u => u.id === state.currentUser);
+  if (!me) return false;
+  const admins = state.groupConfig.adminIds || [];
+  return admins.includes(me.id) || me.name.toLowerCase().trim() === ADMIN_NAME.toLowerCase().trim();
+}
+function isUserAdmin(u){
+  const admins = state.groupConfig.adminIds || [];
+  return !!u && (admins.includes(u.id) || u.name.toLowerCase().trim() === ADMIN_NAME.toLowerCase().trim());
+}
+const getEntries = (uid, ek) => (state.logs[uid] && state.logs[uid][ek]) || [];
+function exerciseNameForKey(ek){
+  const [day, idxRaw] = String(ek).split(':');
+  const idx = Number(idxRaw);
+  const routine = (state.sharedRoutine && state.sharedRoutine[day]) || getRoutineForDay(day);
+  return routine && routine.exercises && routine.exercises[idx] ? routine.exercises[idx].name : ek;
+}
+const bestSet = (e) => !e.sets || !e.sets.length ? null : e.sets.reduce((b,s)=> (s.weight||0)>(b.weight||0)?s:b, e.sets[0]);
+const totalVolume = (e) => !e.sets ? 0 : e.sets.reduce((s,x)=> s + (Number(x.reps)||0)*(Number(x.weight)||0), 0);
+const latestEntry = (uid, ek) => {
+  const a = getEntries(uid, ek);
+  return a.length ? a.slice().sort((x,y)=>x.date.localeCompare(y.date)).pop() : null;
 };
+function bucketEntries(entries, mode){
+  const b = {};
+  for (const e of entries){
+    let key;
+    if (mode==='week'){
+      const d = new Date(e.date); const day = (d.getDay()+6)%7;
+      d.setDate(d.getDate()-day); key = d.toISOString().slice(0,10);
+    } else if (mode==='month'){ key = e.date.slice(0,7); }
+    else { key = e.date.slice(0,4); }
+    if (!b[key]) b[key] = { key, maxWeight:0, totalVolume:0, sessions:0 };
+    const best = bestSet(e);
+    if (best && best.weight > b[key].maxWeight) b[key].maxWeight = Number(best.weight)||0;
+    b[key].totalVolume += totalVolume(e);
+    b[key].sessions += 1;
+  }
+  return Object.values(b).sort((x,y)=>x.key.localeCompare(y.key));
+}
+function muscleLabels(prim, sec){
+  return {
+    primLabels: (prim||[]).map(id => MUSCLES[id]?.label).filter(Boolean),
+    secLabels: (sec||[]).map(id => MUSCLES[id]?.label).filter(Boolean)
+  };
+}
 
-// ====== DATA LAYER ======
-async function loadGroupData() {
-  const usersSnap = await getDocs(collection(db, `salas/${state.currentGroup}/users`));
-  state.users = usersSnap.docs.map(d=>d.data());
-  
-  onSnapshot(collection(db, `salas/${state.currentGroup}/logs`), snap => {
-    state.logs = snap.docs.map(d=>({id: d.id, ...d.data()}));
+// Returns the routine the current user is viewing for a given day.
+function getRoutineForDay(dayKey){
+  const src = state.routineSource[dayKey] || 'shared';
+  if (src === 'personal'){
+    const pr = state.personalRoutines[state.currentUser];
+    if (pr && pr[dayKey]) return pr[dayKey];
+  }
+  return (state.sharedRoutine && state.sharedRoutine[dayKey]) || null;
+}
+function getCurrentSource(dayKey){
+  return state.routineSource[dayKey] || 'shared';
+}
+function setCurrentSource(dayKey, src){
+  state.routineSource[dayKey] = src;
+  saveRoutineSource(state.routineSource);
+}
+function getAllDayKeys(){
+  const all = new Set(DAY_ORDER);
+  if (state.sharedRoutine) Object.keys(state.sharedRoutine).forEach(k => all.add(k));
+  const pr = state.personalRoutines[state.currentUser];
+  if (pr) Object.keys(pr).forEach(k => all.add(k));
+  const ordered = DAY_ORDER.filter(k => all.has(k));
+  const extras = [...all].filter(k => !DAY_ORDER.includes(k));
+  return [...ordered, ...extras];
+}
+
+// ====== BODY DIAGRAM SVG ======
+function bodyDiagram(primary, secondary){
+  const isPrim = id => (primary||[]).includes(id);
+  const isSec = id => (secondary||[]).includes(id);
+  const fillFor = id => isPrim(id) ? 'var(--accent)' : isSec(id) ? 'var(--warning)' : 'var(--bg-elev-2)';
+  const stroke = 'var(--border-strong)';
+  const skin = 'var(--bg-elev-2)';
+  const sw = 0.7;
+  return `<svg viewBox="0 0 320 360" xmlns="http://www.w3.org/2000/svg" style="display:block;max-width:100%;height:auto;" role="img" aria-label="Diagrama de músculos">
+    <g transform="translate(20,10)">
+      <ellipse cx="60" cy="22" rx="14" ry="17" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
+      <rect x="54" y="36" width="12" height="8" fill="${fillFor('neckF')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M30 50 Q28 75 32 110 L36 175 Q40 195 50 195 L70 195 Q80 195 84 175 L88 110 Q92 75 90 50 Q80 44 60 44 Q40 44 30 50 Z" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="30" cy="55" rx="9" ry="11" fill="${fillFor('shouldersF')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="90" cy="55" rx="9" ry="11" fill="${fillFor('shouldersF')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M36 55 Q45 50 58 52 L58 85 Q45 88 38 80 Z" fill="${fillFor('chest')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M84 55 Q75 50 62 52 L62 85 Q75 88 82 80 Z" fill="${fillFor('chest')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M52 88 L68 88 L68 140 Q60 145 52 140 Z" fill="${fillFor('abs')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <line x1="60" y1="92" x2="60" y2="138" stroke="${stroke}" stroke-width="${sw}"/>
+      <line x1="52" y1="105" x2="68" y2="105" stroke="${stroke}" stroke-width="${sw}"/>
+      <line x1="52" y1="118" x2="68" y2="118" stroke="${stroke}" stroke-width="${sw}"/>
+      <line x1="52" y1="130" x2="68" y2="130" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M38 95 Q34 120 40 145 L50 140 L52 95 Z" fill="${fillFor('obliques')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M82 95 Q86 120 80 145 L70 140 L68 95 Z" fill="${fillFor('obliques')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="22" cy="85" rx="8" ry="22" fill="${fillFor('bicepsF')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="98" cy="85" rx="8" ry="22" fill="${fillFor('bicepsF')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="18" cy="125" rx="7" ry="18" fill="${fillFor('forearmsF')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="102" cy="125" rx="7" ry="18" fill="${fillFor('forearmsF')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="16" cy="150" rx="5" ry="7" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="104" cy="150" rx="5" ry="7" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M40 175 Q35 195 38 210 L82 210 Q85 195 80 175 Z" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M40 210 Q35 235 40 275 L52 275 L54 215 Z" fill="${fillFor('quads')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M80 210 Q85 235 80 275 L68 275 L66 215 Z" fill="${fillFor('quads')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M54 215 L52 275 L58 275 L60 215 Z" fill="${fillFor('adductors')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M66 215 L68 275 L62 275 L60 215 Z" fill="${fillFor('adductors')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="48" cy="282" rx="6" ry="5" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="72" cy="282" rx="6" ry="5" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M44 288 Q40 315 46 335 L52 335 L52 288 Z" fill="${fillFor('calvesF')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M76 288 Q80 315 74 335 L68 335 L68 288 Z" fill="${fillFor('calvesF')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="48" cy="343" rx="7" ry="4" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="72" cy="343" rx="7" ry="4" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
+      <text x="60" y="358" text-anchor="middle" font-size="9" fill="var(--text-dim)">Frente</text>
+    </g>
+    <g transform="translate(180,10)">
+      <ellipse cx="60" cy="22" rx="14" ry="17" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M50 36 L70 36 L74 48 L46 48 Z" fill="${fillFor('upperBack')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M30 50 Q28 75 32 110 L36 175 Q40 195 50 195 L70 195 Q80 195 84 175 L88 110 Q92 75 90 50 Q80 44 60 44 Q40 44 30 50 Z" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="30" cy="55" rx="9" ry="11" fill="${fillFor('shouldersB')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="90" cy="55" rx="9" ry="11" fill="${fillFor('shouldersB')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M38 48 L82 48 L88 75 Q60 78 32 75 Z" fill="${fillFor('upperBack')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M40 76 L80 76 L78 105 L42 105 Z" fill="${fillFor('midBack')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <line x1="60" y1="78" x2="60" y2="103" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M32 80 Q28 115 36 145 L42 145 L42 100 Z" fill="${fillFor('lats')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M88 80 Q92 115 84 145 L78 145 L78 100 Z" fill="${fillFor('lats')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M44 110 L76 110 L74 165 L46 165 Z" fill="${fillFor('lowerBack')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <line x1="60" y1="113" x2="60" y2="162" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="22" cy="85" rx="8" ry="22" fill="${fillFor('triceps')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="98" cy="85" rx="8" ry="22" fill="${fillFor('triceps')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="18" cy="125" rx="7" ry="18" fill="${fillFor('forearmsB')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="102" cy="125" rx="7" ry="18" fill="${fillFor('forearmsB')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="16" cy="150" rx="5" ry="7" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="104" cy="150" rx="5" ry="7" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M38 170 Q34 200 42 215 L60 218 L60 170 Z" fill="${fillFor('glutes')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M82 170 Q86 200 78 215 L60 218 L60 170 Z" fill="${fillFor('glutes')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M34 175 Q30 200 36 218 L40 218 L40 175 Z" fill="${fillFor('abductors')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M86 175 Q90 200 84 218 L80 218 L80 175 Z" fill="${fillFor('abductors')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M40 220 Q36 250 42 278 L54 278 L56 220 Z" fill="${fillFor('hamstrings')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M80 220 Q84 250 78 278 L66 278 L64 220 Z" fill="${fillFor('hamstrings')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="48" cy="285" rx="6" ry="4" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="72" cy="285" rx="6" ry="4" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M42 290 Q36 315 46 335 L54 335 L54 290 Z" fill="${fillFor('calves')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <path d="M78 290 Q84 315 74 335 L66 335 L66 290 Z" fill="${fillFor('calves')}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="48" cy="343" rx="7" ry="4" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
+      <ellipse cx="72" cy="343" rx="7" ry="4" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
+      <text x="60" y="358" text-anchor="middle" font-size="9" fill="var(--text-dim)">Espalda</text>
+    </g>
+  </svg>`;
+}
+
+// ====== MODAL ======
+function openModal(html, onAttach){
+  modalRoot.innerHTML = `<div class="modal-backdrop" id="mb">
+    <div class="modal" onclick="event.stopPropagation()">${html}</div>
+  </div>`;
+  document.getElementById('mb').addEventListener('click', (e) => { if (e.target.id === 'mb') closeModal(); });
+  if (onAttach) onAttach();
+}
+function closeModal(){ modalRoot.innerHTML = ''; state.modalOpen = null; }
+
+// ====== RENDER ======
+function render(){
+  if (state.view === 'setup') return renderSetup();
+  if (state.view === 'day') return renderDay();
+  if (state.view === 'exercise') return renderExercise();
+  if (state.view === 'compare') return renderCompare();
+  if (state.view === 'daily') return renderDaily();
+  if (state.view === 'settings') return renderSettings();
+  if (state.view === 'editRoutine') return renderEditRoutine();
+  if (state.view === 'editExercise') return renderEditExercise();
+  return renderHome();
+}
+
+function syncIndicator(){
+  if (!firebaseReady) return '';
+  if (state.syncing) return `<span class="sync-pill"><span class="loader" style="width:8px;height:8px;border-width:1.5px;"></span>SYNC</span>`;
+  return `<span class="sync-pill"><span class="pulse"></span>LIVE</span>`;
+}
+function configBanner(){
+  if (firebaseReady) return '';
+  return `<div class="banner banner-warning"><i class="ti ti-alert-triangle"></i>
+    <div><strong>Modo local:</strong> Los datos solo se guardan en este navegador.</div></div>`;
+}
+function headerBar(title, backFn){
+  const me = state.users.find(u=>u.id===state.currentUser);
+  const userPill = me ? `<button class="user-pill" data-action="userMenu">
+    <span class="dot" style="background:${me.color};width:14px;height:14px;border:2px solid var(--bg-elev);box-shadow:0 0 0 1px ${me.color};"></span>${esc(me.name)}
+    ${isAdmin() ? '<span class="admin-pill">admin</span>' : ''}
+    <i class="ti ti-chevron-down" style="font-size:14px;color:var(--text-muted);"></i>
+  </button>` : '';
+  return `<div class="row" style="margin-bottom:20px;">
+    ${backFn ? `<button data-action="${backFn}" aria-label="Volver" style="padding:8px 10px;border-radius:10px;border-color:var(--border);"><i class="ti ti-arrow-left" style="font-size:18px;"></i></button>` : ''}
+    <h1 style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(title)}</h1>
+    <div class="spacer"></div>
+    ${userPill}
+  </div>
+  ${configBanner()}`;
+}
+
+// ====== SETUP / AUTH ======
+function renderSetup(){
+  if (state.setupStep === 'pickUser'){
+    const userOptions = state.users.map((u,i) => `
+      <button data-action="pickUser" data-uid="${u.id}" class="day-card fade-in" style="animation-delay:${i*60}ms;display:flex;align-items:center;gap:12px;padding:16px;">
+        <span class="dot" style="background:${u.color};width:32px;height:32px;border-radius:50%;flex-shrink:0;box-shadow:0 0 0 3px var(--bg-elev), 0 0 0 4px ${u.color}33;"></span>
+        <span style="font-size:16px;font-weight:500;flex:1;text-align:left;">${esc(u.name)}</span>
+        ${isUserAdmin(u) ? '<span class="admin-pill">admin</span>' : ''}
+        <i class="ti ti-chevron-right" style="font-size:18px;color:var(--text-dim);"></i>
+      </button>`).join('');
+    root.innerHTML = `
+      <div style="max-width:420px;margin:0 auto;padding-top:32px;">
+        ${configBanner()}
+        <div class="fade-in">
+          <div style="font-size:48px;margin-bottom:8px;">💪</div>
+          <h1 style="margin-bottom:6px;">¿Quién entrena hoy?</h1>
+          <p class="muted" style="font-size:14px;margin:0 0 8px;">Grupo: <strong style="color:var(--text);">${esc(state.groupConfig.groupName || groupPath())}</strong></p>
+          <button data-action="groupMenu" style="margin-bottom:20px;padding:8px 12px;font-size:12px;background:var(--bg-elev);border-color:var(--border);">
+            <i class="ti ti-users-group" style="font-size:14px;vertical-align:-2px;color:var(--accent);"></i> Cambiar / crear grupo
+          </button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;">${userOptions}</div>
+        <button data-action="newUser" class="fade-in" style="margin-top:14px;width:100%;padding:14px;border-style:dashed;color:var(--text-muted);font-weight:500;animation-delay:${state.users.length*60}ms;">
+          <i class="ti ti-plus" style="font-size:16px;vertical-align:-2px;"></i> Agregar otra persona
+        </button>
+      </div>`;
+    attach(); return;
+  }
+  if (state.setupStep === 'enterPin'){
+    const u = state.users.find(x => x.id === state.pendingUserId);
+    const isFirstTime = u && !u.pinHash;
+    root.innerHTML = `
+      <div style="max-width:420px;margin:0 auto;padding-top:32px;">
+        ${configBanner()}
+        <button data-action="backToPick" style="background:transparent;border:none;padding:0;margin-bottom:18px;color:var(--text-muted);font-size:13px;cursor:pointer;">
+          <i class="ti ti-arrow-left" style="font-size:14px;vertical-align:-2px;"></i> Cambiar de usuario
+        </button>
+        <div class="fade-in" style="text-align:center;margin-bottom:24px;">
+          <span class="dot" style="background:${u?.color};width:64px;height:64px;border-radius:50%;box-shadow:0 0 0 5px var(--bg-elev), 0 0 0 7px ${u?.color}33;display:inline-block;margin-bottom:14px;"></span>
+          <h1 style="margin-bottom:4px;">${esc(u?.name || '')}</h1>
+          <p class="muted" style="font-size:14px;margin:0;">${isFirstTime
+            ? 'Crea tu PIN personal'
+            : 'Ingresa tu PIN'}</p>
+        </div>
+        ${isFirstTime ? `<div class="banner banner-info" style="margin-bottom:18px;"><i class="ti ti-info-circle"></i>
+          <div>Primera vez en esta versión. Crea un PIN (mínimo 4 caracteres). Lo usarás para registrar entrenos.</div></div>` : ''}
+        <input id="pinInput" type="password" inputmode="numeric" placeholder="${isFirstTime?'Tu nuevo PIN':'••••'}" maxlength="20" style="text-align:center;font-size:22px;letter-spacing:0.4em;margin-bottom:12px;padding:14px;font-family:var(--font-mono);" autofocus />
+        <button class="primary" data-action="submitPin" style="width:100%;padding:14px;font-weight:600;font-size:15px;">${isFirstTime?'Crear PIN y entrar':'Entrar'}</button>
+        <div id="pinError" style="color:var(--danger);font-size:12px;text-align:center;margin-top:10px;min-height:14px;"></div>
+        <div style="margin-top:24px;padding-top:18px;border-top:1px solid var(--border);text-align:center;">
+          <button data-action="viewOnlyMode" style="background:transparent;border:none;padding:0;color:var(--text-muted);font-size:13px;text-decoration:underline;cursor:pointer;">
+            Solo quiero ver el progreso
+          </button>
+        </div>
+      </div>`;
+    attach();
+    setTimeout(()=> document.getElementById('pinInput')?.focus(), 50);
+    document.getElementById('pinInput')?.addEventListener('keydown', (e)=>{
+      if (e.key === 'Enter') document.querySelector('[data-action="submitPin"]').click();
+    });
+    return;
+  }
+  if (state.setupStep === 'newUser'){
+    root.innerHTML = `
+      <div style="max-width:420px;margin:0 auto;padding-top:32px;">
+        ${configBanner()}
+        <div class="fade-in">
+          <div style="font-size:42px;margin-bottom:6px;">✨</div>
+          <h1 style="margin-bottom:6px;">Crear cuenta</h1>
+          <p class="muted" style="font-size:14px;margin:0 0 10px;">Grupo: <strong style="color:var(--text);">${esc(state.groupConfig.groupName || groupPath())}</strong></p>
+          <button data-action="groupMenu" style="margin-bottom:18px;padding:8px 12px;font-size:12px;background:var(--bg-elev);border-color:var(--border);">
+            <i class="ti ti-users-group" style="font-size:14px;vertical-align:-2px;color:var(--accent);"></i> Cambiar / unirse a grupo
+          </button>
+          <p class="muted" style="font-size:14px;margin:0 0 22px;">Necesitas la <strong style="color:var(--text);">contraseña de invitación</strong> del grupo.</p>
+        </div>
+        <div class="card fade-in" style="margin-bottom:14px;animation-delay:60ms;">
+          <label class="section-label" style="margin-bottom:6px;">Tu nombre</label>
+          <input id="nameInput" type="text" placeholder="Ej. Lucía" maxlength="20" style="margin-bottom:14px;" autofocus />
+          <label class="section-label" style="margin-bottom:6px;">Contraseña de invitación</label>
+          <input id="invInput" type="password" placeholder="••••••••" />
+        </div>
+        <button class="primary" data-action="checkInvite" style="width:100%;padding:14px;font-weight:600;font-size:15px;">Continuar</button>
+        <div id="invError" style="color:var(--danger);font-size:12px;text-align:center;margin-top:10px;min-height:14px;"></div>
+        ${state.users.length > 0 ? `<button data-action="backToPick" style="margin-top:14px;width:100%;padding:10px;background:transparent;border:none;font-size:13px;color:var(--text-muted);">← Volver a la lista</button>` : ''}
+      </div>`;
+    attach();
+    return;
+  }
+  if (state.setupStep === 'newUserPin'){
+    root.innerHTML = `
+      <div style="max-width:420px;margin:0 auto;padding-top:32px;">
+        ${configBanner()}
+        <div class="fade-in" style="text-align:center;margin-bottom:22px;">
+          <div style="font-size:42px;margin-bottom:6px;">🎉</div>
+          <h1 style="margin-bottom:6px;">¡Bienvenido, ${esc(state.pendingNewName)}!</h1>
+          <p class="muted" style="font-size:14px;margin:0;">Crea un PIN personal (mínimo 4 caracteres).</p>
+        </div>
+        <div class="card fade-in" style="margin-bottom:14px;animation-delay:60ms;">
+          <input id="newPin" type="password" inputmode="numeric" placeholder="Tu PIN" minlength="4" maxlength="20" style="text-align:center;font-size:20px;letter-spacing:0.4em;margin-bottom:10px;font-family:var(--font-mono);padding:13px;" autofocus />
+          <input id="newPin2" type="password" inputmode="numeric" placeholder="Repite tu PIN" minlength="4" maxlength="20" style="text-align:center;font-size:20px;letter-spacing:0.4em;font-family:var(--font-mono);padding:13px;" />
+        </div>
+        <button class="primary" data-action="finalizeUser" style="width:100%;padding:14px;font-weight:600;font-size:15px;">Crear cuenta</button>
+        <div id="pinError2" style="color:var(--danger);font-size:12px;text-align:center;margin-top:10px;min-height:14px;"></div>
+      </div>`;
+    attach();
+    return;
+  }
+}
+
+// ====== HOME ======
+function renderHome(){
+  const others = state.users.filter(u=>u.id!==state.currentUser);
+  const lastByUser = state.users.map(u=>{
+    let latest = null;
+    const ul = state.logs[u.id] || {};
+    for (const k in ul) for (const e of ul[k]){
+      if (!latest || e.date > latest.date) latest = { date:e.date, exKey:k };
+    }
+    return { user:u, latest };
+  });
+
+  const allDays = getAllDayKeys();
+  const dayCards = allDays.map((dk, i) => {
+    const r = getRoutineForDay(dk);
+    if (!r) return '';
+    const totalEx = r.exercises.length;
+    let logged = 0;
+    const ws = new Date(); ws.setDate(ws.getDate()-((ws.getDay()+6)%7));
+    const wss = ws.toISOString().slice(0,10);
+    for (let j=0;j<totalEx;j++){
+      const ek = exerciseKey(dk,j);
+      if (state.currentUser && getEntries(state.currentUser, ek).some(e => e.date >= wss)) logged++;
+    }
+    const pct = totalEx ? Math.round((logged/totalEx)*100) : 0;
+    const src = getCurrentSource(dk);
+    const sourceLabel = src === 'personal' ? `<span class="badge" style="background:var(--info-bg);color:var(--info);font-size:10px;padding:2px 8px;font-family:var(--font-mono);">PERSONAL</span>` : '';
+    return `<button data-action="openDay" data-day="${dk}" class="day-card fade-in" style="animation-delay:${i*60}ms;">
+      <div class="row" style="position:relative;z-index:1;">
+        <div class="icon-tile">
+          <i class="ti ${r.icon || 'ti-barbell'}" style="font-size:20px;"></i>
+        </div>
+        <div style="min-width:0;flex:1;">
+          <div style="font-size:15px;font-weight:600;display:flex;align-items:center;gap:6px;">${esc(r.label)} ${sourceLabel}</div>
+          <div class="muted" style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">${esc(r.focus)}</div>
+        </div>
+        ${state.currentUser ? `<div style="text-align:right;">
+          <div class="mono" style="font-size:11px;color:var(--text-dim);letter-spacing:0.02em;">${logged}/${totalEx}</div>
+          <div style="width:36px;height:4px;background:var(--bg-elev-2);border-radius:2px;margin-top:4px;overflow:hidden;">
+            <div style="height:100%;background:var(--accent-grad);width:${pct}%;transition:width 0.5s ease;border-radius:2px;"></div>
+          </div>
+        </div>` : ''}
+        <i class="ti ti-chevron-right" style="font-size:18px;color:var(--text-dim);"></i>
+      </div>
+    </button>`;
+  }).join('');
+
+  const partnersBlock = others.length ? `
+    <div style="margin-top:28px;">
+      <div class="section-label">Compañeros</div>
+      ${others.map((u,i)=>{
+        const last = lastByUser.find(x=>x.user.id===u.id);
+        const lastTxt = last && last.latest ? `Último entreno: ${last.latest.date}` : 'Sin entrenos registrados';
+        return `<div class="card fade-in" style="margin-bottom:6px;padding:12px 14px;animation-delay:${i*40}ms;">
+          <div class="row">
+            <span class="dot" style="background:${u.color};width:14px;height:14px;border:2px solid var(--bg-elev);box-shadow:0 0 0 1px ${u.color};"></span>
+            <div style="flex:1;">
+              <div style="font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px;">${esc(u.name)} ${isUserAdmin(u) ? '<span class="admin-pill">admin</span>' : ''}</div>
+              <div class="muted" style="font-size:12px;margin-top:2px;">${lastTxt}</div>
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>` : `
+    <div class="card fade-in" style="margin-top:28px;padding:16px;font-size:13px;color:var(--text-muted);text-align:center;">
+      <i class="ti ti-users" style="font-size:24px;color:var(--text-dim);display:block;margin-bottom:6px;"></i>
+      Cuando tu compañero entre, aparecerá aquí.
+    </div>`;
+
+  const me = state.users.find(u=>u.id===state.currentUser);
+  const viewOnlyBanner = !state.currentUser ? `
+    <div class="banner banner-info"><i class="ti ti-eye"></i>
+      <div>Modo solo lectura. <button data-action="switchUser" style="background:transparent;border:none;color:var(--info);text-decoration:underline;cursor:pointer;padding:0;font-size:13px;font-family:inherit;">Inicia sesión</button> para registrar entrenos.</div>
+    </div>` : '';
+
+  root.innerHTML = `
+    ${configBanner()}
+    ${viewOnlyBanner}
+    <div class="row fade-in" style="margin-bottom:20px;">
+      <div>
+        <h1>Mi rutina</h1>
+        <div class="muted" style="font-size:13px;margin-top:2px;">${new Date().toLocaleDateString('es-ES', {weekday:'long', day:'numeric', month:'long'})}</div>
+      </div>
+      <div class="spacer"></div>
+      ${syncIndicator()}
+      ${me ? `<button class="user-pill" data-action="userMenu">
+        <span class="dot" style="background:${me.color};width:14px;height:14px;border:2px solid var(--bg-elev);box-shadow:0 0 0 1px ${me.color};"></span>${esc(me.name)}
+        ${isAdmin() ? '<span class="admin-pill">admin</span>' : ''}
+        <i class="ti ti-chevron-down" style="font-size:14px;color:var(--text-muted);"></i>
+      </button>` : `<button data-action="switchUser" style="font-size:13px;">Iniciar sesión</button>`}
+    </div>
+    <div class="fade-in" style="display:flex;gap:8px;margin-bottom:20px;animation-delay:80ms;">
+      <button data-action="goCompare" style="flex:1;padding:14px;background:var(--bg-elev);display:flex;align-items:center;justify-content:center;gap:8px;font-weight:500;border:1px solid var(--border);">
+        <i class="ti ti-chart-line" style="font-size:17px;color:var(--accent);"></i> Ver progreso
+      </button>
+      <button data-action="goDaily" style="flex:1;padding:14px;background:var(--bg-elev);display:flex;align-items:center;justify-content:center;gap:8px;font-weight:500;border:1px solid var(--border);">
+        <i class="ti ti-calendar-stats" style="font-size:17px;color:var(--accent);"></i> Diario
+      </button>
+      <button data-action="goSettings" aria-label="Configuración" style="padding:14px;background:var(--bg-elev);border:1px solid var(--border);">
+        <i class="ti ti-settings" style="font-size:17px;color:var(--text-muted);"></i>
+      </button>
+    </div>
+    ${dayCards}
+    ${partnersBlock}`;
+  attach();
+}
+
+// ====== DAY ======
+function renderDay(){
+  const dayKey = state.currentDay;
+  const r = getRoutineForDay(dayKey);
+  if (!r){
+    root.innerHTML = `${headerBar('Día sin rutina', 'goHome')}
+      <p class="muted">Este día no tiene rutina asignada todavía.</p>
+      ${state.currentUser ? `<button class="primary" data-action="editRoutineNew" data-day="${dayKey}" style="margin-top:10px;">Crear rutina</button>` : ''}`;
+    attach(); return;
+  }
+  const src = getCurrentSource(dayKey);
+  const personalAvail = !!(state.personalRoutines[state.currentUser] && state.personalRoutines[state.currentUser][dayKey]);
+
+  const me = state.users.find(u=>u.id===state.currentUser);
+  const meColor = me ? me.color : 'var(--border)';
+  const exList = r.exercises.map((ex,idx)=>{
+    const ek = exerciseKey(dayKey, idx);
+    const myLatest = state.currentUser ? latestEntry(state.currentUser, ek) : null;
+    const others = state.users.filter(u=>u.id!==state.currentUser);
+    const meDot = state.currentUser ? `<span class="dot" title="Tú" style="background:${myLatest?meColor:'transparent'};border:1.5px solid ${myLatest?meColor:'var(--border-strong)'};"></span>` : '';
+    const otherDots = others.map(u=>{
+      const has = getEntries(u.id, ek).length > 0;
+      return `<span class="dot" title="${esc(u.name)}" style="background:${has?u.color:'transparent'};border:1.5px solid ${has?u.color:'var(--border-strong)'};"></span>`;
+    }).join('');
+    const { primLabels } = muscleLabels(ex.primary, ex.secondary);
+    const musclePill = primLabels.slice(0,2).join(' · ');
+    const lastInfo = myLatest ? `<span class="mono" style="font-size:11px;color:var(--accent);">${myLatest.sets.length}×</span> · ${myLatest.date}` : (state.currentUser ? 'Sin registros' : '');
+    return `<button data-action="openEx" data-idx="${idx}" class="exercise-card fade-in" style="animation-delay:${idx*30}ms;">
+      <div class="row">
+        <div style="min-width:0;flex:1;">
+          <div style="font-size:14px;font-weight:500;margin-bottom:3px;">${esc(ex.name)}</div>
+          <div class="muted" style="font-size:12px;">${esc(musclePill)}${lastInfo ? ' · '+lastInfo : ''}</div>
+        </div>
+        <div class="user-dots">${meDot}${otherDots}</div>
+        <i class="ti ti-chevron-right" style="font-size:18px;color:var(--text-dim);"></i>
+      </div>
+    </button>`;
+  }).join('');
+
+  const switcher = state.currentUser ? `
+    <div class="tab-bar">
+      <button class="${src==='shared'?'active':''}" data-action="setSource" data-src="shared">
+        <i class="ti ti-users" style="font-size:13px;vertical-align:-1px;"></i> Compartida
+      </button>
+      <button class="${src==='personal'?'active':''}" data-action="setSource" data-src="personal">
+        <i class="ti ti-user" style="font-size:13px;vertical-align:-1px;"></i> ${personalAvail ? 'Personal' : 'Crear personal'}
+      </button>
+    </div>` : '';
+
+  const editBtn = state.currentUser ? `
+    <button data-action="editRoutine" style="margin-bottom:16px;padding:11px;width:100%;background:var(--bg-elev);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:500;">
+      <i class="ti ti-edit" style="font-size:15px;color:var(--accent);"></i> Editar ${src==='personal' ? 'mi rutina' : 'rutina compartida'}
+    </button>` : '';
+
+  root.innerHTML = `
+    ${headerBar(r.label, 'goHome')}
+    <div class="muted fade-in" style="font-size:13px;margin-top:-12px;margin-bottom:16px;">${esc(r.focus)}</div>
+    ${switcher}
+    ${editBtn}
+    ${exList}`;
+  attach();
+}
+
+// ====== EXERCISE ======
+function renderExercise(){
+  const dayKey = state.currentDay;
+  const r = getRoutineForDay(dayKey);
+  const ex = r.exercises[state.currentExerciseIdx];
+  const ek = exerciseKey(dayKey, state.currentExerciseIdx);
+  const myEntries = state.currentUser ? getEntries(state.currentUser, ek).slice().sort((a,b)=>b.date.localeCompare(a.date)) : [];
+  const lastEntry = myEntries[0]; const prevEntry = myEntries[1];
+  const editing = state.editingSession && state.editingSession.uid === state.currentUser && state.editingSession.ek === ek
+    ? getEntries(state.currentUser, ek).find(e => e.date === state.editingSession.date)
+    : null;
+  const formEntry = editing || lastEntry;
+
+  let formHtml = '';
+  if (state.currentUser){
+    const initialCount = formEntry ? formEntry.sets.length : 4;
+    const setRows = [];
+    for (let i=0;i<initialCount;i++){
+      const set = formEntry && formEntry.sets[i] ? formEntry.sets[i] : null;
+      const ph_r = lastEntry ? (lastEntry.sets[i] && lastEntry.sets[i].reps) || '' : '';
+      const ph_w = lastEntry ? (lastEntry.sets[i] && lastEntry.sets[i].weight) || '' : '';
+      const ph_n = lastEntry ? (lastEntry.sets[i] && lastEntry.sets[i].note) || '' : '';
+      setRows.push(`<div class="set-row">
+        <div style="display:grid;grid-template-columns:30px 1fr 1fr 28px;gap:8px;align-items:center;margin-bottom:6px;">
+          <div class="mono" style="font-size:13px;text-align:center;font-weight:600;color:var(--accent);">${i+1}</div>
+          <input type="number" class="reps-in" inputmode="numeric" min="0" value="${set ? esc(set.reps) : ''}" placeholder="${ph_r || 'reps'}" style="text-align:center;padding:9px;" />
+          <input type="number" class="weight-in" inputmode="decimal" step="0.5" min="0" value="${set ? esc(set.weight) : ''}" placeholder="${ph_w ? ph_w+' lb' : 'peso lb'}" style="text-align:center;padding:9px;" />
+          <button class="del-set" aria-label="Eliminar" style="padding:4px;border:none;color:var(--text-dim);background:transparent;"><i class="ti ti-x" style="font-size:14px;"></i></button>
+        </div>
+        <input type="text" class="note-in" value="${set && set.note ? esc(set.note) : ''}" placeholder="${ph_n ? 'Nota anterior: '+esc(ph_n) : 'Nota del set (opcional)'}" maxlength="120" style="width:100%;font-size:12px;padding:7px 11px;" />
+      </div>`);
+    }
+    const sessionNotePh = lastEntry && lastEntry.note ? 'Nota anterior: ' + lastEntry.note.slice(0,60) : 'Cómo te sentiste, observaciones, ajustes…';
+    formHtml = `<div class="card" style="margin-bottom:18px;">
+      <div class="row" style="margin-bottom:14px;">
+        <h2>${editing ? 'Editar sesión' : 'Registrar sesión'}</h2>
+        <div class="spacer"></div>
+        <input type="date" id="sessionDate" value="${editing ? esc(editing.date) : today()}" style="width:auto;padding:7px 11px;font-size:13px;font-family:var(--font-mono);" />
+      </div>
+      ${editing ? `<div class="banner banner-info" style="margin-bottom:12px;"><i class="ti ti-edit"></i><div>Editando la sesión del ${esc(editing.date)}. Puedes cambiar la fecha, sets, peso, reps y notas.</div></div>` : ''}
+      <div class="dim" style="display:grid;grid-template-columns:30px 1fr 1fr 28px;gap:8px;margin-bottom:8px;padding:0 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;font-family:var(--font-mono);">
+        <div style="text-align:center;">SET</div><div style="text-align:center;">REPS</div><div style="text-align:center;">PESO (LB)</div><div></div>
+      </div>
+      <div id="setsContainer">${setRows.join('')}</div>
+      <button data-action="addSet" style="margin-top:6px;width:100%;padding:11px;border-style:dashed;color:var(--text-muted);">
+        <i class="ti ti-plus" style="font-size:14px;vertical-align:-2px;"></i> Agregar set
+      </button>
+      <div style="margin-top:16px;">
+        <label class="section-label" style="margin-bottom:6px;">
+          <i class="ti ti-message" style="font-size:11px;vertical-align:-1px;"></i> Comentario general
+        </label>
+        <textarea id="sessionNote" rows="2" maxlength="300" placeholder="${esc(sessionNotePh)}" style="resize:vertical;font-family:inherit;">${editing && editing.note ? esc(editing.note) : ''}</textarea>
+      </div>
+      <button class="primary" data-action="saveSession" style="margin-top:12px;width:100%;padding:13px;font-weight:600;font-size:15px;">${editing ? 'Actualizar sesión' : 'Guardar sesión'}</button>
+      ${editing ? `<button data-action="cancelEditSession" style="margin-top:8px;width:100%;padding:11px;background:var(--bg-elev);border:1px solid var(--border);">Cancelar edición</button>` : ''}
+      <div id="saveStatus" style="font-size:12px;color:var(--success);text-align:center;margin-top:8px;min-height:14px;"></div>
+    </div>`;
+  }
+
+  const historyRows = [];
+  for (const u of state.users){
+    const entries = getEntries(u.id, ek).slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+    for (const e of entries){
+      const best = bestSet(e); const vol = totalVolume(e);
+      const setNotes = (e.sets||[]).map((s,i)=> s.note ? `Set ${i+1}: ${s.note}` : null).filter(Boolean);
+      historyRows.push({ date:e.date, user:u, ek, uid:u.id,
+        summary:`${e.sets.length} sets · max ${best ? best.weight+'lb × '+best.reps : '–'} · vol ${Math.round(vol)}`,
+        sessionNote: e.note || null, setNotes });
+    }
+  }
+  historyRows.sort((a,b)=>b.date.localeCompare(a.date));
+  const historyList = historyRows.slice(0,8).map(h => `<div class="history-entry">
+    <div class="row">
+      <span class="dot" style="background:${h.user.color};"></span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:500;">${esc(h.user.name)} <span class="mono dim" style="font-weight:400;font-size:11px;">· ${h.date}</span></div>
+        <div class="muted mono" style="font-size:11px;margin-top:2px;">${h.summary}</div>
+      </div>
+      ${state.currentUser && h.uid === state.currentUser ? `<div style="display:flex;gap:4px;">
+        <button data-action="editSession" data-uid="${h.uid}" data-ek="${h.ek}" data-date="${h.date}" aria-label="Editar" style="padding:6px;border-color:var(--border);"><i class="ti ti-edit" style="font-size:14px;color:var(--accent);"></i></button>
+        <button data-action="deleteSession" data-uid="${h.uid}" data-ek="${h.ek}" data-date="${h.date}" aria-label="Eliminar" style="padding:6px;border:none;color:var(--danger);"><i class="ti ti-trash" style="font-size:14px;"></i></button>
+      </div>` : ''}
+    </div>
+    ${h.sessionNote ? `<div style="margin-top:8px;padding:7px 10px;background:var(--bg-elev);border-radius:8px;font-size:12px;color:var(--text-muted);font-style:italic;"><i class="ti ti-message" style="font-size:12px;"></i> ${esc(h.sessionNote)}</div>` : ''}
+    ${h.setNotes.length ? `<div class="dim" style="margin-top:6px;font-size:11px;padding-left:18px;">${h.setNotes.map(n=>esc(n)).join(' · ')}</div>` : ''}
+  </div>`).join('') || '<div class="muted" style="font-size:13px;padding:14px;text-align:center;">Sin historial todavía.</div>';
+
+  let progressBadge = '';
+  if (lastEntry && prevEntry){
+    const lb = bestSet(lastEntry); const pb = bestSet(prevEntry);
+    if (lb && pb){
+      const diff = (Number(lb.weight)||0) - (Number(pb.weight)||0);
+      if (diff>0) progressBadge = `<span class="badge" style="background:var(--success-bg);color:var(--success);"><i class="ti ti-trending-up" style="font-size:12px;"></i>+${diff} lb</span>`;
+      else if (diff<0) progressBadge = `<span class="badge" style="background:var(--warning-bg);color:var(--warning);"><i class="ti ti-trending-down" style="font-size:12px;"></i>${diff} lb</span>`;
+      else progressBadge = `<span class="badge" style="background:var(--bg-elev-2);color:var(--text-muted);">Igual</span>`;
+    }
+  }
+
+  const altsList = (ex.alts||[]).map(a=> `<li style="padding:8px 0;font-size:14px;color:var(--text-muted);border-bottom:1px solid var(--border);list-style:none;"><i class="ti ti-arrow-right" style="font-size:12px;color:var(--accent);margin-right:6px;"></i>${esc(a)}</li>`).join('');
+  const videoUrl = ex.video ? `https://www.youtube.com/results?search_query=${encodeURIComponent(ex.video)}` : '#';
+  const { primLabels, secLabels } = muscleLabels(ex.primary, ex.secondary);
+
+  root.innerHTML = `
+    ${headerBar(ex.name, 'goDay')}
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+      ${ex.video ? `<a href="${videoUrl}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;padding:9px 14px;background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;text-decoration:none;color:var(--text);font-weight:500;">
+        <i class="ti ti-brand-youtube" style="font-size:16px;color:#ff0000;"></i> Ver técnica
+      </a>` : ''}
+      <button data-action="toggleMuscles" style="background:${state.showMuscles?'var(--accent-bg-strong)':'var(--bg-elev)'};color:${state.showMuscles?'var(--accent)':'var(--text)'};border-color:${state.showMuscles?'var(--accent-border)':'var(--border)'};">
+        <i class="ti ti-body-scan" style="font-size:16px;"></i> Músculos
+      </button>
+      ${(ex.alts && ex.alts.length) ? `<button data-action="toggleAlts" style="background:${state.showAlts?'var(--accent-bg-strong)':'var(--bg-elev)'};color:${state.showAlts?'var(--accent)':'var(--text)'};border-color:${state.showAlts?'var(--accent-border)':'var(--border)'};">
+        <i class="ti ti-arrows-shuffle" style="font-size:16px;"></i> Alternativas
+      </button>` : ''}
+      ${state.currentUser ? `<button data-action="editExerciseFromView" style="padding:9px 14px;font-size:13px;background:var(--bg-elev);border:1px solid var(--border);"><i class="ti ti-edit" style="font-size:14px;vertical-align:-2px;"></i> Editar</button>` : ''}
+      ${progressBadge}
+    </div>
+    ${state.showMuscles ? `<div class="card" style="margin-bottom:16px;">
+      ${bodyDiagram(ex.primary, ex.secondary)}
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px;">
+        <div class="row" style="font-size:13px;">
+          <span style="width:14px;height:14px;background:var(--accent);border-radius:4px;flex-shrink:0;"></span>
+          <span class="muted">Principal:</span>
+          <span style="font-weight:500;">${primLabels.join(', ') || '—'}</span>
+        </div>
+        ${secLabels.length ? `<div class="row" style="font-size:13px;">
+          <span style="width:14px;height:14px;background:var(--warning);border-radius:4px;flex-shrink:0;"></span>
+          <span class="muted">Secundario:</span>
+          <span style="font-weight:500;">${secLabels.join(', ')}</span>
+        </div>` : ''}
+      </div>
+    </div>` : ''}
+    ${state.showAlts && (ex.alts && ex.alts.length) ? `<div class="card" style="margin-bottom:16px;background:var(--bg-elev-2);">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px;"><i class="ti ti-bulb" style="font-size:15px;color:var(--accent);"></i> Si la máquina está ocupada</div>
+      <ul style="margin:0;padding:0;list-style:none;">${altsList}</ul>
+    </div>` : ''}
+    ${formHtml}
+    <div class="section-label">Historial reciente</div>
+    ${historyList}
+    <button data-action="goCompareEx" style="margin-top:16px;width:100%;padding:13px;background:var(--bg-elev);border:1px solid var(--border);font-weight:500;">
+      <i class="ti ti-chart-line" style="font-size:16px;vertical-align:-2px;color:var(--accent);"></i> Comparar progreso
+    </button>`;
+  attach();
+  attachSetHandlers();
+}
+
+// ====== COMPARE ======
+function renderCompare(){
+  const mode = state.compareMode;
+  const focused = state.currentExerciseIdx != null ? { day: state.currentDay, idx: state.currentExerciseIdx } : null;
+
+  const exerciseOptions = [`<option value="">Todos los ejercicios (volumen total)</option>`];
+  for (const dk of getAllDayKeys()){
+    const r = getRoutineForDay(dk);
+    if (!r) continue;
+    exerciseOptions.push(`<optgroup label="${esc(r.label)} - ${esc(r.focus)}">`);
+    r.exercises.forEach((ex,idx)=>{
+      const val = dk+':'+idx;
+      const sel = focused && focused.day===dk && focused.idx===idx ? ' selected' : '';
+      exerciseOptions.push(`<option value="${val}"${sel}>${esc(ex.name)}</option>`);
+    });
+    exerciseOptions.push(`</optgroup>`);
+  }
+
+  function getExerciseStats(exKey){
+    return state.users.map(u => ({ user:u, buckets: bucketEntries(getEntries(u.id, exKey), mode) }));
+  }
+
+  let content = '';
+  if (focused){
+    const ek = exerciseKey(focused.day, focused.idx);
+    const r = getRoutineForDay(focused.day);
+    const ex = r ? r.exercises[focused.idx] : null;
+    if (ex){
+      const stats = getExerciseStats(ek);
+      const maxW = Math.max(1, ...stats.flatMap(s=>s.buckets.map(b=>b.maxWeight)));
+      const allKeys = Array.from(new Set(stats.flatMap(s=>s.buckets.map(b=>b.key)))).sort();
+      content = `<div class="card" style="margin-bottom:16px;">
+        <div style="font-size:16px;font-weight:600;margin-bottom:4px;">${esc(ex.name)}</div>
+        <div class="muted" style="font-size:12px;margin-bottom:18px;">Peso máximo · ${mode==='week'?'semanal':mode==='month'?'mensual':'anual'}</div>
+        ${renderBarChart(stats, allKeys, maxW, false)}
+      </div>
+      ${stats.map(s => renderUserStatCard(s)).join('')}`;
+    }
+  } else {
+    const byUser = state.users.map(u => {
+      const ul = state.logs[u.id] || {};
+      const all = []; for (const k in ul) for (const e of ul[k]) all.push(e);
+      return { user:u, buckets: bucketEntries(all, mode), totalSessions: all.length };
+    });
+    const maxV = Math.max(1, ...byUser.flatMap(s=>s.buckets.map(b=>b.totalVolume)));
+    const allKeys = Array.from(new Set(byUser.flatMap(s=>s.buckets.map(b=>b.key)))).sort();
+    content = `<div class="card" style="margin-bottom:16px;">
+      <div style="font-size:16px;font-weight:600;margin-bottom:4px;">Volumen total</div>
+      <div class="muted" style="font-size:12px;margin-bottom:18px;">Reps × peso · ${mode==='week'?'semanal':mode==='month'?'mensual':'anual'}</div>
+      ${renderBarChart(byUser.map(b=>({...b, buckets: b.buckets.map(x=>({...x, maxWeight: x.totalVolume}))})), allKeys, maxV, true)}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
+      ${byUser.map(s => `<div class="stat-card">
+        <div class="row" style="margin-bottom:8px;">
+          <span class="dot" style="background:${s.user.color};width:14px;height:14px;border:2px solid var(--bg-elev);box-shadow:0 0 0 1px ${s.user.color};"></span>
+          <div style="font-size:13px;font-weight:500;">${esc(s.user.name)}</div>
+        </div>
+        <div class="stat-label">Sesiones totales</div>
+        <div class="stat-value" style="color:${s.user.color};">${s.totalSessions}</div>
+      </div>`).join('')}
+    </div>`;
+  }
+
+  root.innerHTML = `
+    ${headerBar('Progreso', 'goHome')}
+    <div class="tab-bar">
+      ${['week','month','year'].map(m => `<button class="${mode===m?'active':''}" data-action="setMode" data-mode="${m}">${m==='week'?'Semana':m==='month'?'Mes':'Año'}</button>`).join('')}
+    </div>
+    <select id="exPicker" style="margin-bottom:18px;">${exerciseOptions.join('')}</select>
+    ${content}`;
+  attach();
+  const picker = document.getElementById('exPicker');
+  if (picker) picker.addEventListener('change', e => {
+    const v = e.target.value;
+    if (!v){ state.currentDay = null; state.currentExerciseIdx = null; }
+    else { const [d,i] = v.split(':'); state.currentDay = d; state.currentExerciseIdx = Number(i); }
     render();
   });
 }
 
-function saveGroupChange(groupId) {
-  state.currentGroup = groupId;
-  localStorage.setItem('currentGroup', groupId);
-  if (!state.joinedGroups.includes(groupId)) {
-    state.joinedGroups.push(groupId);
-    localStorage.setItem('joinedGroups', JSON.stringify(state.joinedGroups));
+function renderBarChart(stats, allKeys, maxVal, isVolume){
+  if (!allKeys.length){
+    return `<div style="padding:40px 20px;text-align:center;">
+      <i class="ti ti-chart-bar-off" style="font-size:36px;color:var(--text-dim);display:block;margin-bottom:8px;"></i>
+      <div class="muted" style="font-size:13px;">Sin datos registrados todavía.</div>
+    </div>`;
   }
-  loadGroupData();
-}
+  const numUsers = Math.max(1, stats.length);
+  const cH = 180;
+  const lH = 32;
+  const padL = 32;
+  const padR = 10;
+  const padT = 24;
+  // Compute layout
+  const innerW = Math.max(280, allKeys.length * 70);
+  const groupW = innerW / allKeys.length;
+  const barW = Math.min(36, (groupW - 16) / numUsers);
+  const sW = innerW + padL + padR;
 
-async function addLog(dayId, exIdx, reps, weight, note) {
-  const id = Date.now().toString();
-  await setDoc(doc(db, `salas/${state.currentGroup}/logs/${id}`), {
-    userId: state.currentUser, dayId, exIdx, reps, weight, note,
-    date: new Date().toISOString()
-  });
-}
+  // Y axis gridlines
+  const gridLines = [0, 0.25, 0.5, 0.75, 1].map(p => {
+    const y = padT + (cH - padT) * (1 - p);
+    return `<line x1="${padL}" y1="${y}" x2="${sW - padR}" y2="${y}" stroke="var(--border)" stroke-dasharray="2 4"/>
+      <text x="${padL - 6}" y="${y + 3}" text-anchor="end" class="chart-label">${isVolume ? Math.round(maxVal * p) : Math.round(maxVal * p)}</text>`;
+  }).join('');
 
-async function deleteLog(logId) {
-  if(confirm("¿Seguro que quieres eliminar este registro?")) {
-    await deleteDoc(doc(db, `salas/${state.currentGroup}/logs/${logId}`));
-    toast("Registro eliminado");
-  }
-}
+  // Defs for gradients per user
+  const defs = stats.map((s, i) => {
+    const color = s.user.color;
+    return `<linearGradient id="grad-${i}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${color}" stop-opacity="1"/>
+      <stop offset="100%" stop-color="${color}" stop-opacity="0.5"/>
+    </linearGradient>`;
+  }).join('');
 
-// ====== RENDER LAYER ======
-function render() {
-  const app = $('app');
-  if(!state.currentUser) return renderLogin(app);
-
-  let html = `
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-      <h1 style="font-size:22px;">Isla: <span style="color:var(--accent)">${state.currentGroup}</span></h1>
-      <button class="primary" onclick="window.changeGroupModal()">Cambiar Isla</button>
-    </div>
-  `;
-
-  // Spectator Banner
-  if (state.spectatorId) {
-    const specUser = state.users.find(u => u.id === state.spectatorId);
-    html += `
-      <div class="shimmering-banner">
-        <div>
-          <i class="ti ti-eye"></i> Viendo progreso de <b>${specUser?.name || 'Compañero'}</b>
-        </div>
-        <button class="ghost-danger" style="padding:4px 8px; font-size:12px;" onclick="window.exitSpectator()">Salir</button>
-      </div>
-    `;
-  }
-
-  // Compañeros
-  html += `<div style="margin-bottom:20px; display:flex; gap:8px; overflow-x:auto;">`;
-  state.users.forEach(u => {
-    html += `
-      <div class="user-pill ${state.spectatorId===u.id ? 'active' : ''}" onclick="window.toggleSpectator('${u.id}')">
-        <div class="dot" style="background:${u.color || 'var(--accent)'}"></div>
-        ${u.name} ${u.id === state.currentUser ? '(Tú)' : ''}
-      </div>`;
-  });
-  html += `</div>`;
-
-  // Tabs: Semana vs Progreso Diario
-  html += `
-    <div class="tab-bar">
-      <button class="${state.view === 'home' ? 'active' : ''}" onclick="window.setView('home')">Rutina Semanal</button>
-      <button class="${state.view === 'daily' ? 'active' : ''}" onclick="window.setView('daily')">Progreso Diario</button>
-    </div>
-  `;
-
-  if (state.view === 'home') html += renderWeek();
-  if (state.view === 'daily') html += renderDaily();
-
-  app.innerHTML = html;
-}
-
-function renderWeek() {
-  let html = `<div class="section-label">Días de Entrenamiento</div>`;
-  DAY_ORDER.forEach(day => {
-    const d = DEFAULT_ROUTINE[day];
-    html += `
-      <button class="day-card" onclick="window.openDay('${day}')">
-        <div class="row">
-          <div class="icon-tile"><i class="ti ${d.icon}"></i></div>
-          <div>
-            <div style="font-weight:600">${d.label}</div>
-            <div class="muted" style="font-size:13px">${d.focus}</div>
-          </div>
-        </div>
-      </button>
-    `;
-  });
-  return html;
-}
-
-function renderDaily() {
-  const dateLogs = state.logs.filter(l => l.date.startsWith(state.dailyDate));
-  let html = `
-    <div class="card" style="margin-bottom:16px;">
-      <input type="date" value="${state.dailyDate}" onchange="window.setDailyDate(this.value)" style="margin-bottom:14px;">
-      <h3 style="margin-bottom:10px;">Resumen del Día</h3>
-  `;
-  if(dateLogs.length === 0) {
-    html += `<div class="muted">No hay actividad registrada en esta fecha.</div>`;
-  } else {
-    dateLogs.forEach(l => {
-      const u = state.users.find(us => us.id === l.userId);
-      html += `
-        <div class="history-entry">
-          <div>
-            <span class="badge" style="background:${u?.color}22; color:${u?.color}; margin-bottom:4px;">${u?.name}</span>
-            <div><b>${l.weight} lbs</b> × ${l.reps} reps</div>
-            ${l.note ? `<div class="muted" style="font-size:12px;">"${l.note}"</div>` : ''}
-          </div>
-          ${!state.spectatorId && l.userId === state.currentUser ? `
-            <button class="action-btn" onclick="window.deleteLog('${l.id}')"><i class="ti ti-trash"></i></button>
-          ` : ''}
-        </div>
-      `;
+  // Bars
+  const bars = [];
+  allKeys.forEach((k, gi) => {
+    const groupX = padL + gi * groupW + (groupW - barW * numUsers) / 2;
+    stats.forEach((s, ui) => {
+      const b = s.buckets.find(x => x.key === k);
+      const val = b ? b.maxWeight : 0;
+      const h = Math.max(0, Math.round((val / maxVal) * (cH - padT - 4)));
+      const x = groupX + ui * barW;
+      const y = padT + (cH - padT - 4) - h;
+      bars.push(`<g>
+        ${val > 0 ? `<rect class="chart-bar-rect" x="${x + 1}" y="${y}" width="${barW - 2}" height="${h}" fill="url(#grad-${ui})" rx="3"></rect>
+        <text x="${x + barW/2}" y="${y - 5}" text-anchor="middle" class="chart-label" style="fill:${s.user.color};font-weight:500;">${isVolume ? Math.round(val) : val}</text>` : ''}
+      </g>`);
     });
-  }
-  html += `</div>`;
-  return html;
+    // X axis label
+    const lx = padL + gi * groupW + groupW / 2;
+    bars.push(`<text x="${lx}" y="${cH + 18}" text-anchor="middle" class="chart-label">${formatBucket(k, state.compareMode)}</text>`);
+  });
+
+  const legend = stats.map(s => `<div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);">
+    <span style="width:12px;height:12px;border-radius:3px;background:linear-gradient(180deg, ${s.user.color}, ${s.user.color}88);"></span>${esc(s.user.name)}
+  </div>`).join('');
+
+  return `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -4px;">
+    <svg viewBox="0 0 ${sW} ${cH + lH}" width="${Math.max(sW, 320)}" height="${cH + lH}" style="display:block;min-width:100%;">
+      <defs>${defs}</defs>
+      ${gridLines}
+      ${bars.join('')}
+    </svg>
+  </div>
+  <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">${legend}</div>`;
 }
 
-function renderLogin(app) {
-  app.innerHTML = `
-    <div style="max-width:320px; margin: 80px auto; text-align:center;">
-      <div class="icon-tile" style="margin: 0 auto 20px; width:64px; height:64px; font-size:32px;">🏝️</div>
-      <h2 style="margin-bottom:20px;">Unirse a una Isla</h2>
-      <input type="text" id="loginName" placeholder="Tu Nombre" style="margin-bottom:12px;">
-      <input type="text" id="groupName" placeholder="Nombre del Grupo/Isla" value="${state.currentGroup}" style="margin-bottom:20px;">
-      <button class="primary" style="width:100%" onclick="window.login()">Entrar</button>
+function renderUserStatCard(s){
+  if (!s.buckets.length){
+    return `<div class="stat-card" style="margin-bottom:8px;">
+      <div class="row">
+        <span class="dot" style="background:${s.user.color};"></span>
+        <div style="font-size:14px;font-weight:500;">${esc(s.user.name)}</div>
+        <div class="spacer"></div>
+        <div class="muted" style="font-size:12px;">Sin registros</div>
+      </div>
+    </div>`;
+  }
+  const f = s.buckets[0]; const l = s.buckets[s.buckets.length-1];
+  const diff = l.maxWeight - f.maxWeight;
+  const pct = f.maxWeight ? Math.round((diff/f.maxWeight)*100) : 0;
+  const arrowColor = diff>0 ? 'var(--success)' : diff<0 ? 'var(--warning)' : 'var(--text-muted)';
+  const arrow = diff>0 ? '<i class="ti ti-trending-up"></i>' : diff<0 ? '<i class="ti ti-trending-down"></i>' : '<i class="ti ti-minus"></i>';
+  return `<div class="stat-card" style="margin-bottom:10px;">
+    <div class="row" style="margin-bottom:14px;">
+      <span class="dot" style="background:${s.user.color};width:14px;height:14px;border:2px solid var(--bg-elev);box-shadow:0 0 0 1px ${s.user.color};"></span>
+      <div style="font-size:14px;font-weight:500;">${esc(s.user.name)}</div>
+      <div class="spacer"></div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:13px;color:${arrowColor};font-weight:500;">${arrow}<span class="mono">${diff>=0?'+':''}${diff} lb (${pct>=0?'+':''}${pct}%)</span></div>
     </div>
-  `;
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+      <div><div class="stat-label" style="margin-bottom:4px;">Primer</div><div class="stat-value" style="font-size:18px;">${f.maxWeight}<span style="font-size:11px;color:var(--text-dim);margin-left:3px;">lb</span></div></div>
+      <div><div class="stat-label" style="margin-bottom:4px;">Último</div><div class="stat-value" style="font-size:18px;color:${s.user.color};">${l.maxWeight}<span style="font-size:11px;color:var(--text-dim);margin-left:3px;">lb</span></div></div>
+      <div><div class="stat-label" style="margin-bottom:4px;">Sesiones</div><div class="stat-value" style="font-size:18px;">${s.buckets.reduce((x,b)=>x+b.sessions,0)}</div></div>
+    </div>
+  </div>`;
+}
+function formatBucket(key, mode){
+  if (mode==='week'){ const d = new Date(key); return d.toLocaleDateString('es', {month:'short', day:'numeric'}); }
+  if (mode==='month'){ const [y,m] = key.split('-'); return new Date(Number(y), Number(m)-1, 1).toLocaleDateString('es', {month:'short', year:'2-digit'}); }
+  return key;
 }
 
-// ====== EXPOSED ACTIONS ======
-window.setView = v => { state.view = v; render(); };
-window.setDailyDate = d => { state.dailyDate = d; render(); };
-window.toggleSpectator = id => { state.spectatorId = state.spectatorId === id ? null : id; render(); };
-window.exitSpectator = () => { state.spectatorId = null; render(); };
-window.deleteLog = deleteLog;
-
-window.login = async () => {
-  const name = $('loginName').value.trim();
-  const group = $('groupName').value.trim();
-  if(!name || !group) return toast("Llena ambos campos");
-  
-  const uid = name.toLowerCase().replace(/\s+/g,'-');
-  localStorage.setItem('currentUser', uid);
-  state.currentUser = uid;
-  saveGroupChange(group);
-  
-  // Create user profile if not exists
-  await setDoc(doc(db, `salas/${group}/users/${uid}`), { id:uid, name, color:'#3b9eff' }, {merge:true});
-};
-
-window.changeGroupModal = () => {
-  const group = prompt("Escribe el nombre de la Isla a la que quieres cambiar:", state.currentGroup);
-  if(group && group !== state.currentGroup) {
-    saveGroupChange(group.trim());
+// ====== DAILY PROGRESS ======
+function renderDaily(){
+  const rows = [];
+  for (const u of state.users){
+    const userLogs = state.logs[u.id] || {};
+    for (const ek in userLogs){
+      for (const entry of userLogs[ek] || []){
+        if (entry.date === state.dailyDate){
+          const best = bestSet(entry);
+          rows.push({ user:u, ek, entry, best, volume: totalVolume(entry) });
+        }
+      }
+    }
   }
-};
+  rows.sort((a,b)=> a.user.name.localeCompare(b.user.name) || exerciseNameForKey(a.ek).localeCompare(exerciseNameForKey(b.ek)));
+  const totals = rows.reduce((acc,r)=>{
+    acc.sessions += 1;
+    acc.sets += (r.entry.sets || []).length;
+    acc.volume += r.volume;
+    acc.max = Math.max(acc.max, r.best ? Number(r.best.weight)||0 : 0);
+    return acc;
+  }, { sessions:0, sets:0, volume:0, max:0 });
+  const list = rows.map(r => {
+    const mine = state.currentUser && r.user.id === state.currentUser;
+    const setText = (r.entry.sets || []).map((set,i)=>`${i+1}) ${set.weight}lb × ${set.reps}${set.note ? ' · '+set.note : ''}`).join(' · ');
+    return `<div class="history-entry">
+      <div class="row" style="align-items:flex-start;">
+        <span class="dot" style="background:${r.user.color};width:14px;height:14px;margin-top:3px;"></span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:600;">${esc(r.user.name)} · ${esc(exerciseNameForKey(r.ek))}</div>
+          <div class="muted mono" style="font-size:11px;margin-top:2px;">${(r.entry.sets||[]).length} sets · max ${r.best ? r.best.weight+'lb × '+r.best.reps : '–'} · vol ${Math.round(r.volume)}</div>
+          <div class="dim" style="font-size:11px;margin-top:6px;">${esc(setText)}</div>
+          ${r.entry.note ? `<div style="margin-top:7px;padding:7px 10px;background:var(--bg-elev);border-radius:8px;font-size:12px;color:var(--text-muted);font-style:italic;"><i class="ti ti-message" style="font-size:12px;"></i> ${esc(r.entry.note)}</div>` : ''}
+        </div>
+        ${mine ? `<div style="display:flex;gap:4px;">
+          <button data-action="editSession" data-uid="${r.user.id}" data-ek="${r.ek}" data-date="${r.entry.date}" aria-label="Editar" style="padding:6px;border-color:var(--border);"><i class="ti ti-edit" style="font-size:14px;color:var(--accent);"></i></button>
+          <button data-action="deleteSession" data-uid="${r.user.id}" data-ek="${r.ek}" data-date="${r.entry.date}" aria-label="Eliminar" style="padding:6px;border:none;color:var(--danger);"><i class="ti ti-trash" style="font-size:14px;"></i></button>
+        </div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
 
-window.openDay = day => {
-  toast("Funcionalidad de Ejercicios en desarrollo para la estructura de Grupos.");
-  // (La lógica interna de ejercicios se conectaría aquí siguiendo la estructura anterior)
-};
+  root.innerHTML = `
+    ${headerBar('Progreso diario', 'goHome')}
+    <div class="card" style="margin-bottom:16px;">
+      <label class="section-label" style="margin-bottom:6px;">Fecha</label>
+      <input id="dailyDate" type="date" value="${esc(state.dailyDate)}" style="font-family:var(--font-mono);" />
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;">
+      <div class="stat-card"><div class="stat-label">Sesiones</div><div class="stat-value" style="font-size:18px;">${totals.sessions}</div></div>
+      <div class="stat-card"><div class="stat-label">Sets</div><div class="stat-value" style="font-size:18px;">${totals.sets}</div></div>
+      <div class="stat-card"><div class="stat-label">Volumen</div><div class="stat-value" style="font-size:18px;">${Math.round(totals.volume)}</div></div>
+      <div class="stat-card"><div class="stat-label">Max</div><div class="stat-value" style="font-size:18px;">${totals.max}<span style="font-size:10px;color:var(--text-dim);">lb</span></div></div>
+    </div>
+    <div class="section-label">Sesiones del día</div>
+    ${list || '<div class="card" style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">No hay sesiones guardadas en esta fecha.</div>'}`;
+  attach();
+  document.getElementById('dailyDate')?.addEventListener('change', e => { state.dailyDate = e.target.value || today(); render(); });
+}
 
-// Start
-loadGroupData();
+// ====== SETTINGS ======
+function renderSettings(){
+  const adm = isAdmin();
+  const usersList = state.users.map(u => `
+    <div class="history-entry" style="margin-bottom:6px;">
+      <div class="row">
+        <span class="dot" style="background:${u.color};width:14px;height:14px;border:2px solid var(--bg-elev);box-shadow:0 0 0 1px ${u.color};"></span>
+        <div style="flex:1;">
+          <div style="font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px;">${esc(u.name)} ${isUserAdmin(u) ? '<span class="admin-pill">admin</span>' : ''} ${u.id === state.currentUser ? '<span style="font-size:11px;color:var(--text-dim);">(tú)</span>' : ''}</div>
+        </div>
+        ${adm && u.id !== state.currentUser ? `<button data-action="deleteUser" data-uid="${u.id}" class="ghost-danger" style="padding:6px 12px;font-size:12px;">Eliminar</button>` : ''}
+      </div>
+    </div>`).join('');
+  const groupRows = state.joinedGroups.map(g => `
+    <button data-action="switchGroup" data-group="${esc(g)}" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:${g===groupPath()?'var(--accent-bg)':'transparent'};border:none;text-align:left;border-radius:8px;">
+      <i class="ti ${g===groupPath()?'ti-circle-check':'ti-circle'}" style="font-size:17px;color:${g===groupPath()?'var(--accent)':'var(--text-dim)'};"></i>
+      <span style="flex:1;font-weight:${g===groupPath()?'600':'500'};">${esc(g)}</span>
+    </button>`).join('');
+
+  root.innerHTML = `
+    ${headerBar('Configuración', 'goHome')}
+    <div class="section-label">Grupo</div>
+    <div class="card" style="margin-bottom:16px;padding:6px;">
+      <div style="padding:10px 12px 8px;">
+        <div style="font-size:14px;font-weight:600;">${esc(state.groupConfig.groupName || groupPath())}</div>
+        <div class="muted mono" style="font-size:11px;margin-top:2px;">${esc(groupPath())}</div>
+      </div>
+      <div style="height:1px;background:var(--border);margin:0 8px 6px;"></div>
+      ${groupRows}
+      <div style="height:1px;background:var(--border);margin:6px 8px;"></div>
+      <button data-action="createGroupModal" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:transparent;border:none;text-align:left;border-radius:8px;">
+        <i class="ti ti-plus" style="font-size:18px;color:var(--accent);"></i><span>Crear grupo</span>
+      </button>
+      <button data-action="joinGroupModal" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:transparent;border:none;text-align:left;border-radius:8px;">
+        <i class="ti ti-login" style="font-size:18px;color:var(--accent);"></i><span>Unirse a grupo</span>
+      </button>
+      ${adm && groupPath() !== DEFAULT_GROUP ? `<button data-action="deleteGroupModal" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:transparent;border:none;text-align:left;color:var(--danger);border-radius:8px;">
+        <i class="ti ti-trash" style="font-size:18px;"></i><span>Eliminar este grupo</span>
+      </button>` : ''}
+    </div>
+
+    <div class="section-label">Cuenta</div>
+    <div class="card" style="margin-bottom:16px;padding:6px;">
+      <button data-action="changeMyPin" style="width:100%;padding:14px 12px;display:flex;align-items:center;gap:12px;background:transparent;border:none;text-align:left;border-radius:8px;">
+        <i class="ti ti-key" style="font-size:18px;color:var(--accent);"></i>
+        <span style="font-weight:500;">Cambiar mi PIN</span>
+        <span class="spacer"></span>
+        <i class="ti ti-chevron-right" style="color:var(--text-dim);"></i>
+      </button>
+      <div style="height:1px;background:var(--border);margin:0 8px;"></div>
+      <button data-action="logoutUser" style="width:100%;padding:14px 12px;display:flex;align-items:center;gap:12px;background:transparent;border:none;text-align:left;color:var(--text-muted);border-radius:8px;">
+        <i class="ti ti-logout" style="font-size:18px;"></i>
+        <span>Cerrar sesión</span>
+      </button>
+    </div>
+
+    <div class="section-label">Usuarios</div>
+    ${usersList}
+
+    ${adm ? `<div class="section-label" style="margin-top:24px;">Admin</div>
+    <div class="card" style="padding:6px;">
+      <button data-action="changeInvitationPw" style="width:100%;padding:14px 12px;display:flex;align-items:center;gap:12px;background:transparent;border:none;text-align:left;border-radius:8px;">
+        <i class="ti ti-shield-lock" style="font-size:18px;color:var(--accent);"></i>
+        <div style="flex:1;">
+          <div style="font-weight:500;">Contraseña de invitación</div>
+          <div class="muted mono" style="font-size:12px;margin-top:2px;">${esc(state.invitationPassword)}</div>
+        </div>
+        <i class="ti ti-chevron-right" style="color:var(--text-dim);"></i>
+      </button>
+    </div>` : ''}
+
+    <div style="margin-top:32px;padding:14px;text-align:center;color:var(--text-dim);font-size:11px;font-family:var(--font-mono);">
+      <div style="margin-bottom:4px;">💪 RUTINA DEL GYM</div>
+      <div>v2 · sincronizado en la nube</div>
+    </div>`;
+  attach();
+}
+
+// ====== EDIT ROUTINE ======
+function renderEditRoutine(){
+  const dayKey = state.currentDay;
+  const src = getCurrentSource(dayKey);
+  let routine;
+  if (src === 'personal'){
+    const pr = state.personalRoutines[state.currentUser] || {};
+    routine = pr[dayKey];
+    if (!routine){
+      const shared = state.sharedRoutine && state.sharedRoutine[dayKey];
+      routine = shared ? JSON.parse(JSON.stringify(shared)) : { label: 'Nuevo día', focus: '', icon:'ti-barbell', exercises: [] };
+    }
+  } else {
+    routine = state.sharedRoutine && state.sharedRoutine[dayKey];
+    if (!routine) routine = { label: 'Nuevo día', focus: '', icon:'ti-barbell', exercises: [] };
+  }
+
+  const exList = routine.exercises.map((ex, idx) => `
+    <div class="history-entry" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:14px;font-weight:500;">${esc(ex.name)}</div>
+        <div class="muted" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc((ex.primary||[]).map(m=>MUSCLES[m]?.label).filter(Boolean).slice(0,3).join(' · ')) || 'Sin músculos asignados'}</div>
+      </div>
+      <button data-action="moveExUp" data-idx="${idx}" aria-label="Subir" style="padding:6px;border-color:var(--border);" ${idx===0?'disabled':''}><i class="ti ti-arrow-up" style="font-size:14px;"></i></button>
+      <button data-action="moveExDown" data-idx="${idx}" aria-label="Bajar" style="padding:6px;border-color:var(--border);" ${idx===routine.exercises.length-1?'disabled':''}><i class="ti ti-arrow-down" style="font-size:14px;"></i></button>
+      <button data-action="editExFromList" data-idx="${idx}" aria-label="Editar" style="padding:6px;border-color:var(--border);"><i class="ti ti-edit" style="font-size:14px;color:var(--accent);"></i></button>
+      <button data-action="deleteEx" data-idx="${idx}" aria-label="Eliminar" style="padding:6px;border:none;color:var(--danger);"><i class="ti ti-trash" style="font-size:14px;"></i></button>
+    </div>`).join('');
+
+  root.innerHTML = `
+    ${headerBar('Editar ' + (src==='personal' ? 'mi rutina' : 'rutina'), 'goDay')}
+    <div class="card" style="margin-bottom:18px;">
+      <label class="section-label" style="margin-bottom:6px;">Nombre del día</label>
+      <input id="dayLabel" type="text" value="${esc(routine.label)}" maxlength="30" style="margin-bottom:12px;" />
+      <label class="section-label" style="margin-bottom:6px;">Enfoque / grupo muscular</label>
+      <input id="dayFocus" type="text" value="${esc(routine.focus)}" maxlength="60" />
+    </div>
+
+    <div class="section-label">Ejercicios</div>
+    ${exList || '<div class="card" style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">Aún no hay ejercicios.</div>'}
+
+    <button data-action="addNewEx" style="margin-top:10px;width:100%;padding:14px;border-style:dashed;color:var(--text-muted);font-weight:500;">
+      <i class="ti ti-plus" style="font-size:14px;vertical-align:-2px;"></i> Agregar ejercicio
+    </button>
+
+    <button class="primary" data-action="saveRoutineMeta" style="margin-top:18px;width:100%;padding:14px;font-weight:600;font-size:15px;">
+      Guardar cambios del día
+    </button>`;
+  attach();
+}
+
+// ====== EDIT EXERCISE ======
+function renderEditExercise(){
+  const dayKey = state.currentDay;
+  const src = getCurrentSource(dayKey);
+  let routine;
+  if (src === 'personal'){
+    routine = (state.personalRoutines[state.currentUser] || {})[dayKey];
+  } else {
+    routine = state.sharedRoutine && state.sharedRoutine[dayKey];
+  }
+  const idx = state.currentExerciseIdx;
+  const isNew = idx === -1 || idx == null;
+  const ex = isNew ? { name:'', video:'', primary:[], secondary:[], alts:[] } : (routine && routine.exercises[idx]) || { name:'', video:'', primary:[], secondary:[], alts:[] };
+
+  window._editEx = JSON.parse(JSON.stringify(ex));
+
+  const muscleChips = MUSCLE_IDS.map(m => {
+    const isP = window._editEx.primary.includes(m);
+    const isS = window._editEx.secondary.includes(m);
+    const cls = isP ? 'primary' : isS ? 'secondary' : '';
+    return `<div class="muscle-chip ${cls}" data-action="cycleMuscle" data-mid="${m}">
+      <span>${MUSCLES[m].label}</span>
+      <span style="font-size:10px;font-weight:600;">${isP?'●●':isS?'●':''}</span>
+    </div>`;
+  }).join('');
+
+  const altsRows = (window._editEx.alts || []).map((a,i) => `
+    <div class="alt-row">
+      <input type="text" class="alt-in" data-i="${i}" value="${esc(a)}" maxlength="80" />
+      <button data-action="removeAlt" data-i="${i}" style="padding:6px;border:none;color:var(--danger);"><i class="ti ti-x" style="font-size:14px;"></i></button>
+    </div>`).join('');
+
+  root.innerHTML = `
+    ${headerBar(isNew ? 'Nuevo ejercicio' : 'Editar ejercicio', 'goEditRoutine')}
+    <div class="card" style="margin-bottom:18px;">
+      <label class="section-label" style="margin-bottom:6px;">Nombre</label>
+      <input id="exName" type="text" value="${esc(window._editEx.name)}" maxlength="80" style="margin-bottom:12px;" />
+      <label class="section-label" style="margin-bottom:6px;">Búsqueda del video en YouTube</label>
+      <input id="exVideo" type="text" value="${esc(window._editEx.video)}" maxlength="120" placeholder="ej: lat pulldown technique" />
+      <div class="muted" style="font-size:11px;margin-top:6px;">En inglés funciona mejor para encontrar videos.</div>
+    </div>
+
+    <div class="section-label">Músculos trabajados</div>
+    <div class="muted" style="font-size:12px;margin-bottom:10px;">Toca para alternar: vacío → <strong style="color:var(--accent);">principal ●●</strong> → <strong style="color:var(--warning);">secundario ●</strong> → vacío</div>
+    <div class="muscle-grid" id="muscleGrid">${muscleChips}</div>
+
+    <div class="section-label" style="margin-top:24px;">Alternativas (si la máquina está ocupada)</div>
+    <div id="altsContainer">${altsRows}</div>
+    <button data-action="addAlt" style="margin-top:6px;width:100%;padding:11px;border-style:dashed;color:var(--text-muted);">
+      <i class="ti ti-plus" style="font-size:14px;vertical-align:-2px;"></i> Agregar alternativa
+    </button>
+
+    <button class="primary" data-action="saveExercise" style="margin-top:20px;width:100%;padding:14px;font-weight:600;font-size:15px;">
+      ${isNew ? 'Crear ejercicio' : 'Guardar cambios'}
+    </button>`;
+  attach();
+}
+
+// ====== EVENTS ======
+function attach(){
+  root.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle));
+}
+function attachSetHandlers(){
+  document.querySelectorAll('.del-set').forEach(b => b.addEventListener('click', e => e.target.closest('.set-row').remove()));
+}
+
+async function handle(e){
+  const btn = e.currentTarget; const a = btn.dataset.action;
+
+  // ====== Setup / Auth ======
+  if (a === 'newUser'){ state.setupStep = 'newUser'; render(); return; }
+  if (a === 'backToPick'){ state.setupStep = state.users.length ? 'pickUser' : 'newUser'; render(); return; }
+  if (a === 'pickUser'){
+    const uid = btn.dataset.uid;
+    state.pendingUserId = uid;
+    state.setupStep = 'enterPin';
+    render();
+    return;
+  }
+  if (a === 'submitPin'){
+    const u = state.users.find(x => x.id === state.pendingUserId);
+    const pin = document.getElementById('pinInput').value;
+    const errEl = document.getElementById('pinError');
+    if (!u) return;
+    // Migration from v1: if user has no pinHash, treat this entry as SETTING their PIN
+    if (!u.pinHash){
+      if (pin.length < 4){ errEl.textContent = 'Crea un PIN de al menos 4 caracteres'; return; }
+      u.pinHash = await sha(pin);
+      await saveUsers(state.users);
+      state.currentUser = u.id;
+      saveMe(u.id); setAuth(u.id);
+      state.view = 'home'; state.setupStep = null;
+      toast('PIN creado. ¡Bienvenida! 💪');
+      render(); return;
+    }
+    const hash = await sha(pin);
+    if (hash === u.pinHash){
+      state.currentUser = u.id;
+      saveMe(u.id); setAuth(u.id);
+      state.view = 'home'; state.setupStep = null;
+      toast('Bienvenida 💪');
+      render();
+    } else {
+      errEl.textContent = 'PIN incorrecto';
+      document.getElementById('pinInput').value = '';
+    }
+    return;
+  }
+  if (a === 'viewOnlyMode'){
+    state.currentUser = null; clearMe(); clearAuth();
+    state.view = 'home'; state.setupStep = null;
+    render(); return;
+  }
+  if (a === 'checkInvite'){
+    const name = (document.getElementById('nameInput').value || '').trim();
+    const inv = (document.getElementById('invInput').value || '').trim();
+    const errEl = document.getElementById('invError');
+    if (!name){ errEl.textContent = 'Ingresa tu nombre'; return; }
+    if (name.length < 2){ errEl.textContent = 'Nombre muy corto'; return; }
+    if (state.users.some(u => u.name.toLowerCase().trim() === name.toLowerCase().trim())){
+      errEl.textContent = 'Ese nombre ya está en uso'; return;
+    }
+    const expected = state.invitationPassword || INVITATION_PASSWORD_DEFAULT;
+    if (inv !== expected){ errEl.textContent = 'Contraseña de invitación incorrecta'; return; }
+    state.pendingNewName = name;
+    state.setupStep = 'newUserPin';
+    render();
+    return;
+  }
+  if (a === 'finalizeUser'){
+    const p1 = document.getElementById('newPin').value;
+    const p2 = document.getElementById('newPin2').value;
+    const errEl = document.getElementById('pinError2');
+    if (p1.length < 4){ errEl.textContent = 'El PIN debe tener al menos 4 caracteres'; return; }
+    if (p1 !== p2){ errEl.textContent = 'Los PINs no coinciden'; return; }
+    const id = 'u_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+    const color = userColor(state.users.length);
+    const pinHash = await sha(p1);
+    state.users.push({ id, name: state.pendingNewName, color, pinHash, createdAt: Date.now() });
+    await saveUsers(state.users);
+    state.currentUser = id; saveMe(id); setAuth(id);
+    state.view = 'home'; state.setupStep = null;
+    state.pendingNewName = null;
+    toast('¡Cuenta creada!');
+    render();
+    return;
+  }
+
+  // ====== Groups ======
+  if (a === 'groupMenu'){
+    closeModal();
+    const groups = state.joinedGroups.map(g => `
+      <button data-action="switchGroup" data-group="${esc(g)}" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:${g===groupPath()?'var(--accent-bg)':'transparent'};border:none;text-align:left;border-radius:8px;">
+        <i class="ti ${g===groupPath()?'ti-circle-check':'ti-circle'}" style="font-size:17px;color:${g===groupPath()?'var(--accent)':'var(--text-dim)'};"></i>
+        <span style="flex:1;font-weight:${g===groupPath()?'600':'500'};">${esc(g)}</span>
+      </button>`).join('');
+    openModal(`
+      <h2 style="margin-bottom:4px;">Grupos</h2>
+      <p class="muted" style="font-size:13px;margin:0 0 12px;">Cada grupo tiene sus propios usuarios, rutinas y progreso.</p>
+      <div class="card" style="padding:6px;margin-bottom:12px;">${groups}</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <button data-action="createGroupModal" style="flex:1;padding:11px;"><i class="ti ti-plus" style="font-size:14px;vertical-align:-2px;color:var(--accent);"></i> Crear</button>
+        <button data-action="joinGroupModal" style="flex:1;padding:11px;"><i class="ti ti-login" style="font-size:14px;vertical-align:-2px;color:var(--accent);"></i> Unirse</button>
+      </div>
+      <button data-action="closeModal" style="width:100%;padding:10px;background:var(--bg-elev-2);">Cancelar</button>
+    `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+    return;
+  }
+  if (a === 'switchGroup'){
+    closeModal();
+    await switchGroup(btn.dataset.group);
+    return;
+  }
+  if (a === 'createGroupModal'){
+    closeModal();
+    openModal(`
+      <h2 style="margin-bottom:8px;">Crear grupo</h2>
+      <p class="muted" style="font-size:13px;margin:0 0 12px;">Tú serás admin de este grupo. Comparte el código y la contraseña con tu buddy.</p>
+      ${!state.currentUser ? `<div class="banner banner-info"><i class="ti ti-user-plus"></i><div>Como no has iniciado sesión, crea primero tu perfil de admin para este grupo.</div></div>
+      <label class="section-label" style="margin-bottom:6px;">Tu nombre</label>
+      <input id="newGroupAdminName" type="text" maxlength="24" placeholder="Ej. Jazmin" style="margin-bottom:10px;" />
+      <label class="section-label" style="margin-bottom:6px;">Tu PIN</label>
+      <input id="newGroupAdminPin" type="password" maxlength="20" inputmode="numeric" placeholder="Mínimo 4 caracteres" style="margin-bottom:12px;" />` : ''}
+      <label class="section-label" style="margin-bottom:6px;">Nombre del grupo</label>
+      <input id="newGroupName" type="text" maxlength="40" placeholder="Ej. gym-de-jaz" style="margin-bottom:10px;" />
+      <label class="section-label" style="margin-bottom:6px;">Contraseña de invitación</label>
+      <input id="newGroupPw" type="text" maxlength="40" placeholder="Mínimo 4 caracteres" style="margin-bottom:12px;" />
+      <label class="section-label" style="margin-bottom:6px;">Rutina inicial</label>
+      <select id="newGroupRoutine" style="margin-bottom:14px;">
+        <option value="copy-current">Copiar la rutina compartida actual</option>
+        <option value="default">Usar rutina base</option>
+        <option value="blank">Empezar desde cero</option>
+      </select>
+      <div id="groupErr" style="font-size:12px;color:var(--danger);min-height:14px;margin-bottom:8px;text-align:center;"></div>
+      <div style="display:flex;gap:8px;">
+        <button data-action="closeModal" style="flex:1;padding:10px;">Cancelar</button>
+        <button class="primary" data-action="submitCreateGroup" style="flex:1;padding:10px;font-weight:600;">Crear</button>
+      </div>
+    `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+    return;
+  }
+  if (a === 'submitCreateGroup'){
+    const name = (document.getElementById('newGroupName').value || '').trim();
+    const pw = (document.getElementById('newGroupPw').value || '').trim();
+    const mode = document.getElementById('newGroupRoutine').value;
+    const err = document.getElementById('groupErr');
+    const id = slugGroupName(name);
+    if (!id){ err.textContent = 'Escribe un nombre válido'; return; }
+    if (pw.length < 4){ err.textContent = 'La contraseña debe tener mínimo 4 caracteres'; return; }
+    if (!state.currentUser){
+      const adminName = (document.getElementById('newGroupAdminName').value || '').trim();
+      const adminPin = document.getElementById('newGroupAdminPin').value || '';
+      if (adminName.length < 2){ err.textContent = 'Escribe tu nombre'; return; }
+      if (adminPin.length < 4){ err.textContent = 'Tu PIN debe tener mínimo 4 caracteres'; return; }
+      window._pendingGroupCreator = {
+        id: 'u_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+        name: adminName,
+        color: userColor(0),
+        pinHash: await sha(adminPin),
+        createdAt: Date.now()
+      };
+    }
+    closeModal();
+    await createGroup(id, name, pw, mode);
+    return;
+  }
+  if (a === 'joinGroupModal'){
+    closeModal();
+    openModal(`
+      <h2 style="margin-bottom:8px;">Unirse a grupo</h2>
+      <p class="muted" style="font-size:13px;margin:0 0 12px;">Pide a la admin el código del grupo y la contraseña de invitación.</p>
+      <label class="section-label" style="margin-bottom:6px;">Código del grupo</label>
+      <input id="joinGroupId" type="text" maxlength="50" placeholder="ej. gym-de-jaz" style="margin-bottom:10px;" />
+      <label class="section-label" style="margin-bottom:6px;">Contraseña</label>
+      <input id="joinGroupPw" type="password" maxlength="40" style="margin-bottom:10px;" />
+      <div style="display:flex;gap:8px;">
+        <button data-action="closeModal" style="flex:1;padding:10px;">Cancelar</button>
+        <button class="primary" data-action="submitJoinGroup" style="flex:1;padding:10px;font-weight:600;">Unirse</button>
+      </div>
+    `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+    return;
+  }
+  if (a === 'submitJoinGroup'){
+    const id = (document.getElementById('joinGroupId').value || '').trim();
+    const pw = (document.getElementById('joinGroupPw').value || '').trim();
+    closeModal();
+    await joinGroup(id, pw);
+    return;
+  }
+  if (a === 'deleteGroupModal'){
+    if (!isAdmin()){ toast('Solo admin'); return; }
+    if (groupPath() === DEFAULT_GROUP){ toast('El grupo original está protegido'); return; }
+    openModal(`
+      <h2 style="margin-bottom:8px;color:var(--danger);">Eliminar grupo</h2>
+      <p style="font-size:14px;margin:0 0 12px;">Esto borra usuarios, rutinas y progreso de <strong>${esc(groupPath())}</strong>. No se puede deshacer.</p>
+      <label class="section-label" style="margin-bottom:6px;">Escribe el código del grupo para confirmar</label>
+      <input id="deleteGroupConfirm" type="text" placeholder="${esc(groupPath())}" style="margin-bottom:10px;" />
+      <div id="deleteGroupErr" style="font-size:12px;color:var(--danger);min-height:14px;margin-bottom:8px;text-align:center;"></div>
+      <div style="display:flex;gap:8px;">
+        <button data-action="closeModal" style="flex:1;padding:10px;">Cancelar</button>
+        <button class="danger" data-action="confirmDeleteGroup" style="flex:1;padding:10px;font-weight:600;">Eliminar</button>
+      </div>
+    `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+    return;
+  }
+  if (a === 'confirmDeleteGroup'){
+    const v = (document.getElementById('deleteGroupConfirm').value || '').trim();
+    const err = document.getElementById('deleteGroupErr');
+    if (v !== groupPath()){ err.textContent = 'El código no coincide'; return; }
+    closeModal();
+    await deleteCurrentGroup();
+    return;
+  }
+
+  // ====== User menu ======
+  if (a === 'userMenu'){
+    openModal(`
+      <h2 style="margin-bottom:12px;">Cuenta</h2>
+      <button data-action="goSettings" data-modal="close" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:transparent;border:none;text-align:left;">
+        <i class="ti ti-settings" style="font-size:18px;color:var(--text-muted);"></i> Configuración
+      </button>
+      <button data-action="groupMenu" data-modal="close" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:transparent;border:none;border-top:1px solid var(--border);text-align:left;">
+        <i class="ti ti-users-group" style="font-size:18px;color:var(--text-muted);"></i> Cambiar / crear grupo
+      </button>
+      <button data-action="switchUser" data-modal="close" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:transparent;border:none;border-top:1px solid var(--border);text-align:left;">
+        <i class="ti ti-users" style="font-size:18px;color:var(--text-muted);"></i> Cambiar de usuario
+      </button>
+      <button data-action="logoutUser" data-modal="close" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:transparent;border:none;border-top:1px solid var(--border);text-align:left;color:var(--text-muted);">
+        <i class="ti ti-logout" style="font-size:18px;"></i> Cerrar sesión
+      </button>
+      <button data-modal="close" data-action="closeModal" style="width:100%;padding:10px;margin-top:10px;background:var(--bg-elev-2);">Cancelar</button>
+    `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+    return;
+  }
+  if (a === 'closeModal'){ closeModal(); return; }
+  if (a === 'switchUser'){
+    closeModal();
+    state.setupStep = state.users.length ? 'pickUser' : 'newUser';
+    state.view = 'setup';
+    render(); return;
+  }
+  if (a === 'logoutUser'){
+    closeModal();
+    state.currentUser = null; clearMe(); clearAuth();
+    state.setupStep = state.users.length ? 'pickUser' : 'newUser';
+    state.view = 'setup';
+    render(); return;
+  }
+  if (a === 'changeMyPin'){
+    openModal(`
+      <h2 style="margin-bottom:12px;">Cambiar mi PIN</h2>
+      <label class="muted" style="font-size:12px;display:block;margin-bottom:4px;">PIN actual</label>
+      <input id="oldPin" type="password" inputmode="numeric" style="text-align:center;letter-spacing:0.3em;margin-bottom:10px;" />
+      <label class="muted" style="font-size:12px;display:block;margin-bottom:4px;">PIN nuevo</label>
+      <input id="newPinA" type="password" inputmode="numeric" style="text-align:center;letter-spacing:0.3em;margin-bottom:10px;" />
+      <label class="muted" style="font-size:12px;display:block;margin-bottom:4px;">Repite el PIN nuevo</label>
+      <input id="newPinB" type="password" inputmode="numeric" style="text-align:center;letter-spacing:0.3em;margin-bottom:10px;" />
+      <div id="changePinErr" style="font-size:12px;color:var(--danger);min-height:14px;margin-bottom:8px;text-align:center;"></div>
+      <div style="display:flex;gap:8px;">
+        <button data-action="closeModal" style="flex:1;padding:10px;">Cancelar</button>
+        <button class="primary" data-action="submitChangePin" style="flex:1;padding:10px;font-weight:600;">Guardar</button>
+      </div>
+    `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+    return;
+  }
+  if (a === 'submitChangePin'){
+    const u = state.users.find(x => x.id === state.currentUser);
+    const oldP = document.getElementById('oldPin').value;
+    const a1 = document.getElementById('newPinA').value;
+    const a2 = document.getElementById('newPinB').value;
+    const err = document.getElementById('changePinErr');
+    if ((await sha(oldP)) !== u.pinHash){ err.textContent = 'PIN actual incorrecto'; return; }
+    if (a1.length < 4){ err.textContent = 'El PIN nuevo debe tener al menos 4 caracteres'; return; }
+    if (a1 !== a2){ err.textContent = 'Los PINs no coinciden'; return; }
+    u.pinHash = await sha(a1);
+    await saveUsers(state.users);
+    setAuth(u.id);
+    closeModal(); toast('PIN actualizado'); return;
+  }
+  if (a === 'changeInvitationPw'){
+    if (!isAdmin()) { toast('Solo admin'); return; }
+    openModal(`
+      <h2 style="margin-bottom:12px;">Contraseña de invitación</h2>
+      <p class="muted" style="font-size:13px;margin:0 0 12px;">Esta es la contraseña que tus compañeros necesitan para crear su cuenta. Cámbiala si la actual ya se conoce demasiado.</p>
+      <label class="muted" style="font-size:12px;display:block;margin-bottom:4px;">Nueva contraseña de invitación</label>
+      <input id="newInv" type="text" value="${esc(state.invitationPassword)}" maxlength="40" style="margin-bottom:10px;" />
+      <div style="display:flex;gap:8px;">
+        <button data-action="closeModal" style="flex:1;padding:10px;">Cancelar</button>
+        <button class="primary" data-action="submitInvPw" style="flex:1;padding:10px;font-weight:600;">Guardar</button>
+      </div>
+    `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+    return;
+  }
+  if (a === 'submitInvPw'){
+    const v = (document.getElementById('newInv').value || '').trim();
+    if (v.length < 4){ toast('Mínimo 4 caracteres'); return; }
+    state.invitationPassword = v;
+    await saveConfig({ invitationPassword: v });
+    closeModal(); toast('Contraseña actualizada'); render(); return;
+  }
+  if (a === 'deleteUser'){
+    if (!isAdmin()){ toast('Solo admin'); return; }
+    const uid = btn.dataset.uid;
+    const u = state.users.find(x => x.id === uid);
+    if (!u) return;
+    if (isUserAdmin(u)){
+      toast('No puedes eliminar a un admin'); return;
+    }
+    const hasLogs = !!state.logs[uid] && Object.keys(state.logs[uid]||{}).length > 0;
+    openModal(`
+      <h2 style="margin-bottom:8px;color:var(--danger);">Eliminar usuario</h2>
+      <p style="font-size:14px;margin:0 0 14px;">¿Seguro que quieres eliminar a <strong>${esc(u.name)}</strong>?</p>
+      ${hasLogs ? `<p class="muted" style="font-size:13px;margin:0 0 14px;">Tiene historial de entrenos registrado. Elige qué hacer:</p>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+        <label style="display:flex;align-items:flex-start;gap:8px;padding:10px;background:var(--bg-elev-2);border-radius:var(--radius-sm);cursor:pointer;">
+          <input type="radio" name="delMode" value="keep" checked style="margin-top:3px;" />
+          <div>
+            <div style="font-size:14px;font-weight:500;">Mantener historial</div>
+            <div class="muted" style="font-size:12px;">El usuario desaparece pero sus entrenos se conservan en la base de datos.</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:8px;padding:10px;background:var(--bg-elev-2);border-radius:var(--radius-sm);cursor:pointer;">
+          <input type="radio" name="delMode" value="purge" style="margin-top:3px;" />
+          <div>
+            <div style="font-size:14px;font-weight:500;color:var(--danger);">Borrar todo</div>
+            <div class="muted" style="font-size:12px;">Elimina usuario y todos sus entrenos. <strong>No se puede deshacer.</strong></div>
+          </div>
+        </label>
+      </div>` : '<p class="muted" style="font-size:13px;margin:0 0 14px;">No tiene entrenos registrados.</p>'}
+      <div style="display:flex;gap:8px;">
+        <button data-action="closeModal" style="flex:1;padding:10px;">Cancelar</button>
+        <button class="danger" data-action="confirmDeleteUser" data-uid="${uid}" style="flex:1;padding:10px;font-weight:600;">Eliminar</button>
+      </div>
+    `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+    return;
+  }
+  if (a === 'confirmDeleteUser'){
+    const uid = btn.dataset.uid;
+    const u = state.users.find(x => x.id === uid);
+    const modeRadio = document.querySelector('input[name="delMode"]:checked');
+    const mode = modeRadio ? modeRadio.value : 'keep';
+    state.users = state.users.filter(x => x.id !== uid);
+    await saveUsers(state.users);
+    if (mode === 'purge'){
+      await deleteUserLogsDoc(uid);
+      await deletePersonalRoutineDoc(uid);
+      delete state.logs[uid];
+      delete state.personalRoutines[uid];
+    }
+    closeModal(); toast('Usuario eliminado'); render(); return;
+  }
+
+  // ====== Nav ======
+  if (a === 'openDay'){ state.currentDay = btn.dataset.day; state.view = 'day'; render(); return; }
+  if (a === 'goHome'){ state.view = 'home'; state.currentDay = null; state.currentExerciseIdx = null; state.showAlts = false; state.showMuscles = false; render(); return; }
+  if (a === 'goDay'){ state.view = 'day'; state.currentExerciseIdx = null; state.showAlts = false; state.showMuscles = false; render(); return; }
+  if (a === 'openEx'){ state.currentExerciseIdx = Number(btn.dataset.idx); state.view = 'exercise'; state.showAlts = false; state.showMuscles = false; render(); return; }
+  if (a === 'goCompare'){ state.view = 'compare'; state.currentDay = null; state.currentExerciseIdx = null; render(); return; }
+  if (a === 'goCompareEx'){ state.view = 'compare'; render(); return; }
+  if (a === 'goDaily'){ state.view = 'daily'; state.currentDay = null; state.currentExerciseIdx = null; render(); return; }
+  if (a === 'goSettings'){ closeModal(); state.view = 'settings'; render(); return; }
+  if (a === 'goEditRoutine'){ state.view = 'editRoutine'; render(); return; }
+  if (a === 'editRoutine'){ state.view = 'editRoutine'; render(); return; }
+  if (a === 'editRoutineNew'){ state.currentDay = btn.dataset.day || state.currentDay; state.view = 'editRoutine'; render(); return; }
+
+  // ====== Source switch ======
+  if (a === 'setSource'){
+    const src = btn.dataset.src;
+    setCurrentSource(state.currentDay, src);
+    if (src === 'personal'){
+      // ensure a personal routine exists for this day, seeded from shared if available
+      const pr = state.personalRoutines[state.currentUser] || {};
+      if (!pr[state.currentDay]){
+        openModal(`
+          <h2 style="margin-bottom:8px;">Crear rutina personal</h2>
+          <p class="muted" style="font-size:13px;margin:0 0 14px;">Puedes copiar la rutina compartida como base o empezar desde cero.</p>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <button class="primary" data-action="createPersonalRoutine" data-mode="copy" style="padding:12px;">Copiar rutina compartida</button>
+            <button data-action="createPersonalRoutine" data-mode="blank" style="padding:12px;">Empezar desde cero</button>
+            <button data-action="closeModal" style="padding:10px;background:var(--bg-elev-2);">Cancelar</button>
+          </div>
+        `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+        return;
+      }
+    }
+    render(); return;
+  }
+  if (a === 'createPersonalRoutine'){
+    const mode = btn.dataset.mode;
+    const pr = state.personalRoutines[state.currentUser] || {};
+    const shared = state.sharedRoutine && state.sharedRoutine[state.currentDay];
+    if (mode === 'copy' && shared) pr[state.currentDay] = JSON.parse(JSON.stringify(shared));
+    else {
+      const base = (state.sharedRoutine && state.sharedRoutine[state.currentDay]) || DEFAULT_ROUTINE[state.currentDay] || { label:'Día', focus:'', icon:'ti-barbell', exercises: [] };
+      pr[state.currentDay] = { label: base.label || 'Día', focus: base.focus || '', icon: base.icon || 'ti-barbell', exercises: [] };
+    }
+    state.personalRoutines[state.currentUser] = pr;
+    await savePersonalRoutine(state.currentUser, pr);
+    closeModal();
+    toast(mode === 'copy' ? 'Rutina personal copiada' : 'Rutina personal creada desde cero');
+    render(); return;
+  }
+
+  // ====== Exercise view toggles ======
+  if (a === 'toggleAlts'){ state.showAlts = !state.showAlts; render(); return; }
+  if (a === 'toggleMuscles'){ state.showMuscles = !state.showMuscles; render(); return; }
+  if (a === 'editExerciseFromView'){ state.view = 'editExercise'; render(); return; }
+
+  // ====== Session save ======
+  if (a === 'addSet'){
+    const c = document.getElementById('setsContainer'); const n = c.children.length + 1;
+    const div = document.createElement('div');
+    div.className = 'set-row';
+    div.style.cssText = 'margin-bottom:10px;padding:8px;background:var(--bg-elev-2);border-radius:var(--radius-sm);';
+    div.innerHTML = `<div style="display:grid;grid-template-columns:28px 1fr 1fr 28px;gap:6px;align-items:center;margin-bottom:4px;">
+      <div class="muted" style="font-size:13px;text-align:center;font-weight:500;">${n}</div>
+      <input type="number" class="reps-in" inputmode="numeric" min="0" placeholder="reps" style="text-align:center;padding:8px;" />
+      <input type="number" class="weight-in" inputmode="decimal" step="0.5" min="0" placeholder="peso lb" style="text-align:center;padding:8px;" />
+      <button class="del-set" aria-label="Eliminar" style="padding:4px;border:none;color:var(--text-dim);"><i class="ti ti-x" style="font-size:14px;"></i></button>
+    </div>
+    <input type="text" class="note-in" placeholder="Nota del set (opcional)" maxlength="120" style="width:100%;font-size:12px;padding:6px 10px;" />`;
+    c.appendChild(div);
+    div.querySelector('.del-set').addEventListener('click', ()=> div.remove());
+    return;
+  }
+  if (a === 'saveSession'){
+    if (!state.currentUser){ toast('Inicia sesión para registrar'); return; }
+    if (!authValid()) { toast('Sesión expirada, vuelve a entrar'); return; }
+    const date = document.getElementById('sessionDate').value || today();
+    const rows = document.querySelectorAll('.set-row');
+    const sets = [];
+    rows.forEach(r => {
+      const reps = Number(r.querySelector('.reps-in').value);
+      const weight = Number(r.querySelector('.weight-in').value);
+      const note = (r.querySelector('.note-in').value || '').trim();
+      if (reps > 0 && weight >= 0){ const s = { reps, weight }; if (note) s.note = note; sets.push(s); }
+    });
+    const sessionNote = (document.getElementById('sessionNote').value || '').trim();
+    const status = document.getElementById('saveStatus');
+    if (!sets.length){ status.style.color = 'var(--warning)'; status.textContent = 'Ingresa al menos un set con reps y peso.'; return; }
+    const ek = exerciseKey(state.currentDay, state.currentExerciseIdx);
+    const userLogs = state.logs[state.currentUser] || {};
+    if (!userLogs[ek]) userLogs[ek] = [];
+    if (state.editingSession && state.editingSession.ek === ek && state.editingSession.uid === state.currentUser && state.editingSession.date !== date){
+      userLogs[ek] = userLogs[ek].filter(e => e.date !== state.editingSession.date);
+    }
+    const idx = userLogs[ek].findIndex(e => e.date === date);
+    const entry = { date, sets }; if (sessionNote) entry.note = sessionNote;
+    if (idx >= 0) userLogs[ek][idx] = entry; else userLogs[ek].push(entry);
+    state.logs[state.currentUser] = userLogs;
+    await saveUserLogs(state.currentUser, userLogs);
+    status.style.color = 'var(--success)'; status.textContent = '✓ Guardado. Sigue así 💪';
+    state.editingSession = null;
+    toast('Sesión guardada');
+    setTimeout(()=> render(), 600);
+    return;
+  }
+  if (a === 'cancelEditSession'){
+    state.editingSession = null;
+    render(); return;
+  }
+  if (a === 'editSession'){
+    const uid = btn.dataset.uid;
+    if (uid !== state.currentUser){ toast('Solo puedes editar tus sesiones'); return; }
+    const [day, idx] = btn.dataset.ek.split(':');
+    state.currentDay = day;
+    state.currentExerciseIdx = Number(idx);
+    state.editingSession = { uid, ek: btn.dataset.ek, date: btn.dataset.date };
+    state.view = 'exercise';
+    state.showAlts = false;
+    state.showMuscles = false;
+    render(); return;
+  }
+  if (a === 'deleteSession'){
+    const uid = btn.dataset.uid;
+    if (uid !== state.currentUser){ toast('Solo puedes borrar tus sesiones'); return; }
+    openModal(`
+      <h2 style="margin-bottom:8px;color:var(--danger);">Eliminar sesión</h2>
+      <p style="font-size:14px;margin:0 0 14px;">¿Seguro que quieres borrar la sesión de <strong>${esc(exerciseNameForKey(btn.dataset.ek))}</strong> del <strong>${esc(btn.dataset.date)}</strong>?</p>
+      <div style="display:flex;gap:8px;">
+        <button data-action="closeModal" style="flex:1;padding:10px;">Cancelar</button>
+        <button class="danger" data-action="confirmDeleteSession" data-uid="${uid}" data-ek="${btn.dataset.ek}" data-date="${btn.dataset.date}" style="flex:1;padding:10px;font-weight:600;">Eliminar</button>
+      </div>
+    `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+    return;
+  }
+  if (a === 'confirmDeleteSession'){
+    const uid = btn.dataset.uid;
+    const ek = btn.dataset.ek;
+    const date = btn.dataset.date;
+    if (uid !== state.currentUser){ toast('Solo puedes borrar tus sesiones'); return; }
+    const userLogs = state.logs[uid] || {};
+    userLogs[ek] = (userLogs[ek] || []).filter(e => e.date !== date);
+    if (!userLogs[ek].length) delete userLogs[ek];
+    state.logs[uid] = userLogs;
+    await saveUserLogs(uid, userLogs);
+    if (state.editingSession && state.editingSession.uid === uid && state.editingSession.ek === ek && state.editingSession.date === date) state.editingSession = null;
+    closeModal(); toast('Sesión eliminada'); render(); return;
+  }
+  if (a === 'setMode'){ state.compareMode = btn.dataset.mode; render(); return; }
+
+  // ====== EDIT ROUTINE actions ======
+  if (a === 'addNewEx'){
+    state.currentExerciseIdx = -1; // new
+    state.view = 'editExercise'; render(); return;
+  }
+  if (a === 'editExFromList'){
+    state.currentExerciseIdx = Number(btn.dataset.idx);
+    state.view = 'editExercise'; render(); return;
+  }
+  if (a === 'moveExUp' || a === 'moveExDown'){
+    const idx = Number(btn.dataset.idx);
+    const dayKey = state.currentDay;
+    const src = getCurrentSource(dayKey);
+    let routine;
+    if (src === 'personal'){ routine = (state.personalRoutines[state.currentUser]||{})[dayKey]; }
+    else { routine = state.sharedRoutine && state.sharedRoutine[dayKey]; }
+    if (!routine) return;
+    const swap = a === 'moveExUp' ? idx - 1 : idx + 1;
+    if (swap < 0 || swap >= routine.exercises.length) return;
+    [routine.exercises[idx], routine.exercises[swap]] = [routine.exercises[swap], routine.exercises[idx]];
+    if (src === 'personal'){
+      await savePersonalRoutine(state.currentUser, state.personalRoutines[state.currentUser]);
+    } else {
+      await saveSharedRoutine(state.sharedRoutine);
+    }
+    render(); return;
+  }
+  if (a === 'deleteEx'){
+    const idx = Number(btn.dataset.idx);
+    const dayKey = state.currentDay;
+    const src = getCurrentSource(dayKey);
+    let routine = src === 'personal' ? (state.personalRoutines[state.currentUser]||{})[dayKey] : (state.sharedRoutine && state.sharedRoutine[dayKey]);
+    if (!routine) return;
+    const ek = exerciseKey(dayKey, idx);
+    // count entries across all users for this exKey
+    let totalEntries = 0;
+    for (const u of state.users){ totalEntries += getEntries(u.id, ek).length; }
+    openModal(`
+      <h2 style="margin-bottom:8px;">Eliminar ejercicio</h2>
+      <p style="font-size:14px;margin:0 0 14px;">¿Eliminar <strong>${esc(routine.exercises[idx].name)}</strong>?</p>
+      ${totalEntries > 0 ? `<p class="muted" style="font-size:13px;margin:0 0 14px;">Tiene <strong>${totalEntries}</strong> entrenos registrados. Elige qué hacer:</p>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+        <label style="display:flex;align-items:flex-start;gap:8px;padding:10px;background:var(--bg-elev-2);border-radius:var(--radius-sm);cursor:pointer;">
+          <input type="radio" name="exDelMode" value="keep" checked style="margin-top:3px;" />
+          <div><div style="font-size:14px;font-weight:500;">Mantener historial</div>
+          <div class="muted" style="font-size:12px;">Los datos se quedan en la base por si vuelves a agregar el ejercicio. Quedan ligados a la posición original.</div></div>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:8px;padding:10px;background:var(--bg-elev-2);border-radius:var(--radius-sm);cursor:pointer;">
+          <input type="radio" name="exDelMode" value="purge" style="margin-top:3px;" />
+          <div><div style="font-size:14px;font-weight:500;color:var(--danger);">Borrar también el historial</div>
+          <div class="muted" style="font-size:12px;">Elimina ejercicio y todos sus entrenos. No se puede deshacer.</div></div>
+        </label>
+      </div>` : ''}
+      <div style="display:flex;gap:8px;">
+        <button data-action="closeModal" style="flex:1;padding:10px;">Cancelar</button>
+        <button class="danger" data-action="confirmDeleteEx" data-idx="${idx}" style="flex:1;padding:10px;font-weight:600;">Eliminar</button>
+      </div>
+    `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+    return;
+  }
+  if (a === 'confirmDeleteEx'){
+    const idx = Number(btn.dataset.idx);
+    const dayKey = state.currentDay;
+    const src = getCurrentSource(dayKey);
+    const purge = (document.querySelector('input[name="exDelMode"]:checked')||{}).value === 'purge';
+    let routine = src === 'personal' ? (state.personalRoutines[state.currentUser]||{})[dayKey] : (state.sharedRoutine && state.sharedRoutine[dayKey]);
+    if (!routine) return;
+    routine.exercises.splice(idx, 1);
+    if (src === 'personal'){
+      await savePersonalRoutine(state.currentUser, state.personalRoutines[state.currentUser]);
+    } else {
+      await saveSharedRoutine(state.sharedRoutine);
+    }
+    if (purge){
+      // remove that exercise's key from ALL users' logs
+      // but note: keys are dayKey:index, deletion shifts indexes — to keep simplicity we only purge the specific key
+      const ek = exerciseKey(dayKey, idx);
+      for (const u of state.users){
+        if (state.logs[u.id] && state.logs[u.id][ek]){
+          delete state.logs[u.id][ek];
+          await saveUserLogs(u.id, state.logs[u.id]);
+        }
+      }
+    }
+    closeModal(); toast('Ejercicio eliminado'); render(); return;
+  }
+  if (a === 'saveRoutineMeta'){
+    const dayKey = state.currentDay;
+    const src = getCurrentSource(dayKey);
+    const label = (document.getElementById('dayLabel').value || '').trim() || 'Día';
+    const focus = (document.getElementById('dayFocus').value || '').trim();
+    if (src === 'personal'){
+      const pr = state.personalRoutines[state.currentUser] || {};
+      if (!pr[dayKey]) pr[dayKey] = { exercises: [] };
+      pr[dayKey].label = label; pr[dayKey].focus = focus;
+      pr[dayKey].icon = pr[dayKey].icon || 'ti-barbell';
+      state.personalRoutines[state.currentUser] = pr;
+      await savePersonalRoutine(state.currentUser, pr);
+    } else {
+      if (!state.sharedRoutine) state.sharedRoutine = {};
+      if (!state.sharedRoutine[dayKey]) state.sharedRoutine[dayKey] = { exercises: [] };
+      state.sharedRoutine[dayKey].label = label;
+      state.sharedRoutine[dayKey].focus = focus;
+      state.sharedRoutine[dayKey].icon = state.sharedRoutine[dayKey].icon || 'ti-barbell';
+      await saveSharedRoutine(state.sharedRoutine);
+    }
+    toast('Cambios guardados');
+    state.view = 'day'; render(); return;
+  }
+
+  // ====== EDIT EXERCISE actions ======
+  if (a === 'cycleMuscle'){
+    const mid = btn.dataset.mid;
+    const ed = window._editEx;
+    const inP = ed.primary.indexOf(mid);
+    const inS = ed.secondary.indexOf(mid);
+    if (inP === -1 && inS === -1){ ed.primary.push(mid); }
+    else if (inP !== -1){ ed.primary.splice(inP,1); ed.secondary.push(mid); }
+    else if (inS !== -1){ ed.secondary.splice(inS,1); }
+    // re-render only the muscle grid
+    const grid = document.getElementById('muscleGrid');
+    grid.innerHTML = MUSCLE_IDS.map(m => {
+      const isP = ed.primary.includes(m);
+      const isS = ed.secondary.includes(m);
+      const cls = isP ? 'primary' : isS ? 'secondary' : '';
+      return `<div class="muscle-chip ${cls}" data-action="cycleMuscle" data-mid="${m}">
+        <span>${MUSCLES[m].label}</span>
+        <span style="font-size:10px;font-weight:600;">${isP?'●●':isS?'●':''}</span>
+      </div>`;
+    }).join('');
+    grid.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle));
+    return;
+  }
+  if (a === 'addAlt'){
+    const c = document.getElementById('altsContainer');
+    const i = c.children.length;
+    const div = document.createElement('div');
+    div.className = 'alt-row';
+    div.innerHTML = `<input type="text" class="alt-in" data-i="${i}" value="" maxlength="80" placeholder="Alternativa..." />
+      <button data-action="removeAlt" data-i="${i}" class="ghost-danger" style="padding:6px;border:none;"><i class="ti ti-x" style="font-size:14px;"></i></button>`;
+    c.appendChild(div);
+    div.querySelector('[data-action]').addEventListener('click', handle);
+    div.querySelector('input').focus();
+    return;
+  }
+  if (a === 'removeAlt'){
+    btn.closest('.alt-row').remove();
+    return;
+  }
+  if (a === 'saveExercise'){
+    const dayKey = state.currentDay;
+    const src = getCurrentSource(dayKey);
+    const idx = state.currentExerciseIdx;
+    const isNew = idx === -1 || idx == null;
+    const ed = window._editEx;
+    ed.name = (document.getElementById('exName').value || '').trim();
+    ed.video = (document.getElementById('exVideo').value || '').trim();
+    ed.alts = Array.from(document.querySelectorAll('.alt-in')).map(i => i.value.trim()).filter(Boolean);
+    if (!ed.name){ toast('Ingresa un nombre'); return; }
+    let routine;
+    if (src === 'personal'){
+      const pr = state.personalRoutines[state.currentUser] || {};
+      if (!pr[dayKey]) pr[dayKey] = { label:'Día', focus:'', icon:'ti-barbell', exercises:[] };
+      routine = pr[dayKey];
+      state.personalRoutines[state.currentUser] = pr;
+    } else {
+      if (!state.sharedRoutine) state.sharedRoutine = {};
+      if (!state.sharedRoutine[dayKey]) state.sharedRoutine[dayKey] = { label:'Día', focus:'', icon:'ti-barbell', exercises:[] };
+      routine = state.sharedRoutine[dayKey];
+    }
+    if (isNew){ routine.exercises.push(ed); }
+    else { routine.exercises[idx] = ed; }
+    if (src === 'personal'){ await savePersonalRoutine(state.currentUser, state.personalRoutines[state.currentUser]); }
+    else { await saveSharedRoutine(state.sharedRoutine); }
+    toast(isNew ? 'Ejercicio creado' : 'Ejercicio actualizado');
+    state.view = 'editRoutine'; render(); return;
+  }
+}
+
+// ====== REALTIME SUBSCRIPTIONS ======
+let unsubs = [];
+function subscribeRealtime(){
+  if (!firebaseReady) return;
+  unsubs.forEach(u => u && u());
+  unsubs = [];
+  unsubs.push(onSnapshot(doc(db,'salas',groupPath(),'meta','users'), (snap)=>{
+    if (snap.exists()){
+      const newUsers = snap.data().users || [];
+      const changed = JSON.stringify(newUsers) !== JSON.stringify(state.users);
+      state.users = newUsers;
+      // if current user got deleted, log out
+      if (state.currentUser && !state.users.find(u => u.id === state.currentUser)){
+        state.currentUser = null; clearMe(); clearAuth();
+        toast('Tu usuario fue eliminado');
+        state.view = 'setup'; state.setupStep = state.users.length ? 'pickUser' : 'newUser';
+        render(); return;
+      }
+      if (changed) render();
+    }
+  }, console.error));
+  unsubs.push(onSnapshot(doc(db,'salas',groupPath(),'meta','config'), (snap)=>{
+    if (snap.exists()){
+      state.groupConfig = normalizeGroupConfig(snap.data());
+      state.invitationPassword = state.groupConfig.invitationPassword || INVITATION_PASSWORD_DEFAULT;
+    }
+  }, console.error));
+  unsubs.push(onSnapshot(doc(db,'salas',groupPath(),'routines','shared'), (snap)=>{
+    if (snap.exists() && snap.data().routine){
+      const r = snap.data().routine;
+      if (JSON.stringify(r) !== JSON.stringify(state.sharedRoutine)){
+        state.sharedRoutine = r; render();
+      }
+    }
+  }, console.error));
+  unsubs.push(onSnapshot(collection(db,'salas',groupPath(),'logs'), (snap)=>{
+    let changed = false;
+    snap.docChanges().forEach(ch => {
+      const id = ch.doc.id;
+      if (ch.type === 'removed'){
+        if (state.logs[id]){ delete state.logs[id]; changed = true; }
+      } else {
+        const data = ch.doc.data();
+        if (JSON.stringify(state.logs[id]) !== JSON.stringify(data)){
+          state.logs[id] = data; changed = true;
+        }
+      }
+    });
+    if (changed) render();
+  }, console.error));
+  unsubs.push(onSnapshot(collection(db,'salas',groupPath(),'personalRoutines'), (snap)=>{
+    let changed = false;
+    snap.docChanges().forEach(ch => {
+      const id = ch.doc.id;
+      if (ch.type === 'removed'){
+        if (state.personalRoutines[id]){ delete state.personalRoutines[id]; changed = true; }
+      } else {
+        const data = ch.doc.data().routine || {};
+        if (JSON.stringify(state.personalRoutines[id]) !== JSON.stringify(data)){
+          state.personalRoutines[id] = data; changed = true;
+        }
+      }
+    });
+    if (changed) render();
+  }, console.error));
+}
+
+// ====== INIT ======
+async function init(){
+  rememberGroup(state.currentGroup);
+  await reloadGroup();
+}
+init();
 </script>
 </body>
 </html>
+
+
+
+
