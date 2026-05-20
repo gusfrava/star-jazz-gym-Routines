@@ -355,6 +355,35 @@ function saveJoinedGroups(groups){ localStorage.setItem(LS_GROUPS, JSON.stringif
 function rememberGroup(groupId){ state.joinedGroups = Array.from(new Set([DEFAULT_GROUP, ...state.joinedGroups, groupId])); saveJoinedGroups(state.joinedGroups); }
 function forgetGroup(groupId){ state.joinedGroups = state.joinedGroups.filter(g => g !== groupId); saveJoinedGroups(state.joinedGroups); }
 function slugGroupName(name){ return String(name || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,48); }
+function membershipLocalKey(userId){ return 'membership:'+userId; }
+async function loadMembershipGroups(userId){
+  if (!userId) return [];
+  if (!firebaseReady){
+    try { return JSON.parse(localStorage.getItem(membershipLocalKey(userId)) || '[]'); } catch { return []; }
+  }
+  try {
+    const snap = await getDoc(doc(db,'memberships',userId));
+    return snap.exists() ? (snap.data().groups || []) : [];
+  } catch(e){ console.error(e); return []; }
+}
+async function saveMembershipGroups(userId, groups){
+  if (!userId) return;
+  const clean = Array.from(new Set(groups.filter(Boolean)));
+  if (!firebaseReady){ localStorage.setItem(membershipLocalKey(userId), JSON.stringify(clean)); return; }
+  await setDoc(doc(db,'memberships',userId), { groups: clean, updatedAt: Date.now() });
+}
+async function rememberMembership(userId, groupId){
+  if (!userId || !groupId) return;
+  const groups = Array.from(new Set([...(await loadMembershipGroups(userId)), groupId]));
+  await saveMembershipGroups(userId, groups);
+  if (userId === state.currentUser){ state.joinedGroups = groups; saveJoinedGroups(groups); }
+}
+async function forgetMembership(userId, groupId){
+  if (!userId || !groupId) return;
+  const groups = (await loadMembershipGroups(userId)).filter(g => g !== groupId);
+  await saveMembershipGroups(userId, groups);
+  if (userId === state.currentUser){ state.joinedGroups = groups.length ? groups : [DEFAULT_GROUP]; saveJoinedGroups(state.joinedGroups); }
+}
 function normalizeRoutine(routine){ return { ...DEFAULT_ROUTINE, ...(routine || {}) }; }
 function defaultGroupConfig(groupId = groupPath()){
   return { invitationPassword: INVITATION_PASSWORD_DEFAULT, groupName: groupId, createdBy: null, adminIds: [], createdAt: Date.now() };
@@ -391,6 +420,17 @@ async function saveUsers(users){
   try { await setDoc(doc(db,'salas',groupPath(),'meta','users'), { users }); }
   catch(e){ console.error(e); toast('Error al guardar'); }
   state.syncing = false;
+}
+async function loadUsersForGroup(groupId){
+  if (!firebaseReady) return JSON.parse(localStorage.getItem(groupLocalKey('users', groupId))||'[]');
+  try {
+    const snap = await getDoc(doc(db,'salas',groupId,'meta','users'));
+    return snap.exists() ? (snap.data().users || []) : [];
+  } catch(e){ console.error(e); return []; }
+}
+async function saveUsersForGroup(groupId, users){
+  if (!firebaseReady){ localStorage.setItem(groupLocalKey('users', groupId), JSON.stringify(users)); return; }
+  await setDoc(doc(db,'salas',groupId,'meta','users'), { users });
 }
 async function loadSharedRoutine(){
   if (!firebaseReady){
@@ -476,6 +516,14 @@ function authValid(){
 }
 function setAuth(userId){ const v = JSON.stringify({ userId, groupId: groupPath(), ts: Date.now() }); localStorage.setItem(groupLocalKey(LS_AUTH), v); if (groupPath() === DEFAULT_GROUP) localStorage.setItem(LS_AUTH, v); }
 function clearAuth(){ localStorage.removeItem(groupLocalKey(LS_AUTH)); if (groupPath() === DEFAULT_GROUP) localStorage.removeItem(LS_AUTH); }
+async function afterLogin(userId){
+  saveMe(userId);
+  setAuth(userId);
+  await rememberMembership(userId, groupPath());
+  const memberships = await loadMembershipGroups(userId);
+  state.joinedGroups = memberships.length ? Array.from(new Set(memberships)) : state.joinedGroups;
+  saveJoinedGroups(state.joinedGroups);
+}
 function loadRoutineSource(){
   try { return JSON.parse(localStorage.getItem(groupLocalKey(LS_SOURCE))||'{}'); } catch { return {}; }
 }
@@ -566,14 +614,14 @@ async function createGroup(groupId, groupName, invitationPassword, routineMode){
   rememberGroup(safeId);
   state.currentGroup = safeId;
   saveCurrentGroup(safeId);
-  saveMe(me.id);
-  setAuth(me.id);
+  await afterLogin(me.id);
   await reloadGroup();
   toast('Grupo creado');
 }
 async function joinGroup(groupId, password){
   const safeId = slugGroupName(groupId);
   if (!safeId){ toast('Escribe el código del grupo'); return; }
+  const currentMe = state.users.find(u => u.id === state.currentUser);
   let cfg = null;
   if (!firebaseReady){
     cfg = JSON.parse(localStorage.getItem(groupLocalKey('config', safeId)) || 'null');
@@ -583,9 +631,24 @@ async function joinGroup(groupId, password){
   }
   if (!cfg){ toast('No encontré ese grupo'); return; }
   if ((cfg.invitationPassword || INVITATION_PASSWORD_DEFAULT) !== password){ toast('Contraseña incorrecta'); return; }
+  if (currentMe && currentMe.pinHash){
+    const targetUsers = await loadUsersForGroup(safeId);
+    if (!targetUsers.some(u => u.id === currentMe.id)){
+      targetUsers.push({ ...currentMe, joinedAt: Date.now() });
+      await saveUsersForGroup(safeId, targetUsers);
+    }
+  }
   rememberGroup(safeId);
-  await switchGroup(safeId);
-  toast('Grupo agregado');
+  state.currentGroup = safeId;
+  saveCurrentGroup(safeId);
+  state.currentDay = null;
+  state.currentExerciseIdx = null;
+  state.editingSession = null;
+  state.showAlts = false;
+  state.showMuscles = false;
+  await reloadGroup();
+  if (currentMe) await afterLogin(currentMe.id);
+  toast(currentMe ? 'Entraste con tu mismo usuario' : 'Grupo agregado');
 }
 async function deleteCurrentGroup(){
   if (groupPath() === DEFAULT_GROUP){ toast('El grupo original está protegido'); return; }
@@ -604,6 +667,7 @@ async function deleteCurrentGroup(){
     await deleteDoc(doc(db,'salas',gid,'meta','users'));
     await deleteDoc(doc(db,'salas',gid,'routines','shared'));
   }
+  for (const u of state.users){ await forgetMembership(u.id, gid); }
   forgetGroup(gid);
   await switchGroup(DEFAULT_GROUP);
   toast('Grupo eliminado');
@@ -916,7 +980,7 @@ function renderSetup(){
         <div class="fade-in">
           <div style="font-size:48px;margin-bottom:8px;">💪</div>
           <h1 style="margin-bottom:6px;">Entrar al grupo</h1>
-          <p class="muted" style="font-size:14px;margin:0 0 8px;">Grupo: <strong style="color:var(--text);">${esc(state.groupConfig.groupName || groupPath())}</strong></p>
+          <p class="muted" style="font-size:14px;margin:0 0 8px;">Escribe tu nombre y PIN para entrar al grupo seleccionado.</p>
           <button data-action="groupMenu" style="margin-bottom:20px;padding:8px 12px;font-size:12px;background:var(--bg-elev);border-color:var(--border);">
             <i class="ti ti-users-group" style="font-size:14px;vertical-align:-2px;color:var(--accent);"></i> Cambiar grupo
           </button>
@@ -981,7 +1045,7 @@ function renderSetup(){
         <div class="fade-in">
           <div style="font-size:42px;margin-bottom:6px;">✨</div>
           <h1 style="margin-bottom:6px;">Crear cuenta</h1>
-          <p class="muted" style="font-size:14px;margin:0 0 10px;">Grupo: <strong style="color:var(--text);">${esc(state.groupConfig.groupName || groupPath())}</strong></p>
+          <p class="muted" style="font-size:14px;margin:0 0 10px;">Crea tu usuario dentro del grupo seleccionado.</p>
           <button data-action="groupMenu" style="margin-bottom:18px;padding:8px 12px;font-size:12px;background:var(--bg-elev);border-color:var(--border);">
             <i class="ti ti-users-group" style="font-size:14px;vertical-align:-2px;color:var(--accent);"></i> Cambiar / unirse a grupo
           </button>
@@ -1852,7 +1916,7 @@ async function handle(e){
       u.pinHash = await sha(pin);
       await saveUsers(state.users);
       state.currentUser = u.id;
-      saveMe(u.id); setAuth(u.id);
+      await afterLogin(u.id);
       state.view = 'home'; state.setupStep = null;
       toast('PIN creado. ¡Bienvenida! 💪');
       render(); return;
@@ -1860,7 +1924,7 @@ async function handle(e){
     const hash = await sha(pin);
     if (hash === u.pinHash){
       state.currentUser = u.id;
-      saveMe(u.id); setAuth(u.id);
+      await afterLogin(u.id);
       state.view = 'home'; state.setupStep = null;
       toast('Bienvenida 💪');
       render();
@@ -1902,7 +1966,7 @@ async function handle(e){
     const pinHash = await sha(p1);
     state.users.push({ id, name: state.pendingNewName, color, pinHash, createdAt: Date.now() });
     await saveUsers(state.users);
-    state.currentUser = id; saveMe(id); setAuth(id);
+    state.currentUser = id; await afterLogin(id);
     state.view = 'home'; state.setupStep = null;
     state.pendingNewName = null;
     toast('¡Cuenta creada!');
@@ -1913,15 +1977,16 @@ async function handle(e){
   // ====== Groups ======
   if (a === 'groupMenu'){
     closeModal();
-    const groups = state.joinedGroups.map(g => `
+    const canShowGroups = !!state.currentUser;
+    const groups = canShowGroups ? state.joinedGroups.map(g => `
       <button data-action="switchGroup" data-group="${esc(g)}" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:${g===groupPath()?'var(--accent-bg)':'transparent'};border:none;text-align:left;border-radius:8px;">
         <i class="ti ${g===groupPath()?'ti-circle-check':'ti-circle'}" style="font-size:17px;color:${g===groupPath()?'var(--accent)':'var(--text-dim)'};"></i>
         <span style="flex:1;font-weight:${g===groupPath()?'600':'500'};">${esc(g)}</span>
-      </button>`).join('');
+      </button>`).join('') : '';
     openModal(`
       <h2 style="margin-bottom:4px;">Grupos</h2>
-      <p class="muted" style="font-size:13px;margin:0 0 12px;">Cada grupo tiene sus propios usuarios, rutinas y progreso.</p>
-      <div class="card" style="padding:6px;margin-bottom:12px;">${groups}</div>
+      <p class="muted" style="font-size:13px;margin:0 0 12px;">${canShowGroups ? 'Cada grupo tiene sus propios usuarios, rutinas y progreso.' : 'Por privacidad, los grupos guardados solo se muestran despues de iniciar sesion.'}</p>
+      ${canShowGroups ? `<div class="card" style="padding:6px;margin-bottom:12px;">${groups}</div>` : ''}
       <div style="display:flex;gap:8px;margin-bottom:8px;">
         <button data-action="createGroupModal" style="flex:1;padding:11px;"><i class="ti ti-plus" style="font-size:14px;vertical-align:-2px;color:var(--accent);"></i> Crear</button>
         <button data-action="joinGroupModal" style="flex:1;padding:11px;"><i class="ti ti-login" style="font-size:14px;vertical-align:-2px;color:var(--accent);"></i> Unirse</button>
