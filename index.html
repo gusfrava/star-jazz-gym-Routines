@@ -213,6 +213,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/fireba
 import {
   getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, getDocs
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import {
+  getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  GoogleAuthProvider, signInWithPopup, signOut, updateProfile
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 
 // ============================================================
 // FIREBASE CONFIG
@@ -236,10 +240,11 @@ const ADMIN_NAME = "Jazmin";
 const INVITATION_PASSWORD_DEFAULT = "gym2026";
 // ============================================================
 
-let db; let firebaseReady = false;
+let db; let auth; let firebaseReady = false;
 try {
   const fbApp = initializeApp(firebaseConfig);
   db = getFirestore(fbApp);
+  auth = getAuth(fbApp);
   firebaseReady = !firebaseConfig.apiKey.startsWith("REEMPLAZA");
 } catch (e) { console.error("Firebase init error:", e); }
 
@@ -319,6 +324,9 @@ const state = {
   compareMode: 'week',
   logs: {},
   users: [],
+  authReady: !firebaseReady,
+  authUser: null,
+  account: null,
   sharedRoutine: null,
   personalRoutines: {},
   routineSource: {},      // { dayKey: 'shared'|'personal' }
@@ -370,19 +378,77 @@ async function saveMembershipGroups(userId, groups){
   if (!userId) return;
   const clean = Array.from(new Set(groups.filter(Boolean)));
   if (!firebaseReady){ localStorage.setItem(membershipLocalKey(userId), JSON.stringify(clean)); return; }
-  await setDoc(doc(db,'memberships',userId), { groups: clean, updatedAt: Date.now() });
+  try { await setDoc(doc(db,'memberships',userId), { groups: clean, updatedAt: Date.now() }); }
+  catch(e){ console.error(e); localStorage.setItem(membershipLocalKey(userId), JSON.stringify(clean)); }
 }
 async function rememberMembership(userId, groupId){
   if (!userId || !groupId) return;
-  const groups = Array.from(new Set([...(await loadMembershipGroups(userId)), groupId]));
-  await saveMembershipGroups(userId, groups);
-  if (userId === state.currentUser){ state.joinedGroups = groups; saveJoinedGroups(groups); }
+  try {
+    const groups = Array.from(new Set([...(await loadMembershipGroups(userId)), groupId]));
+    await saveMembershipGroups(userId, groups);
+    if (userId === state.currentUser){ state.joinedGroups = groups; saveJoinedGroups(groups); }
+  } catch(e){ console.error(e); }
 }
 async function forgetMembership(userId, groupId){
   if (!userId || !groupId) return;
-  const groups = (await loadMembershipGroups(userId)).filter(g => g !== groupId);
-  await saveMembershipGroups(userId, groups);
-  if (userId === state.currentUser){ state.joinedGroups = groups.length ? groups : [DEFAULT_GROUP]; saveJoinedGroups(state.joinedGroups); }
+  try {
+    const groups = (await loadMembershipGroups(userId)).filter(g => g !== groupId);
+    await saveMembershipGroups(userId, groups);
+    if (userId === state.currentUser){ state.joinedGroups = groups.length ? groups : [DEFAULT_GROUP]; saveJoinedGroups(state.joinedGroups); }
+  } catch(e){ console.error(e); }
+}
+function defaultAccount(user){
+  return {
+    uid: user.uid,
+    email: user.email || '',
+    displayName: user.displayName || '',
+    groups: [],
+    linkedProfiles: {},
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+}
+async function loadAccount(user){
+  if (!firebaseReady || !user) return null;
+  try {
+    const ref = doc(db, 'accounts', user.uid);
+    const snap = await getDoc(ref);
+    const account = snap.exists() ? { ...defaultAccount(user), ...snap.data(), uid: user.uid } : defaultAccount(user);
+    account.groups = Array.from(new Set(account.groups || []));
+    account.linkedProfiles = account.linkedProfiles || {};
+    if (!snap.exists()) await setDoc(ref, account);
+    return account;
+  } catch(e){
+    console.error(e);
+    toast('No pude cargar tu cuenta');
+    return defaultAccount(user);
+  }
+}
+async function saveAccount(patch = {}){
+  if (!firebaseReady || !state.authUser) return;
+  const next = {
+    ...defaultAccount(state.authUser),
+    ...(state.account || {}),
+    ...patch,
+    uid: state.authUser.uid,
+    email: state.authUser.email || (state.account && state.account.email) || '',
+    displayName: state.authUser.displayName || (state.account && state.account.displayName) || '',
+    updatedAt: Date.now()
+  };
+  next.groups = Array.from(new Set(next.groups || []));
+  next.linkedProfiles = next.linkedProfiles || {};
+  state.account = next;
+  try { await setDoc(doc(db, 'accounts', state.authUser.uid), next); }
+  catch(e){ console.error(e); toast('No pude guardar tu cuenta'); }
+}
+function linkedProfileForGroup(groupId = groupPath()){
+  return state.account && state.account.linkedProfiles ? state.account.linkedProfiles[groupId] : null;
+}
+async function linkAuthToProfile(userId, groupId = groupPath()){
+  if (!state.authUser || !userId || !groupId) return;
+  const groups = Array.from(new Set([...(state.account?.groups || []), groupId]));
+  const linkedProfiles = { ...(state.account?.linkedProfiles || {}), [groupId]: userId };
+  await saveAccount({ groups, linkedProfiles });
 }
 function normalizeRoutine(routine){ return { ...DEFAULT_ROUTINE, ...(routine || {}) }; }
 function defaultGroupConfig(groupId = groupPath()){
@@ -507,6 +573,7 @@ function loadMe(){ return localStorage.getItem(groupLocalKey(LS_ME)) || (groupPa
 function saveMe(id){ localStorage.setItem(groupLocalKey(LS_ME), id); if (groupPath() === DEFAULT_GROUP) localStorage.setItem(LS_ME, id); }
 function clearMe(){ localStorage.removeItem(groupLocalKey(LS_ME)); if (groupPath() === DEFAULT_GROUP) localStorage.removeItem(LS_ME); }
 function authValid(){
+  if (state.authUser && linkedProfileForGroup() === state.currentUser) return true;
   try {
     const a = JSON.parse(localStorage.getItem(groupLocalKey(LS_AUTH)) || (groupPath() === DEFAULT_GROUP ? localStorage.getItem(LS_AUTH) : 'null'));
     if (!a || !a.userId || !a.ts || (a.groupId && a.groupId !== groupPath())) return false;
@@ -520,8 +587,10 @@ async function afterLogin(userId){
   saveMe(userId);
   setAuth(userId);
   await rememberMembership(userId, groupPath());
+  await linkAuthToProfile(userId, groupPath());
   const memberships = await loadMembershipGroups(userId);
-  state.joinedGroups = memberships.length ? Array.from(new Set(memberships)) : state.joinedGroups;
+  const accountGroups = state.account && state.account.groups ? state.account.groups : [];
+  state.joinedGroups = Array.from(new Set([...(memberships || []), ...(accountGroups || []), groupPath()]));
   saveJoinedGroups(state.joinedGroups);
 }
 function loadRoutineSource(){
@@ -554,7 +623,10 @@ async function loadGroupState(){
 }
 function chooseInitialViewForGroup(){
   const meId = loadMe();
-  if (meId && state.users.find(u=>u.id===meId) && authValid()){
+  const linkedId = linkedProfileForGroup();
+  if (linkedId && state.users.find(u=>u.id===linkedId)){
+    state.currentUser = linkedId; state.view = 'home'; state.setupStep = null;
+  } else if (meId && state.users.find(u=>u.id===meId) && authValid()){
     state.currentUser = meId; state.view = 'home'; state.setupStep = null;
   } else if (state.users.length === 0){
     state.currentUser = null; state.setupStep = 'newUser'; state.view = 'setup';
@@ -568,6 +640,10 @@ async function reloadGroup(){
   unsubs.forEach(u => u && u());
   unsubs = [];
   await loadGroupState();
+  if (state.account && state.account.groups && state.account.groups.length){
+    state.joinedGroups = Array.from(new Set(state.account.groups));
+    saveJoinedGroups(state.joinedGroups);
+  }
   chooseInitialViewForGroup();
   subscribeRealtime();
   render();
@@ -935,6 +1011,8 @@ function closeModal(){ modalRoot.innerHTML = ''; state.modalOpen = null; }
 
 // ====== RENDER ======
 function render(){
+  if (firebaseReady && !state.authReady) return renderAuthLoading();
+  if (firebaseReady && !state.authUser) return renderAuthGate();
   if (state.view === 'setup') return renderSetup();
   if (state.view === 'day') return renderDay();
   if (state.view === 'exercise') return renderExercise();
@@ -943,6 +1021,46 @@ function render(){
   if (state.view === 'editRoutine') return renderEditRoutine();
   if (state.view === 'editExercise') return renderEditExercise();
   return renderHome();
+}
+
+function renderAuthLoading(){
+  root.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--text-muted);font-size:14px;">
+    <div class="loader" style="margin:0 auto 14px;"></div>
+    <div>Revisando tu cuenta...</div>
+  </div>`;
+}
+
+function renderAuthGate(){
+  root.innerHTML = `
+    <div style="max-width:420px;margin:0 auto;padding-top:32px;">
+      <div class="fade-in" style="margin-bottom:22px;">
+        <div style="font-size:48px;margin-bottom:8px;">💪</div>
+        <h1 style="margin-bottom:6px;">Star Jazz Gym Buddy</h1>
+        <p class="muted" style="font-size:14px;margin:0;">Primero entra con email o Google. Despues enlazas tu usuario del gym.</p>
+      </div>
+      <div class="card fade-in" style="margin-bottom:14px;animation-delay:60ms;">
+        <label class="section-label" style="margin-bottom:6px;">Email de tu cuenta</label>
+        <input id="authEmail" type="email" autocomplete="email" placeholder="tu@email.com (no tu nombre del gym)" style="margin-bottom:10px;" />
+        <label class="section-label" style="margin-bottom:6px;">Contraseña de cuenta</label>
+        <input id="authPassword" type="password" autocomplete="current-password" placeholder="Mínimo 6 caracteres, no tu PIN" style="margin-bottom:12px;" />
+        <div style="display:flex;gap:8px;">
+          <button data-action="authEmailLogin" style="flex:1;padding:12px;">Ya tengo cuenta</button>
+          <button class="primary" data-action="authEmailSignup" style="flex:1;padding:12px;font-weight:600;">Crear cuenta</button>
+        </div>
+        <div id="authError" style="color:var(--danger);font-size:12px;text-align:center;margin-top:10px;min-height:14px;"></div>
+      </div>
+      <button data-action="authGoogle" class="fade-in" style="width:100%;padding:14px;font-weight:600;animation-delay:120ms;background:var(--bg-elev);">
+        <i class="ti ti-brand-google" style="font-size:16px;vertical-align:-2px;color:var(--accent);"></i> Continuar con Google
+      </button>
+      <div class="banner banner-info fade-in" style="margin-top:16px;animation-delay:180ms;">
+        <i class="ti ti-info-circle"></i>
+        <div>Si ya tenias usuario, primero crea/entra con tu email. Luego escribes tu nombre del gym y PIN una vez para enlazarlo. Tus rutinas y progreso no se mueven.</div>
+      </div>
+    </div>`;
+  attach();
+  document.getElementById('authPassword')?.addEventListener('keydown', (e)=>{
+    if (e.key === 'Enter') document.querySelector('[data-action="authEmailLogin"]').click();
+  });
 }
 
 function syncIndicator(){
@@ -1883,6 +2001,56 @@ function setRowUnilateral(row, on){
 async function handle(e){
   const btn = e.currentTarget; const a = btn.dataset.action;
 
+  // ====== Firebase Auth ======
+  if (a === 'authEmailLogin' || a === 'authEmailSignup'){
+    const email = (document.getElementById('authEmail')?.value || '').trim();
+    const password = document.getElementById('authPassword')?.value || '';
+    const errEl = document.getElementById('authError');
+    if (!email){ errEl.textContent = 'Escribe tu email'; return; }
+    if (password.length < 6){ errEl.textContent = 'La contraseña debe tener mínimo 6 caracteres'; return; }
+    try {
+      if (a === 'authEmailSignup'){
+        const cred = await createUserWithEmailAndPassword(auth, email, password);
+        if (cred.user && !cred.user.displayName){
+          await updateProfile(cred.user, { displayName: email.split('@')[0] });
+        }
+        toast('Cuenta creada');
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+        toast('Sesión iniciada');
+      }
+    } catch(err){
+      console.error(err);
+      const code = err.code || '';
+      errEl.textContent = code.includes('email-already-in-use') ? 'Ese email ya tiene cuenta. Toca "Ya tengo cuenta".' :
+        code.includes('invalid-email') ? 'Escribe un email válido, no tu nombre del gym.' :
+        code.includes('weak-password') ? 'La contraseña debe tener mínimo 6 caracteres.' :
+        code.includes('invalid-credential') || code.includes('wrong-password') ? 'Email o contraseña incorrectos. Si es primera vez, toca "Crear cuenta".' :
+        code.includes('user-not-found') ? 'No encontré una cuenta con ese email. Toca "Crear cuenta".' :
+        code.includes('operation-not-allowed') ? 'Activa Email/Password en Firebase Auth.' :
+        code.includes('configuration-not-found') ? 'Firebase Auth todavía no está activado en este proyecto.' :
+        code.includes('unauthorized-domain') ? 'Agrega este dominio en Firebase Auth > Authorized domains.' :
+        code.includes('network-request-failed') ? 'No hay conexión con Firebase. Revisa internet o bloqueadores.' :
+        `No pude iniciar sesión (${code || 'error desconocido'}).`;
+    }
+    return;
+  }
+  if (a === 'authGoogle'){
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      toast('Sesión iniciada');
+    } catch(err){
+      console.error(err);
+      const code = err.code || '';
+      toast(code.includes('operation-not-allowed') ? 'Activa Google en Firebase Auth' :
+        code.includes('unauthorized-domain') ? 'Autoriza este dominio en Firebase' :
+        code.includes('popup-blocked') ? 'El navegador bloqueó el popup de Google' :
+        `No pude entrar con Google (${code || 'error'})`);
+    }
+    return;
+  }
+
   // ====== Setup / Auth ======
   if (a === 'newUser'){ state.setupStep = 'newUser'; render(); return; }
   if (a === 'backToPick'){ state.setupStep = state.users.length ? 'pickUser' : 'newUser'; render(); return; }
@@ -2139,6 +2307,10 @@ async function handle(e){
   if (a === 'logoutUser'){
     closeModal();
     state.currentUser = null; clearMe(); clearAuth();
+    if (firebaseReady && auth) {
+      try { await signOut(auth); }
+      catch(err){ console.error(err); }
+    }
     state.setupStep = state.users.length ? 'pickUser' : 'newUser';
     state.view = 'setup';
     render(); return;
@@ -2702,6 +2874,31 @@ function subscribeRealtime(){
 // ====== INIT ======
 async function init(){
   rememberGroup(state.currentGroup);
+  if (firebaseReady && auth){
+    onAuthStateChanged(auth, async (user)=>{
+      state.authReady = true;
+      state.authUser = user || null;
+      state.account = user ? await loadAccount(user) : null;
+      if (state.account && state.account.groups && state.account.groups.length){
+        state.joinedGroups = Array.from(new Set(state.account.groups));
+        saveJoinedGroups(state.joinedGroups);
+        if (!state.joinedGroups.includes(state.currentGroup)){
+          state.currentGroup = state.joinedGroups[0] || DEFAULT_GROUP;
+          saveCurrentGroup(state.currentGroup);
+        }
+      }
+      if (!user){
+        state.currentUser = null;
+        state.setupStep = null;
+        state.view = 'setup';
+        render();
+        return;
+      }
+      await reloadGroup();
+    });
+    render();
+    return;
+  }
   await reloadGroup();
 }
 init();
