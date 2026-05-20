@@ -688,7 +688,7 @@ function setVolume(set){
 function formatSetLine(set, idx){
   if (set.unilateral){
     const l = set.left || {}; const r = set.right || {};
-    return `${idx+1}) L ${l.weight||0}lb × ${l.reps||0} / R ${r.weight||0}lb × ${r.reps||0}${set.note ? ' · '+set.note : ''}`;
+    return `${idx+1}) Izq ${l.weight||0}lb × ${l.reps||0} / Der ${r.weight||0}lb × ${r.reps||0}${set.note ? ' · '+set.note : ''}`;
   }
   return `${idx+1}) ${set.weight}lb × ${set.reps}${set.note ? ' · '+set.note : ''}`;
 }
@@ -722,6 +722,7 @@ function muscleLabels(prim, sec){
   };
 }
 function renderSetRow(i, set = null, lastSet = null, unilateralMode = false){
+  const isUnilateral = !!(unilateralMode || (set && set.unilateral));
   const normalReps = set && !set.unilateral ? set.reps : '';
   const normalWeight = set && !set.unilateral ? set.weight : '';
   const left = set?.left || {};
@@ -730,21 +731,26 @@ function renderSetRow(i, set = null, lastSet = null, unilateralMode = false){
   const ph_w = lastSet ? (lastSet.weight || setMaxWeight(lastSet) || '') : '';
   const ph_n = lastSet && lastSet.note ? lastSet.note : '';
   return `<div class="set-row">
-    <div class="normal-fields" style="display:${unilateralMode?'none':'grid'};grid-template-columns:30px 1fr 1fr 28px;gap:8px;align-items:center;margin-bottom:6px;">
+    <div class="normal-fields" style="display:${isUnilateral?'none':'grid'};grid-template-columns:30px 1fr 1fr 28px;gap:8px;align-items:center;margin-bottom:6px;">
       <div class="mono" style="font-size:13px;text-align:center;font-weight:600;color:var(--accent);">${i+1}</div>
       <input type="number" class="reps-in" inputmode="numeric" min="0" value="${normalReps !== '' ? esc(normalReps) : ''}" placeholder="${ph_r || 'reps'}" style="text-align:center;padding:9px;" />
       <input type="number" class="weight-in" inputmode="decimal" step="0.5" min="0" value="${normalWeight !== '' ? esc(normalWeight) : ''}" placeholder="${ph_w ? ph_w+' lb' : 'peso lb'}" style="text-align:center;padding:9px;" />
       <button class="del-set" aria-label="Eliminar" style="padding:4px;border:none;color:var(--text-dim);background:transparent;"><i class="ti ti-x" style="font-size:14px;"></i></button>
     </div>
-    <div class="unilateral-fields" style="display:${unilateralMode?'grid':'none'};grid-template-columns:30px repeat(4,1fr) 28px;gap:6px;align-items:center;margin-bottom:6px;">
+    <div class="unilateral-fields" style="display:${isUnilateral?'grid':'none'};grid-template-columns:30px repeat(4,1fr) 28px;gap:6px;align-items:center;margin-bottom:6px;">
       <div class="mono" style="font-size:13px;text-align:center;font-weight:600;color:var(--accent);">${i+1}</div>
-      <input type="number" class="left-reps-in" inputmode="numeric" min="0" value="${left.reps ?? ''}" placeholder="L reps" style="text-align:center;padding:8px;" />
-      <input type="number" class="left-weight-in" inputmode="decimal" step="0.5" min="0" value="${left.weight ?? ''}" placeholder="L lb" style="text-align:center;padding:8px;" />
-      <input type="number" class="right-reps-in" inputmode="numeric" min="0" value="${right.reps ?? ''}" placeholder="R reps" style="text-align:center;padding:8px;" />
-      <input type="number" class="right-weight-in" inputmode="decimal" step="0.5" min="0" value="${right.weight ?? ''}" placeholder="R lb" style="text-align:center;padding:8px;" />
+      <input type="number" class="left-reps-in" inputmode="numeric" min="0" value="${left.reps ?? ''}" placeholder="Izq reps" style="text-align:center;padding:8px;" />
+      <input type="number" class="left-weight-in" inputmode="decimal" step="0.5" min="0" value="${left.weight ?? ''}" placeholder="Izq lb" style="text-align:center;padding:8px;" />
+      <input type="number" class="right-reps-in" inputmode="numeric" min="0" value="${right.reps ?? ''}" placeholder="Der reps" style="text-align:center;padding:8px;" />
+      <input type="number" class="right-weight-in" inputmode="decimal" step="0.5" min="0" value="${right.weight ?? ''}" placeholder="Der lb" style="text-align:center;padding:8px;" />
       <button class="del-set" aria-label="Eliminar" style="padding:4px;border:none;color:var(--text-dim);background:transparent;"><i class="ti ti-x" style="font-size:14px;"></i></button>
     </div>
-    <input type="text" class="note-in" value="${set && set.note ? esc(set.note) : ''}" placeholder="${ph_n ? 'Nota anterior: '+esc(ph_n) : 'Nota del set (opcional)'}" maxlength="120" style="width:100%;font-size:12px;padding:7px 11px;" />
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:center;">
+      <label style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted);white-space:nowrap;">
+        <input type="checkbox" class="set-unilateral" ${isUnilateral?'checked':''} /> Uni
+      </label>
+      <input type="text" class="note-in" value="${set && set.note ? esc(set.note) : ''}" placeholder="${ph_n ? 'Nota anterior: '+esc(ph_n) : 'Nota del set (opcional)'}" maxlength="120" style="width:100%;font-size:12px;padding:7px 11px;" />
+    </div>
   </div>`;
 }
 
@@ -1221,6 +1227,7 @@ function renderExercise(){
         <button data-action="copyFirstSet" style="padding:8px 11px;font-size:13px;border-color:var(--border);background:var(--bg-elev-2);">
           <i class="ti ti-copy" style="font-size:14px;vertical-align:-2px;color:var(--accent);"></i> Copiar set 1
         </button>
+        <div class="muted" style="font-size:11px;flex-basis:100%;line-height:1.35;">Puedes mezclar sets normales y unilaterales. Usa Uni por set; todo se suma al mismo progreso de este ejercicio.</div>
       </div>
       <div class="dim" style="display:grid;grid-template-columns:30px 1fr 1fr 28px;gap:8px;margin-bottom:8px;padding:0 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;font-family:var(--font-mono);">
         <div style="text-align:center;">SET</div><div style="text-align:center;">REPS</div><div style="text-align:center;">PESO (LB)</div><div></div>
@@ -1780,6 +1787,33 @@ function attach(){
 }
 function attachSetHandlers(){
   document.querySelectorAll('.del-set').forEach(b => b.addEventListener('click', e => e.target.closest('.set-row').remove()));
+  document.querySelectorAll('.set-unilateral').forEach(b => b.addEventListener('change', e => setRowUnilateral(e.target.closest('.set-row'), e.target.checked)));
+}
+function setRowUnilateral(row, on){
+  if (!row) return;
+  const normal = row.querySelector('.normal-fields');
+  const uni = row.querySelector('.unilateral-fields');
+  if (normal) normal.style.display = on ? 'none' : 'grid';
+  if (uni) uni.style.display = on ? 'grid' : 'none';
+  const cb = row.querySelector('.set-unilateral');
+  if (cb) cb.checked = !!on;
+  if (on){
+    const reps = row.querySelector('.reps-in')?.value || '';
+    const weight = row.querySelector('.weight-in')?.value || '';
+    ['left','right'].forEach(side => {
+      const repsIn = row.querySelector(`.${side}-reps-in`);
+      const weightIn = row.querySelector(`.${side}-weight-in`);
+      if (repsIn && !repsIn.value) repsIn.value = reps;
+      if (weightIn && !weightIn.value) weightIn.value = weight;
+    });
+  } else {
+    const reps = row.querySelector('.left-reps-in')?.value || row.querySelector('.right-reps-in')?.value || '';
+    const weight = row.querySelector('.left-weight-in')?.value || row.querySelector('.right-weight-in')?.value || '';
+    const repsIn = row.querySelector('.reps-in');
+    const weightIn = row.querySelector('.weight-in');
+    if (repsIn && !repsIn.value) repsIn.value = reps;
+    if (weightIn && !weightIn.value) weightIn.value = weight;
+  }
 }
 
 async function handle(e){
@@ -2207,39 +2241,20 @@ async function handle(e){
   if (a === 'toggleUnilateral'){
     const on = document.getElementById('unilateralMode')?.checked;
     document.querySelectorAll('.set-row').forEach(row => {
-      const normal = row.querySelector('.normal-fields');
-      const uni = row.querySelector('.unilateral-fields');
-      if (normal) normal.style.display = on ? 'none' : 'grid';
-      if (uni) uni.style.display = on ? 'grid' : 'none';
-      if (on){
-        const reps = row.querySelector('.reps-in')?.value || '';
-        const weight = row.querySelector('.weight-in')?.value || '';
-        ['left','right'].forEach(side => {
-          const repsIn = row.querySelector(`.${side}-reps-in`);
-          const weightIn = row.querySelector(`.${side}-weight-in`);
-          if (repsIn && !repsIn.value) repsIn.value = reps;
-          if (weightIn && !weightIn.value) weightIn.value = weight;
-        });
-      } else {
-        const reps = row.querySelector('.left-reps-in')?.value || row.querySelector('.right-reps-in')?.value || '';
-        const weight = row.querySelector('.left-weight-in')?.value || row.querySelector('.right-weight-in')?.value || '';
-        const repsIn = row.querySelector('.reps-in');
-        const weightIn = row.querySelector('.weight-in');
-        if (repsIn && !repsIn.value) repsIn.value = reps;
-        if (weightIn && !weightIn.value) weightIn.value = weight;
-      }
+      setRowUnilateral(row, on);
     });
     return;
   }
   if (a === 'copyFirstSet'){
     const rows = Array.from(document.querySelectorAll('.set-row'));
     if (rows.length < 2){ toast('No hay sets para copiar'); return; }
-    const unilateral = !!document.getElementById('unilateralMode')?.checked;
     const first = rows[0];
-    const fields = unilateral
+    const firstUnilateral = !!first.querySelector('.set-unilateral')?.checked;
+    const fields = firstUnilateral
       ? ['left-reps-in','left-weight-in','right-reps-in','right-weight-in']
       : ['reps-in','weight-in'];
     rows.slice(1).forEach(row => {
+      setRowUnilateral(row, firstUnilateral);
       fields.forEach(cls => {
         const src = first.querySelector('.'+cls);
         const dst = row.querySelector('.'+cls);
@@ -2255,7 +2270,8 @@ async function handle(e){
     const prev = c.lastElementChild;
     let seed = null;
     if (prev){
-      if (unilateral){
+      const prevUnilateral = !!prev.querySelector('.set-unilateral')?.checked;
+      if (prevUnilateral){
         seed = {
           unilateral:true,
           left:{ reps: prev.querySelector('.left-reps-in')?.value || '', weight: prev.querySelector('.left-weight-in')?.value || '' },
@@ -2265,9 +2281,12 @@ async function handle(e){
         seed = { reps: prev.querySelector('.reps-in')?.value || '', weight: prev.querySelector('.weight-in')?.value || '' };
       }
     }
-    c.insertAdjacentHTML('beforeend', renderSetRow(n - 1, seed, null, unilateral));
+    c.insertAdjacentHTML('beforeend', renderSetRow(n - 1, seed, null, seed ? !!seed.unilateral : unilateral));
     const added = c.lastElementChild;
-    if (added) added.querySelectorAll('.del-set').forEach(b => b.addEventListener('click', ()=> added.remove()));
+    if (added) {
+      added.querySelectorAll('.del-set').forEach(b => b.addEventListener('click', ()=> added.remove()));
+      added.querySelector('.set-unilateral')?.addEventListener('change', e => setRowUnilateral(added, e.target.checked));
+    }
     return;
   }
   if (a === 'saveSession'){
@@ -2276,10 +2295,10 @@ async function handle(e){
     const date = document.getElementById('sessionDate').value || today();
     const rows = document.querySelectorAll('.set-row');
     const sets = [];
-    const unilateral = !!document.getElementById('unilateralMode')?.checked;
     rows.forEach(r => {
       const note = (r.querySelector('.note-in').value || '').trim();
-      if (unilateral){
+      const rowUnilateral = !!r.querySelector('.set-unilateral')?.checked;
+      if (rowUnilateral){
         const left = {
           reps: Number(r.querySelector('.left-reps-in').value),
           weight: Number(r.querySelector('.left-weight-in').value)
