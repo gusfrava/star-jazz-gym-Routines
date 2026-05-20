@@ -182,6 +182,8 @@ input[type="date"]{color-scheme:dark}
 .history-entry{padding:12px;background:var(--bg-elev-2);border:1px solid var(--border);
   border-radius:var(--radius-sm);margin-bottom:6px;transition:all 0.15s}
 .history-entry:hover{border-color:var(--border-strong)}
+.wrap-text{overflow-wrap:anywhere;word-break:break-word;white-space:normal;line-height:1.45}
+.date-field{display:block;width:100%;max-width:360px;margin:0 auto;text-align:center;text-align-last:center;font-family:var(--font-mono)}
 .banner{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:var(--radius-sm);
   font-size:13px;margin-bottom:14px}
 .banner i{font-size:16px;flex-shrink:0;margin-top:1px}
@@ -623,6 +625,27 @@ function toast(msg){
   el.textContent = msg; el.classList.add('show');
   setTimeout(()=> el.classList.remove('show'), 1800);
 }
+async function copyText(text, label){
+  try {
+    if (navigator.clipboard && window.isSecureContext){
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    toast(`${label} copiado`);
+  } catch(e){
+    console.error(e);
+    toast('No se pudo copiar');
+  }
+}
 function isAdmin(){
   const me = state.users.find(u => u.id === state.currentUser);
   if (!me) return false;
@@ -640,8 +663,37 @@ function exerciseNameForKey(ek){
   const routine = (state.sharedRoutine && state.sharedRoutine[day]) || getRoutineForDay(day);
   return routine && routine.exercises && routine.exercises[idx] ? routine.exercises[idx].name : ek;
 }
-const bestSet = (e) => !e.sets || !e.sets.length ? null : e.sets.reduce((b,s)=> (s.weight||0)>(b.weight||0)?s:b, e.sets[0]);
-const totalVolume = (e) => !e.sets ? 0 : e.sets.reduce((s,x)=> s + (Number(x.reps)||0)*(Number(x.weight)||0), 0);
+function setMaxWeight(set){
+  if (!set) return 0;
+  if (set.unilateral){
+    return Math.max(Number(set.left?.weight)||0, Number(set.right?.weight)||0);
+  }
+  return Number(set.weight)||0;
+}
+function setDisplayReps(set){
+  if (!set) return 0;
+  if (set.unilateral){
+    return Math.max(Number(set.left?.reps)||0, Number(set.right?.reps)||0);
+  }
+  return Number(set.reps)||0;
+}
+function setVolume(set){
+  if (!set) return 0;
+  if (set.unilateral){
+    return (Number(set.left?.reps)||0) * (Number(set.left?.weight)||0) +
+      (Number(set.right?.reps)||0) * (Number(set.right?.weight)||0);
+  }
+  return (Number(set.reps)||0) * (Number(set.weight)||0);
+}
+function formatSetLine(set, idx){
+  if (set.unilateral){
+    const l = set.left || {}; const r = set.right || {};
+    return `${idx+1}) L ${l.weight||0}lb × ${l.reps||0} / R ${r.weight||0}lb × ${r.reps||0}${set.note ? ' · '+set.note : ''}`;
+  }
+  return `${idx+1}) ${set.weight}lb × ${set.reps}${set.note ? ' · '+set.note : ''}`;
+}
+const bestSet = (e) => !e.sets || !e.sets.length ? null : e.sets.reduce((b,s)=> setMaxWeight(s)>setMaxWeight(b)?s:b, e.sets[0]);
+const totalVolume = (e) => !e.sets ? 0 : e.sets.reduce((sum,x)=> sum + setVolume(x), 0);
 const latestEntry = (uid, ek) => {
   const a = getEntries(uid, ek);
   return a.length ? a.slice().sort((x,y)=>x.date.localeCompare(y.date)).pop() : null;
@@ -657,7 +709,7 @@ function bucketEntries(entries, mode){
     else { key = e.date.slice(0,4); }
     if (!b[key]) b[key] = { key, maxWeight:0, totalVolume:0, sessions:0 };
     const best = bestSet(e);
-    if (best && best.weight > b[key].maxWeight) b[key].maxWeight = Number(best.weight)||0;
+    if (best && setMaxWeight(best) > b[key].maxWeight) b[key].maxWeight = setMaxWeight(best);
     b[key].totalVolume += totalVolume(e);
     b[key].sessions += 1;
   }
@@ -668,6 +720,32 @@ function muscleLabels(prim, sec){
     primLabels: (prim||[]).map(id => MUSCLES[id]?.label).filter(Boolean),
     secLabels: (sec||[]).map(id => MUSCLES[id]?.label).filter(Boolean)
   };
+}
+function renderSetRow(i, set = null, lastSet = null, unilateralMode = false){
+  const normalReps = set && !set.unilateral ? set.reps : '';
+  const normalWeight = set && !set.unilateral ? set.weight : '';
+  const left = set?.left || {};
+  const right = set?.right || {};
+  const ph_r = lastSet ? (lastSet.reps || setDisplayReps(lastSet) || '') : '';
+  const ph_w = lastSet ? (lastSet.weight || setMaxWeight(lastSet) || '') : '';
+  const ph_n = lastSet && lastSet.note ? lastSet.note : '';
+  return `<div class="set-row">
+    <div class="normal-fields" style="display:${unilateralMode?'none':'grid'};grid-template-columns:30px 1fr 1fr 28px;gap:8px;align-items:center;margin-bottom:6px;">
+      <div class="mono" style="font-size:13px;text-align:center;font-weight:600;color:var(--accent);">${i+1}</div>
+      <input type="number" class="reps-in" inputmode="numeric" min="0" value="${normalReps !== '' ? esc(normalReps) : ''}" placeholder="${ph_r || 'reps'}" style="text-align:center;padding:9px;" />
+      <input type="number" class="weight-in" inputmode="decimal" step="0.5" min="0" value="${normalWeight !== '' ? esc(normalWeight) : ''}" placeholder="${ph_w ? ph_w+' lb' : 'peso lb'}" style="text-align:center;padding:9px;" />
+      <button class="del-set" aria-label="Eliminar" style="padding:4px;border:none;color:var(--text-dim);background:transparent;"><i class="ti ti-x" style="font-size:14px;"></i></button>
+    </div>
+    <div class="unilateral-fields" style="display:${unilateralMode?'grid':'none'};grid-template-columns:30px repeat(4,1fr) 28px;gap:6px;align-items:center;margin-bottom:6px;">
+      <div class="mono" style="font-size:13px;text-align:center;font-weight:600;color:var(--accent);">${i+1}</div>
+      <input type="number" class="left-reps-in" inputmode="numeric" min="0" value="${left.reps ?? ''}" placeholder="L reps" style="text-align:center;padding:8px;" />
+      <input type="number" class="left-weight-in" inputmode="decimal" step="0.5" min="0" value="${left.weight ?? ''}" placeholder="L lb" style="text-align:center;padding:8px;" />
+      <input type="number" class="right-reps-in" inputmode="numeric" min="0" value="${right.reps ?? ''}" placeholder="R reps" style="text-align:center;padding:8px;" />
+      <input type="number" class="right-weight-in" inputmode="decimal" step="0.5" min="0" value="${right.weight ?? ''}" placeholder="R lb" style="text-align:center;padding:8px;" />
+      <button class="del-set" aria-label="Eliminar" style="padding:4px;border:none;color:var(--text-dim);background:transparent;"><i class="ti ti-x" style="font-size:14px;"></i></button>
+    </div>
+    <input type="text" class="note-in" value="${set && set.note ? esc(set.note) : ''}" placeholder="${ph_n ? 'Nota anterior: '+esc(ph_n) : 'Nota del set (opcional)'}" maxlength="120" style="width:100%;font-size:12px;padding:7px 11px;" />
+  </div>`;
 }
 
 // Returns the routine the current user is viewing for a given day.
@@ -791,7 +869,6 @@ function render(){
   if (state.view === 'day') return renderDay();
   if (state.view === 'exercise') return renderExercise();
   if (state.view === 'compare') return renderCompare();
-  if (state.view === 'daily') return renderDaily();
   if (state.view === 'settings') return renderSettings();
   if (state.view === 'editRoutine') return renderEditRoutine();
   if (state.view === 'editExercise') return renderEditExercise();
@@ -827,30 +904,35 @@ function headerBar(title, backFn){
 // ====== SETUP / AUTH ======
 function renderSetup(){
   if (state.setupStep === 'pickUser'){
-    const userOptions = state.users.map((u,i) => `
-      <button data-action="pickUser" data-uid="${u.id}" class="day-card fade-in" style="animation-delay:${i*60}ms;display:flex;align-items:center;gap:12px;padding:16px;">
-        <span class="dot" style="background:${u.color};width:32px;height:32px;border-radius:50%;flex-shrink:0;box-shadow:0 0 0 3px var(--bg-elev), 0 0 0 4px ${u.color}33;"></span>
-        <span style="font-size:16px;font-weight:500;flex:1;text-align:left;">${esc(u.name)}</span>
-        ${isUserAdmin(u) ? '<span class="admin-pill">admin</span>' : ''}
-        <i class="ti ti-chevron-right" style="font-size:18px;color:var(--text-dim);"></i>
-      </button>`).join('');
     root.innerHTML = `
       <div style="max-width:420px;margin:0 auto;padding-top:32px;">
         ${configBanner()}
         <div class="fade-in">
           <div style="font-size:48px;margin-bottom:8px;">💪</div>
-          <h1 style="margin-bottom:6px;">¿Quién entrena hoy?</h1>
+          <h1 style="margin-bottom:6px;">Entrar al grupo</h1>
           <p class="muted" style="font-size:14px;margin:0 0 8px;">Grupo: <strong style="color:var(--text);">${esc(state.groupConfig.groupName || groupPath())}</strong></p>
           <button data-action="groupMenu" style="margin-bottom:20px;padding:8px 12px;font-size:12px;background:var(--bg-elev);border-color:var(--border);">
-            <i class="ti ti-users-group" style="font-size:14px;vertical-align:-2px;color:var(--accent);"></i> Cambiar / crear grupo
+            <i class="ti ti-users-group" style="font-size:14px;vertical-align:-2px;color:var(--accent);"></i> Cambiar grupo
           </button>
         </div>
-        <div style="display:flex;flex-direction:column;gap:8px;">${userOptions}</div>
-        <button data-action="newUser" class="fade-in" style="margin-top:14px;width:100%;padding:14px;border-style:dashed;color:var(--text-muted);font-weight:500;animation-delay:${state.users.length*60}ms;">
-          <i class="ti ti-plus" style="font-size:16px;vertical-align:-2px;"></i> Agregar otra persona
+        <div class="card fade-in" style="margin-bottom:14px;animation-delay:60ms;">
+          <div class="section-label" style="margin-bottom:8px;">Ya tengo cuenta</div>
+          <input id="loginNameInput" type="text" placeholder="Nombre de usuario" maxlength="24" style="margin-bottom:12px;" autofocus />
+          <button class="primary" data-action="loginByName" style="width:100%;padding:13px;font-weight:600;">Continuar</button>
+          <div id="loginNameError" style="color:var(--danger);font-size:12px;text-align:center;margin-top:10px;min-height:14px;"></div>
+        </div>
+        <button data-action="newUser" class="fade-in" style="margin-top:14px;width:100%;padding:14px;border-style:dashed;color:var(--text-muted);font-weight:500;animation-delay:120ms;">
+          <i class="ti ti-plus" style="font-size:16px;vertical-align:-2px;"></i> Crear cuenta nueva en este grupo
+        </button>
+        <button data-action="groupMenu" class="fade-in" style="margin-top:8px;width:100%;padding:12px;background:transparent;border:none;color:var(--text-muted);font-size:13px;animation-delay:160ms;">
+          Crear grupo nuevo o unirme a otro
         </button>
       </div>`;
-    attach(); return;
+    attach();
+    document.getElementById('loginNameInput')?.addEventListener('keydown', (e)=>{
+      if (e.key === 'Enter') document.querySelector('[data-action="loginByName"]').click();
+    });
+    return;
   }
   if (state.setupStep === 'enterPin'){
     const u = state.users.find(x => x.id === state.pendingUserId);
@@ -1028,9 +1110,6 @@ function renderHome(){
       <button data-action="goCompare" style="flex:1;padding:14px;background:var(--bg-elev);display:flex;align-items:center;justify-content:center;gap:8px;font-weight:500;border:1px solid var(--border);">
         <i class="ti ti-chart-line" style="font-size:17px;color:var(--accent);"></i> Ver progreso
       </button>
-      <button data-action="goDaily" style="flex:1;padding:14px;background:var(--bg-elev);display:flex;align-items:center;justify-content:center;gap:8px;font-weight:500;border:1px solid var(--border);">
-        <i class="ti ti-calendar-stats" style="font-size:17px;color:var(--accent);"></i> Diario
-      </button>
       <button data-action="goSettings" aria-label="Configuración" style="padding:14px;background:var(--bg-elev);border:1px solid var(--border);">
         <i class="ti ti-settings" style="font-size:17px;color:var(--text-muted);"></i>
       </button>
@@ -1119,21 +1198,12 @@ function renderExercise(){
   let formHtml = '';
   if (state.currentUser){
     const initialCount = formEntry ? formEntry.sets.length : 4;
+    const unilateralMode = !!(formEntry && formEntry.sets && formEntry.sets.some(s => s.unilateral));
     const setRows = [];
     for (let i=0;i<initialCount;i++){
       const set = formEntry && formEntry.sets[i] ? formEntry.sets[i] : null;
-      const ph_r = lastEntry ? (lastEntry.sets[i] && lastEntry.sets[i].reps) || '' : '';
-      const ph_w = lastEntry ? (lastEntry.sets[i] && lastEntry.sets[i].weight) || '' : '';
-      const ph_n = lastEntry ? (lastEntry.sets[i] && lastEntry.sets[i].note) || '' : '';
-      setRows.push(`<div class="set-row">
-        <div style="display:grid;grid-template-columns:30px 1fr 1fr 28px;gap:8px;align-items:center;margin-bottom:6px;">
-          <div class="mono" style="font-size:13px;text-align:center;font-weight:600;color:var(--accent);">${i+1}</div>
-          <input type="number" class="reps-in" inputmode="numeric" min="0" value="${set ? esc(set.reps) : ''}" placeholder="${ph_r || 'reps'}" style="text-align:center;padding:9px;" />
-          <input type="number" class="weight-in" inputmode="decimal" step="0.5" min="0" value="${set ? esc(set.weight) : ''}" placeholder="${ph_w ? ph_w+' lb' : 'peso lb'}" style="text-align:center;padding:9px;" />
-          <button class="del-set" aria-label="Eliminar" style="padding:4px;border:none;color:var(--text-dim);background:transparent;"><i class="ti ti-x" style="font-size:14px;"></i></button>
-        </div>
-        <input type="text" class="note-in" value="${set && set.note ? esc(set.note) : ''}" placeholder="${ph_n ? 'Nota anterior: '+esc(ph_n) : 'Nota del set (opcional)'}" maxlength="120" style="width:100%;font-size:12px;padding:7px 11px;" />
-      </div>`);
+      const lastSet = lastEntry && lastEntry.sets[i] ? lastEntry.sets[i] : null;
+      setRows.push(renderSetRow(i, set, lastSet, unilateralMode));
     }
     const sessionNotePh = lastEntry && lastEntry.note ? 'Nota anterior: ' + lastEntry.note.slice(0,60) : 'Cómo te sentiste, observaciones, ajustes…';
     formHtml = `<div class="card" style="margin-bottom:18px;">
@@ -1143,6 +1213,15 @@ function renderExercise(){
         <input type="date" id="sessionDate" value="${editing ? esc(editing.date) : today()}" style="width:auto;padding:7px 11px;font-size:13px;font-family:var(--font-mono);" />
       </div>
       ${editing ? `<div class="banner banner-info" style="margin-bottom:12px;"><i class="ti ti-edit"></i><div>Editando la sesión del ${esc(editing.date)}. Puedes cambiar la fecha, sets, peso, reps y notas.</div></div>` : ''}
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+        <label style="display:inline-flex;align-items:center;gap:8px;padding:8px 11px;background:var(--bg-elev-2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;cursor:pointer;">
+          <input id="unilateralMode" type="checkbox" data-action="toggleUnilateral" ${unilateralMode?'checked':''} />
+          Unilateral
+        </label>
+        <button data-action="copyFirstSet" style="padding:8px 11px;font-size:13px;border-color:var(--border);background:var(--bg-elev-2);">
+          <i class="ti ti-copy" style="font-size:14px;vertical-align:-2px;color:var(--accent);"></i> Copiar set 1
+        </button>
+      </div>
       <div class="dim" style="display:grid;grid-template-columns:30px 1fr 1fr 28px;gap:8px;margin-bottom:8px;padding:0 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;font-family:var(--font-mono);">
         <div style="text-align:center;">SET</div><div style="text-align:center;">REPS</div><div style="text-align:center;">PESO (LB)</div><div></div>
       </div>
@@ -1169,7 +1248,7 @@ function renderExercise(){
       const best = bestSet(e); const vol = totalVolume(e);
       const setNotes = (e.sets||[]).map((s,i)=> s.note ? `Set ${i+1}: ${s.note}` : null).filter(Boolean);
       historyRows.push({ date:e.date, user:u, ek, uid:u.id,
-        summary:`${e.sets.length} sets · max ${best ? best.weight+'lb × '+best.reps : '–'} · vol ${Math.round(vol)}`,
+        summary:`${e.sets.length} sets · max ${best ? setMaxWeight(best)+'lb × '+setDisplayReps(best) : '–'} · vol ${Math.round(vol)}`,
         sessionNote: e.note || null, setNotes });
     }
   }
@@ -1186,15 +1265,15 @@ function renderExercise(){
         <button data-action="deleteSession" data-uid="${h.uid}" data-ek="${h.ek}" data-date="${h.date}" aria-label="Eliminar" style="padding:6px;border:none;color:var(--danger);"><i class="ti ti-trash" style="font-size:14px;"></i></button>
       </div>` : ''}
     </div>
-    ${h.sessionNote ? `<div style="margin-top:8px;padding:7px 10px;background:var(--bg-elev);border-radius:8px;font-size:12px;color:var(--text-muted);font-style:italic;"><i class="ti ti-message" style="font-size:12px;"></i> ${esc(h.sessionNote)}</div>` : ''}
-    ${h.setNotes.length ? `<div class="dim" style="margin-top:6px;font-size:11px;padding-left:18px;">${h.setNotes.map(n=>esc(n)).join(' · ')}</div>` : ''}
+    ${h.sessionNote ? `<div class="wrap-text" style="margin-top:8px;padding:7px 10px;background:var(--bg-elev);border-radius:8px;font-size:12px;color:var(--text-muted);font-style:italic;"><i class="ti ti-message" style="font-size:12px;"></i> ${esc(h.sessionNote)}</div>` : ''}
+    ${h.setNotes.length ? `<div class="dim wrap-text" style="margin-top:6px;font-size:11px;padding-left:18px;">${h.setNotes.map(n=>esc(n)).join(' · ')}</div>` : ''}
   </div>`).join('') || '<div class="muted" style="font-size:13px;padding:14px;text-align:center;">Sin historial todavía.</div>';
 
   let progressBadge = '';
   if (lastEntry && prevEntry){
     const lb = bestSet(lastEntry); const pb = bestSet(prevEntry);
     if (lb && pb){
-      const diff = (Number(lb.weight)||0) - (Number(pb.weight)||0);
+      const diff = setMaxWeight(lb) - setMaxWeight(pb);
       if (diff>0) progressBadge = `<span class="badge" style="background:var(--success-bg);color:var(--success);"><i class="ti ti-trending-up" style="font-size:12px;"></i>+${diff} lb</span>`;
       else if (diff<0) progressBadge = `<span class="badge" style="background:var(--warning-bg);color:var(--warning);"><i class="ti ti-trending-down" style="font-size:12px;"></i>${diff} lb</span>`;
       else progressBadge = `<span class="badge" style="background:var(--bg-elev-2);color:var(--text-muted);">Igual</span>`;
@@ -1252,6 +1331,7 @@ function renderExercise(){
 // ====== COMPARE ======
 function renderCompare(){
   const mode = state.compareMode;
+  if (mode === 'day') return renderDaily(true);
   const focused = state.currentExerciseIdx != null ? { day: state.currentDay, idx: state.currentExerciseIdx } : null;
 
   const exerciseOptions = [`<option value="">Todos los ejercicios (volumen total)</option>`];
@@ -1315,7 +1395,7 @@ function renderCompare(){
   root.innerHTML = `
     ${headerBar('Progreso', 'goHome')}
     <div class="tab-bar">
-      ${['week','month','year'].map(m => `<button class="${mode===m?'active':''}" data-action="setMode" data-mode="${m}">${m==='week'?'Semana':m==='month'?'Mes':'Año'}</button>`).join('')}
+      ${['day','week','month','year'].map(m => `<button class="${mode===m?'active':''}" data-action="setMode" data-mode="${m}">${m==='day'?'Día':m==='week'?'Semana':m==='month'?'Mes':'Año'}</button>`).join('')}
     </div>
     <select id="exPicker" style="margin-bottom:18px;">${exerciseOptions.join('')}</select>
     ${content}`;
@@ -1435,7 +1515,7 @@ function formatBucket(key, mode){
 }
 
 // ====== DAILY PROGRESS ======
-function renderDaily(){
+function renderDaily(insideProgress = false){
   const rows = [];
   for (const u of state.users){
     const userLogs = state.logs[u.id] || {};
@@ -1453,20 +1533,20 @@ function renderDaily(){
     acc.sessions += 1;
     acc.sets += (r.entry.sets || []).length;
     acc.volume += r.volume;
-    acc.max = Math.max(acc.max, r.best ? Number(r.best.weight)||0 : 0);
+    acc.max = Math.max(acc.max, r.best ? setMaxWeight(r.best) : 0);
     return acc;
   }, { sessions:0, sets:0, volume:0, max:0 });
   const list = rows.map(r => {
     const mine = state.currentUser && r.user.id === state.currentUser;
-    const setText = (r.entry.sets || []).map((set,i)=>`${i+1}) ${set.weight}lb × ${set.reps}${set.note ? ' · '+set.note : ''}`).join(' · ');
+    const setText = (r.entry.sets || []).map((set,i)=>formatSetLine(set, i)).join(' · ');
     return `<div class="history-entry">
       <div class="row" style="align-items:flex-start;">
         <span class="dot" style="background:${r.user.color};width:14px;height:14px;margin-top:3px;"></span>
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;">${esc(r.user.name)} · ${esc(exerciseNameForKey(r.ek))}</div>
-          <div class="muted mono" style="font-size:11px;margin-top:2px;">${(r.entry.sets||[]).length} sets · max ${r.best ? r.best.weight+'lb × '+r.best.reps : '–'} · vol ${Math.round(r.volume)}</div>
-          <div class="dim" style="font-size:11px;margin-top:6px;">${esc(setText)}</div>
-          ${r.entry.note ? `<div style="margin-top:7px;padding:7px 10px;background:var(--bg-elev);border-radius:8px;font-size:12px;color:var(--text-muted);font-style:italic;"><i class="ti ti-message" style="font-size:12px;"></i> ${esc(r.entry.note)}</div>` : ''}
+          <div class="muted mono" style="font-size:11px;margin-top:2px;">${(r.entry.sets||[]).length} sets · max ${r.best ? setMaxWeight(r.best)+'lb × '+setDisplayReps(r.best) : '–'} · vol ${Math.round(r.volume)}</div>
+          <div class="dim wrap-text" style="font-size:11px;margin-top:6px;">${esc(setText)}</div>
+          ${r.entry.note ? `<div class="wrap-text" style="margin-top:7px;padding:7px 10px;background:var(--bg-elev);border-radius:8px;font-size:12px;color:var(--text-muted);font-style:italic;"><i class="ti ti-message" style="font-size:12px;"></i> ${esc(r.entry.note)}</div>` : ''}
         </div>
         ${mine ? `<div style="display:flex;gap:4px;">
           <button data-action="editSession" data-uid="${r.user.id}" data-ek="${r.ek}" data-date="${r.entry.date}" aria-label="Editar" style="padding:6px;border-color:var(--border);"><i class="ti ti-edit" style="font-size:14px;color:var(--accent);"></i></button>
@@ -1477,10 +1557,13 @@ function renderDaily(){
   }).join('');
 
   root.innerHTML = `
-    ${headerBar('Progreso diario', 'goHome')}
+    ${headerBar(insideProgress ? 'Progreso' : 'Progreso diario', 'goHome')}
+    ${insideProgress ? `<div class="tab-bar">
+      ${['day','week','month','year'].map(m => `<button class="${state.compareMode===m?'active':''}" data-action="setMode" data-mode="${m}">${m==='day'?'Día':m==='week'?'Semana':m==='month'?'Mes':'Año'}</button>`).join('')}
+    </div>` : ''}
     <div class="card" style="margin-bottom:16px;">
       <label class="section-label" style="margin-bottom:6px;">Fecha</label>
-      <input id="dailyDate" type="date" value="${esc(state.dailyDate)}" style="font-family:var(--font-mono);" />
+      <input id="dailyDate" class="date-field" type="date" value="${esc(state.dailyDate)}" />
     </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;">
       <div class="stat-card"><div class="stat-label">Sesiones</div><div class="stat-value" style="font-size:18px;">${totals.sessions}</div></div>
@@ -1517,9 +1600,14 @@ function renderSettings(){
     ${headerBar('Configuración', 'goHome')}
     <div class="section-label">Grupo</div>
     <div class="card" style="margin-bottom:16px;padding:6px;">
-      <div style="padding:10px 12px 8px;">
-        <div style="font-size:14px;font-weight:600;">${esc(state.groupConfig.groupName || groupPath())}</div>
-        <div class="muted mono" style="font-size:11px;margin-top:2px;">${esc(groupPath())}</div>
+      <div style="padding:10px 12px 8px;display:flex;align-items:center;gap:10px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;font-weight:600;">${esc(state.groupConfig.groupName || groupPath())}</div>
+          <div class="muted mono" style="font-size:11px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(groupPath())}</div>
+        </div>
+        <button data-action="copyGroupId" title="Copiar código del grupo" aria-label="Copiar código del grupo" style="padding:8px 10px;border-color:var(--border);background:var(--bg-elev-2);color:var(--accent);">
+          <i class="ti ti-copy" style="font-size:16px;"></i>
+        </button>
       </div>
       <div style="height:1px;background:var(--border);margin:0 8px 6px;"></div>
       ${groupRows}
@@ -1555,14 +1643,19 @@ function renderSettings(){
 
     ${adm ? `<div class="section-label" style="margin-top:24px;">Admin</div>
     <div class="card" style="padding:6px;">
-      <button data-action="changeInvitationPw" style="width:100%;padding:14px 12px;display:flex;align-items:center;gap:12px;background:transparent;border:none;text-align:left;border-radius:8px;">
-        <i class="ti ti-shield-lock" style="font-size:18px;color:var(--accent);"></i>
-        <div style="flex:1;">
-          <div style="font-weight:500;">Contraseña de invitación</div>
-          <div class="muted mono" style="font-size:12px;margin-top:2px;">${esc(state.invitationPassword)}</div>
-        </div>
-        <i class="ti ti-chevron-right" style="color:var(--text-dim);"></i>
-      </button>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button data-action="changeInvitationPw" style="flex:1;padding:14px 12px;display:flex;align-items:center;gap:12px;background:transparent;border:none;text-align:left;border-radius:8px;">
+          <i class="ti ti-shield-lock" style="font-size:18px;color:var(--accent);"></i>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:500;">Contraseña de invitación</div>
+            <div class="muted mono" style="font-size:12px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(state.invitationPassword)}</div>
+          </div>
+          <i class="ti ti-chevron-right" style="color:var(--text-dim);"></i>
+        </button>
+        <button data-action="copyInvitationPw" title="Copiar contraseña" aria-label="Copiar contraseña" style="padding:8px 10px;border-color:var(--border);background:var(--bg-elev-2);color:var(--accent);">
+          <i class="ti ti-copy" style="font-size:16px;"></i>
+        </button>
+      </div>
     </div>` : ''}
 
     <div style="margin-top:32px;padding:14px;text-align:center;color:var(--text-dim);font-size:11px;font-family:var(--font-mono);">
@@ -1695,6 +1788,18 @@ async function handle(e){
   // ====== Setup / Auth ======
   if (a === 'newUser'){ state.setupStep = 'newUser'; render(); return; }
   if (a === 'backToPick'){ state.setupStep = state.users.length ? 'pickUser' : 'newUser'; render(); return; }
+  if (a === 'loginByName'){
+    const name = (document.getElementById('loginNameInput').value || '').trim();
+    const errEl = document.getElementById('loginNameError');
+    if (!name){ errEl.textContent = 'Escribe tu nombre'; return; }
+    const matches = state.users.filter(u => u.name.toLowerCase().trim() === name.toLowerCase());
+    if (!matches.length){ errEl.textContent = 'No encontré ese nombre en este grupo'; return; }
+    if (matches.length > 1){ errEl.textContent = 'Hay más de una cuenta con ese nombre. Pide a la admin que renombre una.'; return; }
+    state.pendingUserId = matches[0].id;
+    state.setupStep = 'enterPin';
+    render();
+    return;
+  }
   if (a === 'pickUser'){
     const uid = btn.dataset.uid;
     state.pendingUserId = uid;
@@ -1896,6 +2001,14 @@ async function handle(e){
     await deleteCurrentGroup();
     return;
   }
+  if (a === 'copyGroupId'){
+    await copyText(groupPath(), 'Código del grupo');
+    return;
+  }
+  if (a === 'copyInvitationPw'){
+    await copyText(state.invitationPassword || INVITATION_PASSWORD_DEFAULT, 'Contraseña');
+    return;
+  }
 
   // ====== User menu ======
   if (a === 'userMenu'){
@@ -2042,7 +2155,6 @@ async function handle(e){
   if (a === 'openEx'){ state.currentExerciseIdx = Number(btn.dataset.idx); state.view = 'exercise'; state.showAlts = false; state.showMuscles = false; render(); return; }
   if (a === 'goCompare'){ state.view = 'compare'; state.currentDay = null; state.currentExerciseIdx = null; render(); return; }
   if (a === 'goCompareEx'){ state.view = 'compare'; render(); return; }
-  if (a === 'goDaily'){ state.view = 'daily'; state.currentDay = null; state.currentExerciseIdx = null; render(); return; }
   if (a === 'goSettings'){ closeModal(); state.view = 'settings'; render(); return; }
   if (a === 'goEditRoutine'){ state.view = 'editRoutine'; render(); return; }
   if (a === 'editRoutine'){ state.view = 'editRoutine'; render(); return; }
@@ -2092,20 +2204,70 @@ async function handle(e){
   if (a === 'editExerciseFromView'){ state.view = 'editExercise'; render(); return; }
 
   // ====== Session save ======
+  if (a === 'toggleUnilateral'){
+    const on = document.getElementById('unilateralMode')?.checked;
+    document.querySelectorAll('.set-row').forEach(row => {
+      const normal = row.querySelector('.normal-fields');
+      const uni = row.querySelector('.unilateral-fields');
+      if (normal) normal.style.display = on ? 'none' : 'grid';
+      if (uni) uni.style.display = on ? 'grid' : 'none';
+      if (on){
+        const reps = row.querySelector('.reps-in')?.value || '';
+        const weight = row.querySelector('.weight-in')?.value || '';
+        ['left','right'].forEach(side => {
+          const repsIn = row.querySelector(`.${side}-reps-in`);
+          const weightIn = row.querySelector(`.${side}-weight-in`);
+          if (repsIn && !repsIn.value) repsIn.value = reps;
+          if (weightIn && !weightIn.value) weightIn.value = weight;
+        });
+      } else {
+        const reps = row.querySelector('.left-reps-in')?.value || row.querySelector('.right-reps-in')?.value || '';
+        const weight = row.querySelector('.left-weight-in')?.value || row.querySelector('.right-weight-in')?.value || '';
+        const repsIn = row.querySelector('.reps-in');
+        const weightIn = row.querySelector('.weight-in');
+        if (repsIn && !repsIn.value) repsIn.value = reps;
+        if (weightIn && !weightIn.value) weightIn.value = weight;
+      }
+    });
+    return;
+  }
+  if (a === 'copyFirstSet'){
+    const rows = Array.from(document.querySelectorAll('.set-row'));
+    if (rows.length < 2){ toast('No hay sets para copiar'); return; }
+    const unilateral = !!document.getElementById('unilateralMode')?.checked;
+    const first = rows[0];
+    const fields = unilateral
+      ? ['left-reps-in','left-weight-in','right-reps-in','right-weight-in']
+      : ['reps-in','weight-in'];
+    rows.slice(1).forEach(row => {
+      fields.forEach(cls => {
+        const src = first.querySelector('.'+cls);
+        const dst = row.querySelector('.'+cls);
+        if (src && dst && !dst.value) dst.value = src.value;
+      });
+    });
+    toast('Set 1 copiado a los campos vacíos');
+    return;
+  }
   if (a === 'addSet'){
     const c = document.getElementById('setsContainer'); const n = c.children.length + 1;
-    const div = document.createElement('div');
-    div.className = 'set-row';
-    div.style.cssText = 'margin-bottom:10px;padding:8px;background:var(--bg-elev-2);border-radius:var(--radius-sm);';
-    div.innerHTML = `<div style="display:grid;grid-template-columns:28px 1fr 1fr 28px;gap:6px;align-items:center;margin-bottom:4px;">
-      <div class="muted" style="font-size:13px;text-align:center;font-weight:500;">${n}</div>
-      <input type="number" class="reps-in" inputmode="numeric" min="0" placeholder="reps" style="text-align:center;padding:8px;" />
-      <input type="number" class="weight-in" inputmode="decimal" step="0.5" min="0" placeholder="peso lb" style="text-align:center;padding:8px;" />
-      <button class="del-set" aria-label="Eliminar" style="padding:4px;border:none;color:var(--text-dim);"><i class="ti ti-x" style="font-size:14px;"></i></button>
-    </div>
-    <input type="text" class="note-in" placeholder="Nota del set (opcional)" maxlength="120" style="width:100%;font-size:12px;padding:6px 10px;" />`;
-    c.appendChild(div);
-    div.querySelector('.del-set').addEventListener('click', ()=> div.remove());
+    const unilateral = !!document.getElementById('unilateralMode')?.checked;
+    const prev = c.lastElementChild;
+    let seed = null;
+    if (prev){
+      if (unilateral){
+        seed = {
+          unilateral:true,
+          left:{ reps: prev.querySelector('.left-reps-in')?.value || '', weight: prev.querySelector('.left-weight-in')?.value || '' },
+          right:{ reps: prev.querySelector('.right-reps-in')?.value || '', weight: prev.querySelector('.right-weight-in')?.value || '' }
+        };
+      } else {
+        seed = { reps: prev.querySelector('.reps-in')?.value || '', weight: prev.querySelector('.weight-in')?.value || '' };
+      }
+    }
+    c.insertAdjacentHTML('beforeend', renderSetRow(n - 1, seed, null, unilateral));
+    const added = c.lastElementChild;
+    if (added) added.querySelectorAll('.del-set').forEach(b => b.addEventListener('click', ()=> added.remove()));
     return;
   }
   if (a === 'saveSession'){
@@ -2114,11 +2276,34 @@ async function handle(e){
     const date = document.getElementById('sessionDate').value || today();
     const rows = document.querySelectorAll('.set-row');
     const sets = [];
+    const unilateral = !!document.getElementById('unilateralMode')?.checked;
     rows.forEach(r => {
-      const reps = Number(r.querySelector('.reps-in').value);
-      const weight = Number(r.querySelector('.weight-in').value);
       const note = (r.querySelector('.note-in').value || '').trim();
-      if (reps > 0 && weight >= 0){ const s = { reps, weight }; if (note) s.note = note; sets.push(s); }
+      if (unilateral){
+        const left = {
+          reps: Number(r.querySelector('.left-reps-in').value),
+          weight: Number(r.querySelector('.left-weight-in').value)
+        };
+        const right = {
+          reps: Number(r.querySelector('.right-reps-in').value),
+          weight: Number(r.querySelector('.right-weight-in').value)
+        };
+        if (left.reps > 0 && left.weight >= 0 && !(right.reps > 0)){
+          right.reps = left.reps; right.weight = left.weight;
+        }
+        if (right.reps > 0 && right.weight >= 0 && !(left.reps > 0)){
+          left.reps = right.reps; left.weight = right.weight;
+        }
+        if ((left.reps > 0 && left.weight >= 0) || (right.reps > 0 && right.weight >= 0)){
+          const s = { unilateral:true, left, right, reps:setDisplayReps({unilateral:true,left,right}), weight:setMaxWeight({unilateral:true,left,right}) };
+          if (note) s.note = note;
+          sets.push(s);
+        }
+      } else {
+        const reps = Number(r.querySelector('.reps-in').value);
+        const weight = Number(r.querySelector('.weight-in').value);
+        if (reps > 0 && weight >= 0){ const s = { reps, weight }; if (note) s.note = note; sets.push(s); }
+      }
     });
     const sessionNote = (document.getElementById('sessionNote').value || '').trim();
     const status = document.getElementById('saveStatus');
