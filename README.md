@@ -1,188 +1,198 @@
-# 💪 Rutina del Gym — Web compartida con tu gym buddy
+[README.md](https://github.com/user-attachments/files/28066238/README.md)
+# Guia rapida: Rutina del Gym
 
-Una web para registrar tus entrenos, los de tu compañero, y comparar progreso semana / mes / año. Funciona en celular y compu, se sincroniza en tiempo real entre ambos.
+Esta app sirve para compartir rutinas, registrar entrenos y comparar progreso con tu grupo del gym.
 
-## ✨ Qué incluye
+## 1. Entrar a la app
 
-- 5 días de rutina (Martes a Sábado) con todos tus ejercicios
-- Registro de sets, reps, peso y comentarios por sesión
-- Diagrama de músculos trabajados (principal y secundario)
-- Link directo a video de cada ejercicio en YouTube
-- Alternativas si la máquina está ocupada
-- Comparación de progreso entre tú y tu compañero por semana, mes o año
-- Sincronización en tiempo real en la nube (Firebase, gratis)
+Abre el link de la app en Safari o en el navegador:
 
----
+`https://gusfrava.github.io/star-jazz-gym-Routines/`
 
-## 🚀 Pasos para tenerlo en línea
+Si estas en iPhone, puedes guardarla como app:
 
-Vas a hacer 3 cosas:
+1. Abre el link en Safari.
+2. Toca el boton de compartir.
+3. Toca `Add to Home Screen` / `Agregar a pantalla de inicio`.
+4. Abre la app desde el icono nuevo.
 
-1. Crear un proyecto de Firebase (la base de datos en la nube — gratis)
-2. Pegar los datos de Firebase en el `index.html`
-3. Subir el `index.html` a GitHub Pages
+## 2. Como entrar a un grupo
 
-Tiempo total: ~15 minutos.
+La pantalla inicial no muestra la lista de usuarios por privacidad.
 
----
-
-### Paso 1️⃣ — Crear el proyecto de Firebase
-
-1. Entra a https://console.firebase.google.com/ (logueate con Google)
-2. Click en **"Agregar proyecto"** (o "Add project")
-3. Ponle un nombre, ej: `rutina-gym`
-4. Desactiva Google Analytics (no lo necesitas) → **Crear proyecto**
-5. Cuando termine, click en **Continuar**
-
-#### Crear la base de datos
-
-1. En el menú izquierdo, click en **Build → Firestore Database**
-2. Click en **"Crear base de datos"** (Create database)
-3. Elige **"Iniciar en modo de prueba"** (Start in test mode) — *ojo: esto deja la base abierta 30 días, después la cerramos abajo*
-4. Elige la región más cercana (ej: `us-east1` o `southamerica-east1`)
-5. Click **Habilitar**
-
-#### Obtener las credenciales de Firebase
-
-1. En el menú izquierdo, click en el **ícono de engranaje ⚙️** arriba → **Configuración del proyecto**
-2. Baja hasta la sección **"Tus apps"**
-3. Click en el ícono **`</>`** (Web)
-4. Ponle un apodo, ej: `gym-web` → **Registrar app**
-5. Te va a mostrar un bloque de código con un objeto `firebaseConfig` que se ve así:
-
-```js
-const firebaseConfig = {
-  apiKey: "AIzaSyXXXXXXXXXXXXXXXXXXXX",
-  authDomain: "rutina-gym-abc.firebaseapp.com",
-  projectId: "rutina-gym-abc",
-  storageBucket: "rutina-gym-abc.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abc123"
-};
+```mermaid
+flowchart TD
+  A["Abrir la app"] --> B["Revisar grupo actual"]
+  B --> C{"Es tu grupo?"}
+  C -->|"Si"| D["Escribir tu nombre"]
+  C -->|"No"| E["Cambiar grupo o unirse a otro"]
+  D --> F["Ingresar PIN"]
+  F --> G["Entrar a la rutina"]
 ```
 
-**Copia ese objeto completo.**
+Para entrar:
 
----
+1. Confirma que el grupo arriba sea el correcto.
+2. Escribe tu nombre de usuario.
+3. Toca `Continuar`.
+4. Ingresa tu PIN.
 
-### Paso 2️⃣ — Pegar las credenciales en index.html
+Si es tu primera vez en esa cuenta, la app te pedira crear un PIN.
 
-1. Abre el archivo `index.html` con cualquier editor de texto (VS Code, Notepad, Sublime, lo que tengas)
-2. Busca la sección que dice `FIREBASE CONFIG — REEMPLAZA ESTOS VALORES` (está cerca del inicio del script)
-3. Reemplaza el objeto `firebaseConfig` con el tuyo
-4. **(Opcional)** Cambia la variable `SALA` por un nombre único de ustedes:
-   ```js
-   const SALA = "jazmin-y-buddy"; // o lo que quieras, sin espacios
-   ```
-   ⚠️ Tú y tu gym buddy deben usar **exactamente la misma SALA** para compartir datos.
+## 3. Crear cuenta nueva
 
-5. Guarda el archivo.
+Usa esta opcion si todavia no tienes usuario dentro del grupo.
 
----
+1. Toca `Crear cuenta nueva en este grupo`.
+2. Escribe tu nombre.
+3. Escribe la contrasena de invitacion del grupo.
+4. Crea tu PIN personal.
 
-### Paso 3️⃣ — Subir a GitHub Pages
+La contrasena de invitacion la comparte la admin del grupo.
 
-#### A) Crear el repositorio
+## 4. Crear o unirse a un grupo
 
-1. Entra a https://github.com (crea cuenta si no tienes)
-2. Click en **"+" arriba a la derecha → New repository**
-3. Nombre: `rutina-gym` (o lo que quieras)
-4. Marca **Public** ✅
-5. Marca **Add a README file** ✅
-6. Click **Create repository**
+Usa `Crear grupo nuevo o unirme a otro` si quieres otro grupo separado.
 
-#### B) Subir tu index.html
-
-1. En el repo recién creado, click en **"Add file" → "Upload files"**
-2. Arrastra tu `index.html` editado
-3. Click **Commit changes**
-
-#### C) Activar GitHub Pages
-
-1. En el repo, click en **Settings** (arriba a la derecha)
-2. En el menú izquierdo, click en **Pages**
-3. En **"Source"**, selecciona **Deploy from a branch**
-4. En **"Branch"**, selecciona **main** y carpeta **/ (root)** → **Save**
-5. Espera 1–2 minutos. Refresca esa página.
-6. Arriba va a aparecer un mensaje verde con tu URL, algo como:
-   ```
-   https://tu-usuario.github.io/rutina-gym/
-   ```
-
-¡Esa es tu web! Mándale ese link a tu gym buddy y listo.
-
----
-
-### Paso 4️⃣ (Importante) — Cerrar la base de datos
-
-El "modo de prueba" de Firebase deja la base abierta a internet por 30 días. Pasado eso, deja de funcionar. Para evitar eso, cambia las reglas:
-
-1. En Firebase Console → **Firestore Database → Reglas (Rules)**
-2. Reemplaza el contenido con:
-
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    // Permite leer y escribir en cualquier sala — sin auth, simple.
-    // No es súper seguro: cualquiera que descubra tu SALA podría editar.
-    // Para uso entre ustedes dos está bien si el nombre de SALA es difícil de adivinar.
-    match /salas/{sala}/{document=**} {
-      allow read, write: if true;
-    }
-  }
-}
+```mermaid
+flowchart LR
+  A["Grupo"] --> B["Crear grupo"]
+  A --> C["Unirse a grupo"]
+  B --> D["Nombre del grupo"]
+  B --> E["Contrasena de invitacion"]
+  B --> F["Rutina inicial"]
+  C --> G["Codigo del grupo"]
+  C --> H["Contrasena de invitacion"]
 ```
 
-3. Click **Publicar**.
+Al crear un grupo:
 
-> **Sobre seguridad:** Como no tienes login, la "seguridad" depende de que el nombre de tu SALA sea difícil de adivinar. Usa algo como `mi-rutina-2026-abc123` en lugar de `gym`. Si en algún momento te preocupa más la privacidad, dime y agregamos login con Google.
+1. Escribe el nombre del grupo.
+2. Crea una contrasena de invitacion.
+3. Elige si quieres copiar la rutina actual, usar la rutina base o empezar desde cero.
+4. La persona que crea el grupo queda como admin.
 
----
+Al unirte a un grupo:
 
-## 📱 Cómo usarla
+1. Escribe el codigo del grupo.
+2. Escribe la contrasena de invitacion.
+3. Crea o entra con tu usuario dentro de ese grupo.
 
-1. Abre la URL en tu celu (te conviene agregarla a la pantalla de inicio — en iPhone: botón compartir → "Añadir a pantalla de inicio". En Android: menú de Chrome → "Agregar a la pantalla principal")
-2. La primera vez ingresa tu nombre
-3. Tu gym buddy hace lo mismo desde su celu, abriendo el mismo link
-4. Cuando él termine su sesión, automáticamente te aparece en tu pantalla (en tiempo real)
-5. En "Ver progreso" pueden comparar quién progresó más cada semana 😈
+## 5. Registrar una sesion
 
----
+1. Entra a un dia de rutina.
+2. Abre el ejercicio.
+3. Ingresa reps y peso por set.
+4. Agrega notas si quieres.
+5. Toca `Guardar sesion`.
 
-## ❓ Preguntas frecuentes
+Atajos utiles:
 
-**¿Cuesta algo?**
-No. Firebase tiene un nivel gratuito (Spark plan) que permite 50.000 lecturas y 20.000 escrituras al día. Ustedes dos ni se acercarán a eso.
+- `Copiar set 1`: copia el primer set a los campos vacios.
+- `Agregar set`: crea un nuevo set copiando el set anterior.
+- Si ya habias entrenado ese ejercicio antes, la app muestra valores anteriores como ayuda.
 
-**¿Mi gym buddy necesita instalar algo?**
-No. Solo abre el link en su celu.
+## 6. Sets normales y unilaterales
 
-**¿Y si pierdo el celu?**
-Los datos están en la nube (Firebase). Abre el link en otro dispositivo, elige tu nombre y todo sigue ahí.
+Puedes mezclar sets normales y unilaterales dentro del mismo ejercicio.
 
-**¿Puedo cambiar la rutina?**
-Sí, edita la sección `ROUTINE` dentro del `index.html`. Cada ejercicio tiene `name`, `video`, `primary`, `secondary` y `alts`.
+```mermaid
+flowchart TD
+  A["Set normal"] --> B["Reps + peso"]
+  C["Set unilateral"] --> D["Izq reps/peso"]
+  C --> E["Der reps/peso"]
+  B --> F["Mismo progreso del ejercicio"]
+  D --> F
+  E --> F
+```
 
-**¿Y si quiero kg en vez de libras?**
-Busca `lb` en el archivo y reemplázalo por `kg`. Son ~6 lugares.
+Para un set unilateral:
 
-**¿Cómo agrego más usuarios (no solo dos)?**
-Ya funciona — pueden agregar hasta los que quieran, todos comparten la misma SALA.
+1. Marca `Uni` en ese set.
+2. Llena `Izq reps`, `Izq lb`, `Der reps`, `Der lb`.
 
----
+El toggle `Unilateral` de arriba es solo un atajo para convertir todos los sets. Cada set tambien tiene su propio `Uni`.
 
-## 🐛 Problemas comunes
+## 7. Ver progreso
 
-**"Modo local" arriba en amarillo**
-Significa que las credenciales de Firebase no se pegaron bien. Revisa el `firebaseConfig` en `index.html`.
+Toca `Ver progreso`.
 
-**Mi gym buddy no ve mis datos**
-Asegúrense de tener el **mismo valor de `SALA`** en sus copias del `index.html`. Si subiste a GitHub Pages, ambos están viendo el mismo archivo, así que esto debería pasar automáticamente.
+Tabs disponibles:
 
-**Error "Missing or insufficient permissions"**
-Las reglas de Firestore están bloqueando. Revisa el Paso 4 — pega las reglas y publícalas.
+- `Dia`: resumen de una fecha especifica.
+- `Semana`: comparacion semanal.
+- `Mes`: comparacion mensual.
+- `Ano`: comparacion anual.
 
----
+En `Dia` puedes ver:
 
-¡A entrenar! 💪
+- Sesiones.
+- Sets.
+- Volumen.
+- Peso maximo.
+- Notas.
+- Entrenos por usuario y ejercicio.
+
+## 8. Editar o borrar sesiones
+
+Puedes editar o borrar tus propias sesiones desde:
+
+- Historial reciente del ejercicio.
+- Progreso diario.
+
+Solo puedes editar o borrar tus propios registros.
+
+## 9. Editar rutinas
+
+Dentro de un dia puedes tocar `Editar rutina`.
+
+Puedes:
+
+- Cambiar el nombre del dia.
+- Cambiar el enfoque.
+- Agregar ejercicios.
+- Editar ejercicios.
+- Reordenar ejercicios.
+- Borrar ejercicios.
+- Elegir musculos principales/secundarios.
+- Agregar alternativas.
+- Cambiar la busqueda de video.
+
+Rutinas disponibles:
+
+- `Compartida`: la rutina del grupo.
+- `Personal`: tu propia rutina.
+
+Al crear una rutina personal, puedes copiar la compartida o empezar desde cero.
+
+## 10. Admin del grupo
+
+La admin puede:
+
+- Cambiar la contrasena de invitacion.
+- Copiar el codigo del grupo.
+- Copiar la contrasena de invitacion.
+- Eliminar usuarios.
+- Eliminar grupos creados, excepto el grupo original protegido.
+
+El grupo original `jazmin-y-buddy-2026` esta protegido para evitar borrarlo por accidente.
+
+## 11. Privacidad
+
+- La pantalla inicial no muestra la lista de usuarios.
+- Para entrar, cada persona escribe su nombre y PIN.
+- Dentro del grupo, los miembros pueden ver progreso compartido.
+- Cada grupo tiene usuarios, rutinas y progreso separados.
+
+## Resumen rapido
+
+```mermaid
+flowchart TD
+  A["Entrar al grupo"] --> B["Escoger dia"]
+  B --> C["Abrir ejercicio"]
+  C --> D["Registrar sets"]
+  D --> E["Guardar sesion"]
+  E --> F["Ver progreso"]
+  F --> G["Comparar dia / semana / mes / ano"]
+```
+
