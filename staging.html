@@ -623,27 +623,6 @@ function toast(msg){
   el.textContent = msg; el.classList.add('show');
   setTimeout(()=> el.classList.remove('show'), 1800);
 }
-async function copyText(text, label){
-  try {
-    if (navigator.clipboard && window.isSecureContext){
-      await navigator.clipboard.writeText(text);
-    } else {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.setAttribute('readonly', '');
-      ta.style.position = 'fixed';
-      ta.style.left = '-9999px';
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-    }
-    toast(`${label} copiado`);
-  } catch(e){
-    console.error(e);
-    toast('No se pudo copiar');
-  }
-}
 function isAdmin(){
   const me = state.users.find(u => u.id === state.currentUser);
   if (!me) return false;
@@ -812,6 +791,7 @@ function render(){
   if (state.view === 'day') return renderDay();
   if (state.view === 'exercise') return renderExercise();
   if (state.view === 'compare') return renderCompare();
+  if (state.view === 'daily') return renderDaily();
   if (state.view === 'settings') return renderSettings();
   if (state.view === 'editRoutine') return renderEditRoutine();
   if (state.view === 'editExercise') return renderEditExercise();
@@ -847,32 +827,30 @@ function headerBar(title, backFn){
 // ====== SETUP / AUTH ======
 function renderSetup(){
   if (state.setupStep === 'pickUser'){
+    const userOptions = state.users.map((u,i) => `
+      <button data-action="pickUser" data-uid="${u.id}" class="day-card fade-in" style="animation-delay:${i*60}ms;display:flex;align-items:center;gap:12px;padding:16px;">
+        <span class="dot" style="background:${u.color};width:32px;height:32px;border-radius:50%;flex-shrink:0;box-shadow:0 0 0 3px var(--bg-elev), 0 0 0 4px ${u.color}33;"></span>
+        <span style="font-size:16px;font-weight:500;flex:1;text-align:left;">${esc(u.name)}</span>
+        ${isUserAdmin(u) ? '<span class="admin-pill">admin</span>' : ''}
+        <i class="ti ti-chevron-right" style="font-size:18px;color:var(--text-dim);"></i>
+      </button>`).join('');
     root.innerHTML = `
       <div style="max-width:420px;margin:0 auto;padding-top:32px;">
         ${configBanner()}
         <div class="fade-in">
           <div style="font-size:48px;margin-bottom:8px;">💪</div>
-          <h1 style="margin-bottom:6px;">Entrar al grupo</h1>
+          <h1 style="margin-bottom:6px;">¿Quién entrena hoy?</h1>
           <p class="muted" style="font-size:14px;margin:0 0 8px;">Grupo: <strong style="color:var(--text);">${esc(state.groupConfig.groupName || groupPath())}</strong></p>
           <button data-action="groupMenu" style="margin-bottom:20px;padding:8px 12px;font-size:12px;background:var(--bg-elev);border-color:var(--border);">
             <i class="ti ti-users-group" style="font-size:14px;vertical-align:-2px;color:var(--accent);"></i> Cambiar / crear grupo
           </button>
         </div>
-        <div class="card fade-in" style="margin-bottom:14px;animation-delay:60ms;">
-          <label class="section-label" style="margin-bottom:6px;">Tu nombre</label>
-          <input id="loginNameInput" type="text" placeholder="Escribe tu nombre exacto" maxlength="24" style="margin-bottom:12px;" autofocus />
-          <button class="primary" data-action="loginByName" style="width:100%;padding:13px;font-weight:600;">Continuar</button>
-          <div id="loginNameError" style="color:var(--danger);font-size:12px;text-align:center;margin-top:10px;min-height:14px;"></div>
-        </div>
-        <button data-action="newUser" class="fade-in" style="margin-top:14px;width:100%;padding:14px;border-style:dashed;color:var(--text-muted);font-weight:500;animation-delay:120ms;">
+        <div style="display:flex;flex-direction:column;gap:8px;">${userOptions}</div>
+        <button data-action="newUser" class="fade-in" style="margin-top:14px;width:100%;padding:14px;border-style:dashed;color:var(--text-muted);font-weight:500;animation-delay:${state.users.length*60}ms;">
           <i class="ti ti-plus" style="font-size:16px;vertical-align:-2px;"></i> Agregar otra persona
         </button>
       </div>`;
-    attach();
-    document.getElementById('loginNameInput')?.addEventListener('keydown', (e)=>{
-      if (e.key === 'Enter') document.querySelector('[data-action="loginByName"]').click();
-    });
-    return;
+    attach(); return;
   }
   if (state.setupStep === 'enterPin'){
     const u = state.users.find(x => x.id === state.pendingUserId);
@@ -1049,6 +1027,9 @@ function renderHome(){
     <div class="fade-in" style="display:flex;gap:8px;margin-bottom:20px;animation-delay:80ms;">
       <button data-action="goCompare" style="flex:1;padding:14px;background:var(--bg-elev);display:flex;align-items:center;justify-content:center;gap:8px;font-weight:500;border:1px solid var(--border);">
         <i class="ti ti-chart-line" style="font-size:17px;color:var(--accent);"></i> Ver progreso
+      </button>
+      <button data-action="goDaily" style="flex:1;padding:14px;background:var(--bg-elev);display:flex;align-items:center;justify-content:center;gap:8px;font-weight:500;border:1px solid var(--border);">
+        <i class="ti ti-calendar-stats" style="font-size:17px;color:var(--accent);"></i> Diario
       </button>
       <button data-action="goSettings" aria-label="Configuración" style="padding:14px;background:var(--bg-elev);border:1px solid var(--border);">
         <i class="ti ti-settings" style="font-size:17px;color:var(--text-muted);"></i>
@@ -1271,7 +1252,6 @@ function renderExercise(){
 // ====== COMPARE ======
 function renderCompare(){
   const mode = state.compareMode;
-  if (mode === 'day') return renderDaily(true);
   const focused = state.currentExerciseIdx != null ? { day: state.currentDay, idx: state.currentExerciseIdx } : null;
 
   const exerciseOptions = [`<option value="">Todos los ejercicios (volumen total)</option>`];
@@ -1335,7 +1315,7 @@ function renderCompare(){
   root.innerHTML = `
     ${headerBar('Progreso', 'goHome')}
     <div class="tab-bar">
-      ${['day','week','month','year'].map(m => `<button class="${mode===m?'active':''}" data-action="setMode" data-mode="${m}">${m==='day'?'Día':m==='week'?'Semana':m==='month'?'Mes':'Año'}</button>`).join('')}
+      ${['week','month','year'].map(m => `<button class="${mode===m?'active':''}" data-action="setMode" data-mode="${m}">${m==='week'?'Semana':m==='month'?'Mes':'Año'}</button>`).join('')}
     </div>
     <select id="exPicker" style="margin-bottom:18px;">${exerciseOptions.join('')}</select>
     ${content}`;
@@ -1455,7 +1435,7 @@ function formatBucket(key, mode){
 }
 
 // ====== DAILY PROGRESS ======
-function renderDaily(insideProgress = false){
+function renderDaily(){
   const rows = [];
   for (const u of state.users){
     const userLogs = state.logs[u.id] || {};
@@ -1497,10 +1477,7 @@ function renderDaily(insideProgress = false){
   }).join('');
 
   root.innerHTML = `
-    ${headerBar(insideProgress ? 'Progreso' : 'Progreso diario', 'goHome')}
-    ${insideProgress ? `<div class="tab-bar">
-      ${['day','week','month','year'].map(m => `<button class="${state.compareMode===m?'active':''}" data-action="setMode" data-mode="${m}">${m==='day'?'Día':m==='week'?'Semana':m==='month'?'Mes':'Año'}</button>`).join('')}
-    </div>` : ''}
+    ${headerBar('Progreso diario', 'goHome')}
     <div class="card" style="margin-bottom:16px;">
       <label class="section-label" style="margin-bottom:6px;">Fecha</label>
       <input id="dailyDate" type="date" value="${esc(state.dailyDate)}" style="font-family:var(--font-mono);" />
@@ -1540,14 +1517,9 @@ function renderSettings(){
     ${headerBar('Configuración', 'goHome')}
     <div class="section-label">Grupo</div>
     <div class="card" style="margin-bottom:16px;padding:6px;">
-      <div style="padding:10px 12px 8px;display:flex;align-items:center;gap:10px;">
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:14px;font-weight:600;">${esc(state.groupConfig.groupName || groupPath())}</div>
-          <div class="muted mono" style="font-size:11px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(groupPath())}</div>
-        </div>
-        <button data-action="copyGroupId" title="Copiar código del grupo" aria-label="Copiar código del grupo" style="padding:8px 10px;border-color:var(--border);background:var(--bg-elev-2);color:var(--accent);">
-          <i class="ti ti-copy" style="font-size:16px;"></i>
-        </button>
+      <div style="padding:10px 12px 8px;">
+        <div style="font-size:14px;font-weight:600;">${esc(state.groupConfig.groupName || groupPath())}</div>
+        <div class="muted mono" style="font-size:11px;margin-top:2px;">${esc(groupPath())}</div>
       </div>
       <div style="height:1px;background:var(--border);margin:0 8px 6px;"></div>
       ${groupRows}
@@ -1583,19 +1555,14 @@ function renderSettings(){
 
     ${adm ? `<div class="section-label" style="margin-top:24px;">Admin</div>
     <div class="card" style="padding:6px;">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <button data-action="changeInvitationPw" style="flex:1;padding:14px 12px;display:flex;align-items:center;gap:12px;background:transparent;border:none;text-align:left;border-radius:8px;">
-          <i class="ti ti-shield-lock" style="font-size:18px;color:var(--accent);"></i>
-          <div style="flex:1;min-width:0;">
-            <div style="font-weight:500;">Contraseña de invitación</div>
-            <div class="muted mono" style="font-size:12px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(state.invitationPassword)}</div>
-          </div>
-          <i class="ti ti-chevron-right" style="color:var(--text-dim);"></i>
-        </button>
-        <button data-action="copyInvitationPw" title="Copiar contraseña" aria-label="Copiar contraseña" style="padding:8px 10px;border-color:var(--border);background:var(--bg-elev-2);color:var(--accent);">
-          <i class="ti ti-copy" style="font-size:16px;"></i>
-        </button>
-      </div>
+      <button data-action="changeInvitationPw" style="width:100%;padding:14px 12px;display:flex;align-items:center;gap:12px;background:transparent;border:none;text-align:left;border-radius:8px;">
+        <i class="ti ti-shield-lock" style="font-size:18px;color:var(--accent);"></i>
+        <div style="flex:1;">
+          <div style="font-weight:500;">Contraseña de invitación</div>
+          <div class="muted mono" style="font-size:12px;margin-top:2px;">${esc(state.invitationPassword)}</div>
+        </div>
+        <i class="ti ti-chevron-right" style="color:var(--text-dim);"></i>
+      </button>
     </div>` : ''}
 
     <div style="margin-top:32px;padding:14px;text-align:center;color:var(--text-dim);font-size:11px;font-family:var(--font-mono);">
@@ -1728,18 +1695,6 @@ async function handle(e){
   // ====== Setup / Auth ======
   if (a === 'newUser'){ state.setupStep = 'newUser'; render(); return; }
   if (a === 'backToPick'){ state.setupStep = state.users.length ? 'pickUser' : 'newUser'; render(); return; }
-  if (a === 'loginByName'){
-    const name = (document.getElementById('loginNameInput').value || '').trim();
-    const errEl = document.getElementById('loginNameError');
-    if (!name){ errEl.textContent = 'Escribe tu nombre'; return; }
-    const matches = state.users.filter(u => u.name.toLowerCase().trim() === name.toLowerCase());
-    if (!matches.length){ errEl.textContent = 'No encontré ese nombre en este grupo'; return; }
-    if (matches.length > 1){ errEl.textContent = 'Hay más de una cuenta con ese nombre. Pide a la admin que renombre una.'; return; }
-    state.pendingUserId = matches[0].id;
-    state.setupStep = 'enterPin';
-    render();
-    return;
-  }
   if (a === 'pickUser'){
     const uid = btn.dataset.uid;
     state.pendingUserId = uid;
@@ -1941,14 +1896,6 @@ async function handle(e){
     await deleteCurrentGroup();
     return;
   }
-  if (a === 'copyGroupId'){
-    await copyText(groupPath(), 'Código del grupo');
-    return;
-  }
-  if (a === 'copyInvitationPw'){
-    await copyText(state.invitationPassword || INVITATION_PASSWORD_DEFAULT, 'Contraseña');
-    return;
-  }
 
   // ====== User menu ======
   if (a === 'userMenu'){
@@ -2095,6 +2042,7 @@ async function handle(e){
   if (a === 'openEx'){ state.currentExerciseIdx = Number(btn.dataset.idx); state.view = 'exercise'; state.showAlts = false; state.showMuscles = false; render(); return; }
   if (a === 'goCompare'){ state.view = 'compare'; state.currentDay = null; state.currentExerciseIdx = null; render(); return; }
   if (a === 'goCompareEx'){ state.view = 'compare'; render(); return; }
+  if (a === 'goDaily'){ state.view = 'daily'; state.currentDay = null; state.currentExerciseIdx = null; render(); return; }
   if (a === 'goSettings'){ closeModal(); state.view = 'settings'; render(); return; }
   if (a === 'goEditRoutine'){ state.view = 'editRoutine'; render(); return; }
   if (a === 'editRoutine'){ state.view = 'editRoutine'; render(); return; }
