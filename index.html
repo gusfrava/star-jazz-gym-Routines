@@ -223,7 +223,9 @@ const firebaseConfig = {
   messagingSenderId: "1080289668591",
   appId: "1:1080289668591:web:f902974b98717bc71b1a1a"
 };
-const SALA = "jazmin-y-buddy-2026";
+const DEFAULT_GROUP = "jazmin-y-buddy-2026";
+const LS_GROUP = 'gym_current_group_v3';
+const LS_GROUPS = 'gym_joined_groups_v3';
 // ============================================================
 // ADMIN — solo este nombre (sin distinguir mayúsculas) puede eliminar usuarios
 // y cambiar la contraseña de invitación.
@@ -252,9 +254,10 @@ const MUSCLES = {
 };
 const MUSCLE_IDS = Object.keys(MUSCLES);
 
-const DAY_ORDER = ['martes','miercoles','jueves','viernes','sabado'];
+const DAY_ORDER = ['lunes','martes','miercoles','jueves','viernes','sabado','domingo'];
 
 const DEFAULT_ROUTINE = {
+  lunes:{label:'Lunes',focus:'Descanso / rutina libre',icon:'ti-moon',exercises:[]},
   martes:{label:'Martes',focus:'Pierna (Cuádriceps)',icon:'ti-run',exercises:[
     {name:'Hack Squat',video:'how to do hack squat machine',primary:['quads','glutes'],secondary:['hamstrings','calves','lowerBack'],alts:['Sentadilla con barra','Prensa inclinada','Sentadilla búlgara con mancuernas']},
     {name:'Prensa (Pies en medio)',video:'leg press feet middle technique',primary:['quads'],secondary:['glutes','hamstrings','adductors'],alts:['Hack squat','Sentadilla goblet','Sentadilla libre']},
@@ -299,12 +302,15 @@ const DEFAULT_ROUTINE = {
     {name:'Dominadas / Jalón al pecho',video:'pull ups lat pulldown',primary:['lats'],secondary:['bicepsF','midBack','shouldersB','forearmsF'],alts:['Jalón al pecho','Dominadas asistidas','Remo invertido']},
     {name:'Press militar',video:'overhead press standing',primary:['shouldersF'],secondary:['triceps','upperBack','abs'],alts:['Press militar con mancuernas','Press en máquina','Press Arnold']},
     {name:'Curl de bíceps + Tríceps en polea',video:'bicep curl tricep pushdown superset',primary:['bicepsF','triceps'],secondary:['forearmsF','forearmsB'],alts:['Curl martillo + francés','Curl predicador + jalón cuerda','Curl Z + extensión sobre cabeza']}
-  ]}
+  ]},
+  domingo:{label:'Domingo',focus:'Descanso / rutina libre',icon:'ti-sun',exercises:[]}
 };
 
 // ====== STATE ======
 const state = {
   view: 'home',
+  currentGroup: loadCurrentGroup(),
+  joinedGroups: loadJoinedGroups(),
   currentUser: null,
   currentDay: null,
   currentExerciseIdx: null,
@@ -315,6 +321,9 @@ const state = {
   personalRoutines: {},
   routineSource: {},      // { dayKey: 'shared'|'personal' }
   invitationPassword: '',
+  groupConfig: {},
+  dailyDate: new Date().toISOString().slice(0,10),
+  editingSession: null,
   setupStep: null,
   pendingUserId: null,
   pendingNewName: null,
@@ -329,122 +338,273 @@ const LS_ME = 'gym_me_v2';
 const LS_AUTH = 'gym_auth_v2';
 const LS_SOURCE = 'gym_routinesource_v2'; // per-day choice (per device)
 
+// ====== GROUP HELPERS ======
+function groupPath(){ return state.currentGroup || DEFAULT_GROUP; }
+function groupLocalKey(base, groupId = groupPath()){ return groupId === DEFAULT_GROUP ? base : base + ':' + groupId; }
+function loadCurrentGroup(){ return localStorage.getItem(LS_GROUP) || DEFAULT_GROUP; }
+function saveCurrentGroup(groupId){ localStorage.setItem(LS_GROUP, groupId); }
+function loadJoinedGroups(){
+  try {
+    const groups = JSON.parse(localStorage.getItem(LS_GROUPS) || 'null');
+    return Array.isArray(groups) && groups.length ? Array.from(new Set([DEFAULT_GROUP, ...groups])) : [DEFAULT_GROUP];
+  } catch { return [DEFAULT_GROUP]; }
+}
+function saveJoinedGroups(groups){ localStorage.setItem(LS_GROUPS, JSON.stringify(Array.from(new Set([DEFAULT_GROUP, ...groups])))); }
+function rememberGroup(groupId){ state.joinedGroups = Array.from(new Set([DEFAULT_GROUP, ...state.joinedGroups, groupId])); saveJoinedGroups(state.joinedGroups); }
+function forgetGroup(groupId){ state.joinedGroups = state.joinedGroups.filter(g => g !== groupId); saveJoinedGroups(state.joinedGroups); }
+function slugGroupName(name){ return String(name || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,48); }
+function normalizeRoutine(routine){ return { ...DEFAULT_ROUTINE, ...(routine || {}) }; }
+function defaultGroupConfig(groupId = groupPath()){
+  return { invitationPassword: INVITATION_PASSWORD_DEFAULT, groupName: groupId, createdBy: null, adminIds: [], createdAt: Date.now() };
+}
+function normalizeGroupConfig(cfg, groupId = groupPath()){
+  return { ...defaultGroupConfig(groupId), ...(cfg || {}), invitationPassword: (cfg && cfg.invitationPassword) || INVITATION_PASSWORD_DEFAULT };
+}
 // ====== STORAGE ======
 async function loadConfig(){
-  if (!firebaseReady) return JSON.parse(localStorage.getItem('config')||'null') || { invitationPassword: '' };
+  if (!firebaseReady) return normalizeGroupConfig(JSON.parse(localStorage.getItem(groupLocalKey('config'))||'null'));
   try {
-    const snap = await getDoc(doc(db,'salas',SALA,'meta','config'));
-    return snap.exists() ? snap.data() : { invitationPassword: '' };
-  } catch(e){ console.error(e); return { invitationPassword: '' }; }
+    const snap = await getDoc(doc(db,'salas',groupPath(),'meta','config'));
+    return normalizeGroupConfig(snap.exists() ? snap.data() : null);
+  } catch(e){ console.error(e); return defaultGroupConfig(); }
 }
 async function saveConfig(cfg){
-  if (!firebaseReady){ localStorage.setItem('config', JSON.stringify(cfg)); return; }
-  try { await setDoc(doc(db,'salas',SALA,'meta','config'), cfg); }
+  const merged = normalizeGroupConfig({ ...state.groupConfig, ...cfg });
+  state.groupConfig = merged;
+  state.invitationPassword = merged.invitationPassword;
+  if (!firebaseReady){ localStorage.setItem(groupLocalKey('config'), JSON.stringify(merged)); return; }
+  try { await setDoc(doc(db,'salas',groupPath(),'meta','config'), merged); }
   catch(e){ console.error(e); toast('Error al guardar config'); }
 }
 async function loadUsers(){
-  if (!firebaseReady) return JSON.parse(localStorage.getItem('users')||'[]');
+  if (!firebaseReady) return JSON.parse(localStorage.getItem(groupLocalKey('users'))||'[]');
   try {
-    const snap = await getDoc(doc(db,'salas',SALA,'meta','users'));
+    const snap = await getDoc(doc(db,'salas',groupPath(),'meta','users'));
     return snap.exists() ? (snap.data().users || []) : [];
   } catch(e){ console.error(e); return []; }
 }
 async function saveUsers(users){
-  if (!firebaseReady){ localStorage.setItem('users', JSON.stringify(users)); return; }
+  if (!firebaseReady){ localStorage.setItem(groupLocalKey('users'), JSON.stringify(users)); return; }
   state.syncing = true;
-  try { await setDoc(doc(db,'salas',SALA,'meta','users'), { users }); }
+  try { await setDoc(doc(db,'salas',groupPath(),'meta','users'), { users }); }
   catch(e){ console.error(e); toast('Error al guardar'); }
   state.syncing = false;
 }
 async function loadSharedRoutine(){
   if (!firebaseReady){
-    const r = JSON.parse(localStorage.getItem('sharedRoutine')||'null');
-    if (r) return r;
-    localStorage.setItem('sharedRoutine', JSON.stringify(DEFAULT_ROUTINE));
-    return DEFAULT_ROUTINE;
+    const r = JSON.parse(localStorage.getItem(groupLocalKey('sharedRoutine'))||'null');
+    if (r) return normalizeRoutine(r);
+    localStorage.setItem(groupLocalKey('sharedRoutine'), JSON.stringify(normalizeRoutine(DEFAULT_ROUTINE)));
+    return normalizeRoutine(DEFAULT_ROUTINE);
   }
   try {
-    const snap = await getDoc(doc(db,'salas',SALA,'routines','shared'));
-    if (snap.exists() && snap.data().routine) return snap.data().routine;
-    await setDoc(doc(db,'salas',SALA,'routines','shared'), { routine: DEFAULT_ROUTINE });
-    return DEFAULT_ROUTINE;
-  } catch(e){ console.error(e); return DEFAULT_ROUTINE; }
+    const snap = await getDoc(doc(db,'salas',groupPath(),'routines','shared'));
+    if (snap.exists() && snap.data().routine) return normalizeRoutine(snap.data().routine);
+    await setDoc(doc(db,'salas',groupPath(),'routines','shared'), { routine: normalizeRoutine(DEFAULT_ROUTINE) });
+    return normalizeRoutine(DEFAULT_ROUTINE);
+  } catch(e){ console.error(e); return normalizeRoutine(DEFAULT_ROUTINE); }
 }
 async function saveSharedRoutine(routine){
-  if (!firebaseReady){ localStorage.setItem('sharedRoutine', JSON.stringify(routine)); return; }
+  if (!firebaseReady){ localStorage.setItem(groupLocalKey('sharedRoutine'), JSON.stringify(routine)); return; }
   state.syncing = true;
-  try { await setDoc(doc(db,'salas',SALA,'routines','shared'), { routine }); }
+  try { await setDoc(doc(db,'salas',groupPath(),'routines','shared'), { routine }); }
   catch(e){ console.error(e); toast('Error al guardar rutina'); }
   state.syncing = false;
 }
 async function loadAllPersonalRoutines(){
   if (!firebaseReady){
-    const out = {}; const users = JSON.parse(localStorage.getItem('users')||'[]');
-    for (const u of users){ const r = localStorage.getItem('routine:'+u.id); if (r) out[u.id] = JSON.parse(r); }
+    const out = {}; const users = JSON.parse(localStorage.getItem(groupLocalKey('users'))||'[]');
+    for (const u of users){ const r = localStorage.getItem(groupLocalKey('routine:'+u.id)); if (r) out[u.id] = JSON.parse(r); }
     return out;
   }
   try {
     const out = {};
-    const snap = await getDocs(collection(db,'salas',SALA,'personalRoutines'));
+    const snap = await getDocs(collection(db,'salas',groupPath(),'personalRoutines'));
     snap.forEach(d => { out[d.id] = d.data().routine || {}; });
     return out;
   } catch(e){ console.error(e); return {}; }
 }
 async function savePersonalRoutine(userId, routine){
-  if (!firebaseReady){ localStorage.setItem('routine:'+userId, JSON.stringify(routine)); return; }
+  if (!firebaseReady){ localStorage.setItem(groupLocalKey('routine:'+userId), JSON.stringify(routine)); return; }
   state.syncing = true;
-  try { await setDoc(doc(db,'salas',SALA,'personalRoutines',userId), { routine }); }
+  try { await setDoc(doc(db,'salas',groupPath(),'personalRoutines',userId), { routine }); }
   catch(e){ console.error(e); toast('Error al guardar rutina personal'); }
   state.syncing = false;
 }
 async function loadAllLogs(){
   if (!firebaseReady){
-    const out = {}; const users = JSON.parse(localStorage.getItem('users')||'[]');
-    for (const u of users){ out[u.id] = JSON.parse(localStorage.getItem('logs:'+u.id)||'{}'); }
+    const out = {}; const users = JSON.parse(localStorage.getItem(groupLocalKey('users'))||'[]');
+    for (const u of users){ out[u.id] = JSON.parse(localStorage.getItem(groupLocalKey('logs:'+u.id))||'{}'); }
     return out;
   }
   try {
     const out = {};
-    const snap = await getDocs(collection(db,'salas',SALA,'logs'));
+    const snap = await getDocs(collection(db,'salas',groupPath(),'logs'));
     snap.forEach(d => { out[d.id] = d.data(); });
     return out;
   } catch(e){ console.error(e); return {}; }
 }
 async function saveUserLogs(userId, logs){
-  if (!firebaseReady){ localStorage.setItem('logs:'+userId, JSON.stringify(logs)); return; }
+  if (!firebaseReady){ localStorage.setItem(groupLocalKey('logs:'+userId), JSON.stringify(logs)); return; }
   state.syncing = true;
-  try { await setDoc(doc(db,'salas',SALA,'logs',userId), logs); }
+  try { await setDoc(doc(db,'salas',groupPath(),'logs',userId), logs); }
   catch(e){ console.error(e); toast('Error al guardar'); }
   state.syncing = false;
 }
 async function deleteUserLogsDoc(userId){
-  if (!firebaseReady){ localStorage.removeItem('logs:'+userId); return; }
-  try { await deleteDoc(doc(db,'salas',SALA,'logs',userId)); }
+  if (!firebaseReady){ localStorage.removeItem(groupLocalKey('logs:'+userId)); return; }
+  try { await deleteDoc(doc(db,'salas',groupPath(),'logs',userId)); }
   catch(e){ console.error(e); toast('Error al eliminar entrenos'); }
 }
 async function deletePersonalRoutineDoc(userId){
-  if (!firebaseReady){ localStorage.removeItem('routine:'+userId); return; }
-  try { await deleteDoc(doc(db,'salas',SALA,'personalRoutines',userId)); }
+  if (!firebaseReady){ localStorage.removeItem(groupLocalKey('routine:'+userId)); return; }
+  try { await deleteDoc(doc(db,'salas',groupPath(),'personalRoutines',userId)); }
   catch(e){ console.error(e); }
 }
-function loadMe(){ return localStorage.getItem(LS_ME); }
-function saveMe(id){ localStorage.setItem(LS_ME, id); }
-function clearMe(){ localStorage.removeItem(LS_ME); }
+function loadMe(){ return localStorage.getItem(groupLocalKey(LS_ME)) || (groupPath() === DEFAULT_GROUP ? localStorage.getItem(LS_ME) : null); }
+function saveMe(id){ localStorage.setItem(groupLocalKey(LS_ME), id); if (groupPath() === DEFAULT_GROUP) localStorage.setItem(LS_ME, id); }
+function clearMe(){ localStorage.removeItem(groupLocalKey(LS_ME)); if (groupPath() === DEFAULT_GROUP) localStorage.removeItem(LS_ME); }
 function authValid(){
   try {
-    const a = JSON.parse(localStorage.getItem(LS_AUTH)||'null');
-    if (!a || !a.userId || !a.ts) return false;
+    const a = JSON.parse(localStorage.getItem(groupLocalKey(LS_AUTH)) || (groupPath() === DEFAULT_GROUP ? localStorage.getItem(LS_AUTH) : 'null'));
+    if (!a || !a.userId || !a.ts || (a.groupId && a.groupId !== groupPath())) return false;
     const days = (Date.now() - a.ts) / (1000*60*60*24);
     return days < 30 && a.userId === state.currentUser;
   } catch { return false; }
 }
-function setAuth(userId){ localStorage.setItem(LS_AUTH, JSON.stringify({ userId, ts: Date.now() })); }
-function clearAuth(){ localStorage.removeItem(LS_AUTH); }
+function setAuth(userId){ const v = JSON.stringify({ userId, groupId: groupPath(), ts: Date.now() }); localStorage.setItem(groupLocalKey(LS_AUTH), v); if (groupPath() === DEFAULT_GROUP) localStorage.setItem(LS_AUTH, v); }
+function clearAuth(){ localStorage.removeItem(groupLocalKey(LS_AUTH)); if (groupPath() === DEFAULT_GROUP) localStorage.removeItem(LS_AUTH); }
 function loadRoutineSource(){
-  try { return JSON.parse(localStorage.getItem(LS_SOURCE)||'{}'); } catch { return {}; }
+  try { return JSON.parse(localStorage.getItem(groupLocalKey(LS_SOURCE))||'{}'); } catch { return {}; }
 }
 function saveRoutineSource(src){
-  localStorage.setItem(LS_SOURCE, JSON.stringify(src));
+  localStorage.setItem(groupLocalKey(LS_SOURCE), JSON.stringify(src));
+}
+
+function blankRoutine(){
+  const out = {};
+  for (const day of DAY_ORDER){
+    const base = DEFAULT_ROUTINE[day] || { label: day, focus: '', icon:'ti-barbell', exercises: [] };
+    out[day] = { ...base, exercises: [] };
+  }
+  return out;
+}
+async function loadGroupState(){
+  const cfg = await loadConfig();
+  state.groupConfig = cfg;
+  state.invitationPassword = cfg.invitationPassword || INVITATION_PASSWORD_DEFAULT;
+  if (firebaseReady && !cfg.createdAt){
+    await saveConfig(defaultGroupConfig());
+  }
+  state.users = await loadUsers();
+  state.sharedRoutine = normalizeRoutine(await loadSharedRoutine());
+  state.personalRoutines = await loadAllPersonalRoutines();
+  state.logs = await loadAllLogs();
+  state.routineSource = loadRoutineSource();
+}
+function chooseInitialViewForGroup(){
+  const meId = loadMe();
+  if (meId && state.users.find(u=>u.id===meId) && authValid()){
+    state.currentUser = meId; state.view = 'home'; state.setupStep = null;
+  } else if (state.users.length === 0){
+    state.currentUser = null; state.setupStep = 'newUser'; state.view = 'setup';
+  } else if (meId && state.users.find(u=>u.id===meId)){
+    state.currentUser = null; state.pendingUserId = meId; state.setupStep = 'enterPin'; state.view = 'setup';
+  } else {
+    state.currentUser = null; state.setupStep = 'pickUser'; state.view = 'setup';
+  }
+}
+async function reloadGroup(){
+  unsubs.forEach(u => u && u());
+  unsubs = [];
+  await loadGroupState();
+  chooseInitialViewForGroup();
+  subscribeRealtime();
+  render();
+}
+async function switchGroup(groupId){
+  if (!groupId) return;
+  state.currentGroup = groupId;
+  saveCurrentGroup(groupId);
+  rememberGroup(groupId);
+  state.currentDay = null;
+  state.currentExerciseIdx = null;
+  state.editingSession = null;
+  state.showAlts = false;
+  state.showMuscles = false;
+  await reloadGroup();
+}
+async function createGroup(groupId, groupName, invitationPassword, routineMode){
+  let me = state.users.find(u => u.id === state.currentUser);
+  if (!me && window._pendingGroupCreator) me = window._pendingGroupCreator;
+  if (!me){ toast('Crea tu perfil de admin para crear el grupo'); return; }
+  const safeId = slugGroupName(groupId || groupName);
+  if (!safeId){ toast('Nombre de grupo inválido'); return; }
+  const config = {
+    ...defaultGroupConfig(safeId),
+    groupName: groupName || safeId,
+    invitationPassword,
+    createdBy: me.id,
+    adminIds: [me.id],
+    createdAt: Date.now()
+  };
+  let routine = normalizeRoutine(DEFAULT_ROUTINE);
+  if (routineMode === 'blank') routine = blankRoutine();
+  if (routineMode === 'copy-current') routine = JSON.parse(JSON.stringify(state.sharedRoutine || DEFAULT_ROUTINE));
+  if (!firebaseReady){
+    localStorage.setItem(groupLocalKey('config', safeId), JSON.stringify(config));
+    localStorage.setItem(groupLocalKey('users', safeId), JSON.stringify([{ ...me }]));
+    localStorage.setItem(groupLocalKey('sharedRoutine', safeId), JSON.stringify(routine));
+  } else {
+    await setDoc(doc(db,'salas',safeId,'meta','config'), config);
+    await setDoc(doc(db,'salas',safeId,'meta','users'), { users: [{ ...me }] });
+    await setDoc(doc(db,'salas',safeId,'routines','shared'), { routine });
+  }
+  window._pendingGroupCreator = null;
+  rememberGroup(safeId);
+  state.currentGroup = safeId;
+  saveCurrentGroup(safeId);
+  saveMe(me.id);
+  setAuth(me.id);
+  await reloadGroup();
+  toast('Grupo creado');
+}
+async function joinGroup(groupId, password){
+  const safeId = slugGroupName(groupId);
+  if (!safeId){ toast('Escribe el código del grupo'); return; }
+  let cfg = null;
+  if (!firebaseReady){
+    cfg = JSON.parse(localStorage.getItem(groupLocalKey('config', safeId)) || 'null');
+  } else {
+    const snap = await getDoc(doc(db,'salas',safeId,'meta','config'));
+    cfg = snap.exists() ? snap.data() : null;
+  }
+  if (!cfg){ toast('No encontré ese grupo'); return; }
+  if ((cfg.invitationPassword || INVITATION_PASSWORD_DEFAULT) !== password){ toast('Contraseña incorrecta'); return; }
+  rememberGroup(safeId);
+  await switchGroup(safeId);
+  toast('Grupo agregado');
+}
+async function deleteCurrentGroup(){
+  if (groupPath() === DEFAULT_GROUP){ toast('El grupo original está protegido'); return; }
+  if (!isAdmin()){ toast('Solo admin'); return; }
+  const gid = groupPath();
+  if (!firebaseReady){
+    localStorage.removeItem(groupLocalKey('config', gid));
+    localStorage.removeItem(groupLocalKey('users', gid));
+    localStorage.removeItem(groupLocalKey('sharedRoutine', gid));
+  } else {
+    for (const col of ['logs','personalRoutines']){
+      const snap = await getDocs(collection(db,'salas',gid,col));
+      for (const d of snap.docs) await deleteDoc(d.ref);
+    }
+    await deleteDoc(doc(db,'salas',gid,'meta','config'));
+    await deleteDoc(doc(db,'salas',gid,'meta','users'));
+    await deleteDoc(doc(db,'salas',gid,'routines','shared'));
+  }
+  forgetGroup(gid);
+  await switchGroup(DEFAULT_GROUP);
+  toast('Grupo eliminado');
 }
 
 // ====== HELPERS ======
@@ -463,11 +623,44 @@ function toast(msg){
   el.textContent = msg; el.classList.add('show');
   setTimeout(()=> el.classList.remove('show'), 1800);
 }
+async function copyText(text, label){
+  try {
+    if (navigator.clipboard && window.isSecureContext){
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    toast(`${label} copiado`);
+  } catch(e){
+    console.error(e);
+    toast('No se pudo copiar');
+  }
+}
 function isAdmin(){
   const me = state.users.find(u => u.id === state.currentUser);
-  return me && me.name.toLowerCase().trim() === ADMIN_NAME.toLowerCase().trim();
+  if (!me) return false;
+  const admins = state.groupConfig.adminIds || [];
+  return admins.includes(me.id) || me.name.toLowerCase().trim() === ADMIN_NAME.toLowerCase().trim();
+}
+function isUserAdmin(u){
+  const admins = state.groupConfig.adminIds || [];
+  return !!u && (admins.includes(u.id) || u.name.toLowerCase().trim() === ADMIN_NAME.toLowerCase().trim());
 }
 const getEntries = (uid, ek) => (state.logs[uid] && state.logs[uid][ek]) || [];
+function exerciseNameForKey(ek){
+  const [day, idxRaw] = String(ek).split(':');
+  const idx = Number(idxRaw);
+  const routine = (state.sharedRoutine && state.sharedRoutine[day]) || getRoutineForDay(day);
+  return routine && routine.exercises && routine.exercises[idx] ? routine.exercises[idx].name : ek;
+}
 const bestSet = (e) => !e.sets || !e.sets.length ? null : e.sets.reduce((b,s)=> (s.weight||0)>(b.weight||0)?s:b, e.sets[0]);
 const totalVolume = (e) => !e.sets ? 0 : e.sets.reduce((s,x)=> s + (Number(x.reps)||0)*(Number(x.weight)||0), 0);
 const latestEntry = (uid, ek) => {
@@ -515,7 +708,7 @@ function setCurrentSource(dayKey, src){
   saveRoutineSource(state.routineSource);
 }
 function getAllDayKeys(){
-  const all = new Set();
+  const all = new Set(DAY_ORDER);
   if (state.sharedRoutine) Object.keys(state.sharedRoutine).forEach(k => all.add(k));
   const pr = state.personalRoutines[state.currentUser];
   if (pr) Object.keys(pr).forEach(k => all.add(k));
@@ -654,27 +847,32 @@ function headerBar(title, backFn){
 // ====== SETUP / AUTH ======
 function renderSetup(){
   if (state.setupStep === 'pickUser'){
-    const userOptions = state.users.map((u,i) => `
-      <button data-action="pickUser" data-uid="${u.id}" class="day-card fade-in" style="animation-delay:${i*60}ms;display:flex;align-items:center;gap:12px;padding:16px;">
-        <span class="dot" style="background:${u.color};width:32px;height:32px;border-radius:50%;flex-shrink:0;box-shadow:0 0 0 3px var(--bg-elev), 0 0 0 4px ${u.color}33;"></span>
-        <span style="font-size:16px;font-weight:500;flex:1;text-align:left;">${esc(u.name)}</span>
-        ${u.name.toLowerCase().trim() === ADMIN_NAME.toLowerCase().trim() ? '<span class="admin-pill">admin</span>' : ''}
-        <i class="ti ti-chevron-right" style="font-size:18px;color:var(--text-dim);"></i>
-      </button>`).join('');
     root.innerHTML = `
       <div style="max-width:420px;margin:0 auto;padding-top:32px;">
         ${configBanner()}
         <div class="fade-in">
           <div style="font-size:48px;margin-bottom:8px;">💪</div>
-          <h1 style="margin-bottom:6px;">¿Quién entrena hoy?</h1>
-          <p class="muted" style="font-size:14px;margin:0 0 24px;">Selecciona tu cuenta para entrar.</p>
+          <h1 style="margin-bottom:6px;">Entrar al grupo</h1>
+          <p class="muted" style="font-size:14px;margin:0 0 8px;">Grupo: <strong style="color:var(--text);">${esc(state.groupConfig.groupName || groupPath())}</strong></p>
+          <button data-action="groupMenu" style="margin-bottom:20px;padding:8px 12px;font-size:12px;background:var(--bg-elev);border-color:var(--border);">
+            <i class="ti ti-users-group" style="font-size:14px;vertical-align:-2px;color:var(--accent);"></i> Cambiar / crear grupo
+          </button>
         </div>
-        <div style="display:flex;flex-direction:column;gap:8px;">${userOptions}</div>
-        <button data-action="newUser" class="fade-in" style="margin-top:14px;width:100%;padding:14px;border-style:dashed;color:var(--text-muted);font-weight:500;animation-delay:${state.users.length*60}ms;">
+        <div class="card fade-in" style="margin-bottom:14px;animation-delay:60ms;">
+          <label class="section-label" style="margin-bottom:6px;">Tu nombre</label>
+          <input id="loginNameInput" type="text" placeholder="Escribe tu nombre exacto" maxlength="24" style="margin-bottom:12px;" autofocus />
+          <button class="primary" data-action="loginByName" style="width:100%;padding:13px;font-weight:600;">Continuar</button>
+          <div id="loginNameError" style="color:var(--danger);font-size:12px;text-align:center;margin-top:10px;min-height:14px;"></div>
+        </div>
+        <button data-action="newUser" class="fade-in" style="margin-top:14px;width:100%;padding:14px;border-style:dashed;color:var(--text-muted);font-weight:500;animation-delay:120ms;">
           <i class="ti ti-plus" style="font-size:16px;vertical-align:-2px;"></i> Agregar otra persona
         </button>
       </div>`;
-    attach(); return;
+    attach();
+    document.getElementById('loginNameInput')?.addEventListener('keydown', (e)=>{
+      if (e.key === 'Enter') document.querySelector('[data-action="loginByName"]').click();
+    });
+    return;
   }
   if (state.setupStep === 'enterPin'){
     const u = state.users.find(x => x.id === state.pendingUserId);
@@ -717,7 +915,11 @@ function renderSetup(){
         <div class="fade-in">
           <div style="font-size:42px;margin-bottom:6px;">✨</div>
           <h1 style="margin-bottom:6px;">Crear cuenta</h1>
-          <p class="muted" style="font-size:14px;margin:0 0 22px;">Necesitas la <strong style="color:var(--text);">contraseña de invitación</strong> de Jazmin.</p>
+          <p class="muted" style="font-size:14px;margin:0 0 10px;">Grupo: <strong style="color:var(--text);">${esc(state.groupConfig.groupName || groupPath())}</strong></p>
+          <button data-action="groupMenu" style="margin-bottom:18px;padding:8px 12px;font-size:12px;background:var(--bg-elev);border-color:var(--border);">
+            <i class="ti ti-users-group" style="font-size:14px;vertical-align:-2px;color:var(--accent);"></i> Cambiar / unirse a grupo
+          </button>
+          <p class="muted" style="font-size:14px;margin:0 0 22px;">Necesitas la <strong style="color:var(--text);">contraseña de invitación</strong> del grupo.</p>
         </div>
         <div class="card fade-in" style="margin-bottom:14px;animation-delay:60ms;">
           <label class="section-label" style="margin-bottom:6px;">Tu nombre</label>
@@ -810,7 +1012,7 @@ function renderHome(){
           <div class="row">
             <span class="dot" style="background:${u.color};width:14px;height:14px;border:2px solid var(--bg-elev);box-shadow:0 0 0 1px ${u.color};"></span>
             <div style="flex:1;">
-              <div style="font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px;">${esc(u.name)} ${u.name.toLowerCase().trim() === ADMIN_NAME.toLowerCase().trim() ? '<span class="admin-pill">admin</span>' : ''}</div>
+              <div style="font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px;">${esc(u.name)} ${isUserAdmin(u) ? '<span class="admin-pill">admin</span>' : ''}</div>
               <div class="muted" style="font-size:12px;margin-top:2px;">${lastTxt}</div>
             </div>
           </div>
@@ -928,32 +1130,38 @@ function renderExercise(){
   const ek = exerciseKey(dayKey, state.currentExerciseIdx);
   const myEntries = state.currentUser ? getEntries(state.currentUser, ek).slice().sort((a,b)=>b.date.localeCompare(a.date)) : [];
   const lastEntry = myEntries[0]; const prevEntry = myEntries[1];
+  const editing = state.editingSession && state.editingSession.uid === state.currentUser && state.editingSession.ek === ek
+    ? getEntries(state.currentUser, ek).find(e => e.date === state.editingSession.date)
+    : null;
+  const formEntry = editing || lastEntry;
 
   let formHtml = '';
   if (state.currentUser){
-    const initialCount = lastEntry ? lastEntry.sets.length : 4;
+    const initialCount = formEntry ? formEntry.sets.length : 4;
     const setRows = [];
     for (let i=0;i<initialCount;i++){
+      const set = formEntry && formEntry.sets[i] ? formEntry.sets[i] : null;
       const ph_r = lastEntry ? (lastEntry.sets[i] && lastEntry.sets[i].reps) || '' : '';
       const ph_w = lastEntry ? (lastEntry.sets[i] && lastEntry.sets[i].weight) || '' : '';
       const ph_n = lastEntry ? (lastEntry.sets[i] && lastEntry.sets[i].note) || '' : '';
       setRows.push(`<div class="set-row">
         <div style="display:grid;grid-template-columns:30px 1fr 1fr 28px;gap:8px;align-items:center;margin-bottom:6px;">
           <div class="mono" style="font-size:13px;text-align:center;font-weight:600;color:var(--accent);">${i+1}</div>
-          <input type="number" class="reps-in" inputmode="numeric" min="0" placeholder="${ph_r || 'reps'}" style="text-align:center;padding:9px;" />
-          <input type="number" class="weight-in" inputmode="decimal" step="0.5" min="0" placeholder="${ph_w ? ph_w+' lb' : 'peso lb'}" style="text-align:center;padding:9px;" />
+          <input type="number" class="reps-in" inputmode="numeric" min="0" value="${set ? esc(set.reps) : ''}" placeholder="${ph_r || 'reps'}" style="text-align:center;padding:9px;" />
+          <input type="number" class="weight-in" inputmode="decimal" step="0.5" min="0" value="${set ? esc(set.weight) : ''}" placeholder="${ph_w ? ph_w+' lb' : 'peso lb'}" style="text-align:center;padding:9px;" />
           <button class="del-set" aria-label="Eliminar" style="padding:4px;border:none;color:var(--text-dim);background:transparent;"><i class="ti ti-x" style="font-size:14px;"></i></button>
         </div>
-        <input type="text" class="note-in" placeholder="${ph_n ? 'Nota anterior: '+esc(ph_n) : 'Nota del set (opcional)'}" maxlength="120" style="width:100%;font-size:12px;padding:7px 11px;" />
+        <input type="text" class="note-in" value="${set && set.note ? esc(set.note) : ''}" placeholder="${ph_n ? 'Nota anterior: '+esc(ph_n) : 'Nota del set (opcional)'}" maxlength="120" style="width:100%;font-size:12px;padding:7px 11px;" />
       </div>`);
     }
     const sessionNotePh = lastEntry && lastEntry.note ? 'Nota anterior: ' + lastEntry.note.slice(0,60) : 'Cómo te sentiste, observaciones, ajustes…';
     formHtml = `<div class="card" style="margin-bottom:18px;">
       <div class="row" style="margin-bottom:14px;">
-        <h2>Registrar sesión</h2>
+        <h2>${editing ? 'Editar sesión' : 'Registrar sesión'}</h2>
         <div class="spacer"></div>
-        <input type="date" id="sessionDate" value="${today()}" style="width:auto;padding:7px 11px;font-size:13px;font-family:var(--font-mono);" />
+        <input type="date" id="sessionDate" value="${editing ? esc(editing.date) : today()}" style="width:auto;padding:7px 11px;font-size:13px;font-family:var(--font-mono);" />
       </div>
+      ${editing ? `<div class="banner banner-info" style="margin-bottom:12px;"><i class="ti ti-edit"></i><div>Editando la sesión del ${esc(editing.date)}. Puedes cambiar la fecha, sets, peso, reps y notas.</div></div>` : ''}
       <div class="dim" style="display:grid;grid-template-columns:30px 1fr 1fr 28px;gap:8px;margin-bottom:8px;padding:0 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;font-family:var(--font-mono);">
         <div style="text-align:center;">SET</div><div style="text-align:center;">REPS</div><div style="text-align:center;">PESO (LB)</div><div></div>
       </div>
@@ -965,9 +1173,10 @@ function renderExercise(){
         <label class="section-label" style="margin-bottom:6px;">
           <i class="ti ti-message" style="font-size:11px;vertical-align:-1px;"></i> Comentario general
         </label>
-        <textarea id="sessionNote" rows="2" maxlength="300" placeholder="${esc(sessionNotePh)}" style="resize:vertical;font-family:inherit;"></textarea>
+        <textarea id="sessionNote" rows="2" maxlength="300" placeholder="${esc(sessionNotePh)}" style="resize:vertical;font-family:inherit;">${editing && editing.note ? esc(editing.note) : ''}</textarea>
       </div>
-      <button class="primary" data-action="saveSession" style="margin-top:12px;width:100%;padding:13px;font-weight:600;font-size:15px;">Guardar sesión</button>
+      <button class="primary" data-action="saveSession" style="margin-top:12px;width:100%;padding:13px;font-weight:600;font-size:15px;">${editing ? 'Actualizar sesión' : 'Guardar sesión'}</button>
+      ${editing ? `<button data-action="cancelEditSession" style="margin-top:8px;width:100%;padding:11px;background:var(--bg-elev);border:1px solid var(--border);">Cancelar edición</button>` : ''}
       <div id="saveStatus" style="font-size:12px;color:var(--success);text-align:center;margin-top:8px;min-height:14px;"></div>
     </div>`;
   }
@@ -978,7 +1187,7 @@ function renderExercise(){
     for (const e of entries){
       const best = bestSet(e); const vol = totalVolume(e);
       const setNotes = (e.sets||[]).map((s,i)=> s.note ? `Set ${i+1}: ${s.note}` : null).filter(Boolean);
-      historyRows.push({ date:e.date, user:u,
+      historyRows.push({ date:e.date, user:u, ek, uid:u.id,
         summary:`${e.sets.length} sets · max ${best ? best.weight+'lb × '+best.reps : '–'} · vol ${Math.round(vol)}`,
         sessionNote: e.note || null, setNotes });
     }
@@ -991,6 +1200,10 @@ function renderExercise(){
         <div style="font-size:13px;font-weight:500;">${esc(h.user.name)} <span class="mono dim" style="font-weight:400;font-size:11px;">· ${h.date}</span></div>
         <div class="muted mono" style="font-size:11px;margin-top:2px;">${h.summary}</div>
       </div>
+      ${state.currentUser && h.uid === state.currentUser ? `<div style="display:flex;gap:4px;">
+        <button data-action="editSession" data-uid="${h.uid}" data-ek="${h.ek}" data-date="${h.date}" aria-label="Editar" style="padding:6px;border-color:var(--border);"><i class="ti ti-edit" style="font-size:14px;color:var(--accent);"></i></button>
+        <button data-action="deleteSession" data-uid="${h.uid}" data-ek="${h.ek}" data-date="${h.date}" aria-label="Eliminar" style="padding:6px;border:none;color:var(--danger);"><i class="ti ti-trash" style="font-size:14px;"></i></button>
+      </div>` : ''}
     </div>
     ${h.sessionNote ? `<div style="margin-top:8px;padding:7px 10px;background:var(--bg-elev);border-radius:8px;font-size:12px;color:var(--text-muted);font-style:italic;"><i class="ti ti-message" style="font-size:12px;"></i> ${esc(h.sessionNote)}</div>` : ''}
     ${h.setNotes.length ? `<div class="dim" style="margin-top:6px;font-size:11px;padding-left:18px;">${h.setNotes.map(n=>esc(n)).join(' · ')}</div>` : ''}
@@ -1058,6 +1271,7 @@ function renderExercise(){
 // ====== COMPARE ======
 function renderCompare(){
   const mode = state.compareMode;
+  if (mode === 'day') return renderDaily(true);
   const focused = state.currentExerciseIdx != null ? { day: state.currentDay, idx: state.currentExerciseIdx } : null;
 
   const exerciseOptions = [`<option value="">Todos los ejercicios (volumen total)</option>`];
@@ -1121,7 +1335,7 @@ function renderCompare(){
   root.innerHTML = `
     ${headerBar('Progreso', 'goHome')}
     <div class="tab-bar">
-      ${['week','month','year'].map(m => `<button class="${mode===m?'active':''}" data-action="setMode" data-mode="${m}">${m==='week'?'Semana':m==='month'?'Mes':'Año'}</button>`).join('')}
+      ${['day','week','month','year'].map(m => `<button class="${mode===m?'active':''}" data-action="setMode" data-mode="${m}">${m==='day'?'Día':m==='week'?'Semana':m==='month'?'Mes':'Año'}</button>`).join('')}
     </div>
     <select id="exPicker" style="margin-bottom:18px;">${exerciseOptions.join('')}</select>
     ${content}`;
@@ -1240,6 +1454,69 @@ function formatBucket(key, mode){
   return key;
 }
 
+// ====== DAILY PROGRESS ======
+function renderDaily(insideProgress = false){
+  const rows = [];
+  for (const u of state.users){
+    const userLogs = state.logs[u.id] || {};
+    for (const ek in userLogs){
+      for (const entry of userLogs[ek] || []){
+        if (entry.date === state.dailyDate){
+          const best = bestSet(entry);
+          rows.push({ user:u, ek, entry, best, volume: totalVolume(entry) });
+        }
+      }
+    }
+  }
+  rows.sort((a,b)=> a.user.name.localeCompare(b.user.name) || exerciseNameForKey(a.ek).localeCompare(exerciseNameForKey(b.ek)));
+  const totals = rows.reduce((acc,r)=>{
+    acc.sessions += 1;
+    acc.sets += (r.entry.sets || []).length;
+    acc.volume += r.volume;
+    acc.max = Math.max(acc.max, r.best ? Number(r.best.weight)||0 : 0);
+    return acc;
+  }, { sessions:0, sets:0, volume:0, max:0 });
+  const list = rows.map(r => {
+    const mine = state.currentUser && r.user.id === state.currentUser;
+    const setText = (r.entry.sets || []).map((set,i)=>`${i+1}) ${set.weight}lb × ${set.reps}${set.note ? ' · '+set.note : ''}`).join(' · ');
+    return `<div class="history-entry">
+      <div class="row" style="align-items:flex-start;">
+        <span class="dot" style="background:${r.user.color};width:14px;height:14px;margin-top:3px;"></span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:600;">${esc(r.user.name)} · ${esc(exerciseNameForKey(r.ek))}</div>
+          <div class="muted mono" style="font-size:11px;margin-top:2px;">${(r.entry.sets||[]).length} sets · max ${r.best ? r.best.weight+'lb × '+r.best.reps : '–'} · vol ${Math.round(r.volume)}</div>
+          <div class="dim" style="font-size:11px;margin-top:6px;">${esc(setText)}</div>
+          ${r.entry.note ? `<div style="margin-top:7px;padding:7px 10px;background:var(--bg-elev);border-radius:8px;font-size:12px;color:var(--text-muted);font-style:italic;"><i class="ti ti-message" style="font-size:12px;"></i> ${esc(r.entry.note)}</div>` : ''}
+        </div>
+        ${mine ? `<div style="display:flex;gap:4px;">
+          <button data-action="editSession" data-uid="${r.user.id}" data-ek="${r.ek}" data-date="${r.entry.date}" aria-label="Editar" style="padding:6px;border-color:var(--border);"><i class="ti ti-edit" style="font-size:14px;color:var(--accent);"></i></button>
+          <button data-action="deleteSession" data-uid="${r.user.id}" data-ek="${r.ek}" data-date="${r.entry.date}" aria-label="Eliminar" style="padding:6px;border:none;color:var(--danger);"><i class="ti ti-trash" style="font-size:14px;"></i></button>
+        </div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  root.innerHTML = `
+    ${headerBar(insideProgress ? 'Progreso' : 'Progreso diario', 'goHome')}
+    ${insideProgress ? `<div class="tab-bar">
+      ${['day','week','month','year'].map(m => `<button class="${state.compareMode===m?'active':''}" data-action="setMode" data-mode="${m}">${m==='day'?'Día':m==='week'?'Semana':m==='month'?'Mes':'Año'}</button>`).join('')}
+    </div>` : ''}
+    <div class="card" style="margin-bottom:16px;">
+      <label class="section-label" style="margin-bottom:6px;">Fecha</label>
+      <input id="dailyDate" type="date" value="${esc(state.dailyDate)}" style="font-family:var(--font-mono);" />
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;">
+      <div class="stat-card"><div class="stat-label">Sesiones</div><div class="stat-value" style="font-size:18px;">${totals.sessions}</div></div>
+      <div class="stat-card"><div class="stat-label">Sets</div><div class="stat-value" style="font-size:18px;">${totals.sets}</div></div>
+      <div class="stat-card"><div class="stat-label">Volumen</div><div class="stat-value" style="font-size:18px;">${Math.round(totals.volume)}</div></div>
+      <div class="stat-card"><div class="stat-label">Max</div><div class="stat-value" style="font-size:18px;">${totals.max}<span style="font-size:10px;color:var(--text-dim);">lb</span></div></div>
+    </div>
+    <div class="section-label">Sesiones del día</div>
+    ${list || '<div class="card" style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">No hay sesiones guardadas en esta fecha.</div>'}`;
+  attach();
+  document.getElementById('dailyDate')?.addEventListener('change', e => { state.dailyDate = e.target.value || today(); render(); });
+}
+
 // ====== SETTINGS ======
 function renderSettings(){
   const adm = isAdmin();
@@ -1248,14 +1525,44 @@ function renderSettings(){
       <div class="row">
         <span class="dot" style="background:${u.color};width:14px;height:14px;border:2px solid var(--bg-elev);box-shadow:0 0 0 1px ${u.color};"></span>
         <div style="flex:1;">
-          <div style="font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px;">${esc(u.name)} ${u.name.toLowerCase().trim() === ADMIN_NAME.toLowerCase().trim() ? '<span class="admin-pill">admin</span>' : ''} ${u.id === state.currentUser ? '<span style="font-size:11px;color:var(--text-dim);">(tú)</span>' : ''}</div>
+          <div style="font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px;">${esc(u.name)} ${isUserAdmin(u) ? '<span class="admin-pill">admin</span>' : ''} ${u.id === state.currentUser ? '<span style="font-size:11px;color:var(--text-dim);">(tú)</span>' : ''}</div>
         </div>
         ${adm && u.id !== state.currentUser ? `<button data-action="deleteUser" data-uid="${u.id}" class="ghost-danger" style="padding:6px 12px;font-size:12px;">Eliminar</button>` : ''}
       </div>
     </div>`).join('');
+  const groupRows = state.joinedGroups.map(g => `
+    <button data-action="switchGroup" data-group="${esc(g)}" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:${g===groupPath()?'var(--accent-bg)':'transparent'};border:none;text-align:left;border-radius:8px;">
+      <i class="ti ${g===groupPath()?'ti-circle-check':'ti-circle'}" style="font-size:17px;color:${g===groupPath()?'var(--accent)':'var(--text-dim)'};"></i>
+      <span style="flex:1;font-weight:${g===groupPath()?'600':'500'};">${esc(g)}</span>
+    </button>`).join('');
 
   root.innerHTML = `
     ${headerBar('Configuración', 'goHome')}
+    <div class="section-label">Grupo</div>
+    <div class="card" style="margin-bottom:16px;padding:6px;">
+      <div style="padding:10px 12px 8px;display:flex;align-items:center;gap:10px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;font-weight:600;">${esc(state.groupConfig.groupName || groupPath())}</div>
+          <div class="muted mono" style="font-size:11px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(groupPath())}</div>
+        </div>
+        <button data-action="copyGroupId" title="Copiar código del grupo" aria-label="Copiar código del grupo" style="padding:8px 10px;border-color:var(--border);background:var(--bg-elev-2);color:var(--accent);">
+          <i class="ti ti-copy" style="font-size:16px;"></i>
+        </button>
+      </div>
+      <div style="height:1px;background:var(--border);margin:0 8px 6px;"></div>
+      ${groupRows}
+      <div style="height:1px;background:var(--border);margin:6px 8px;"></div>
+      <button data-action="createGroupModal" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:transparent;border:none;text-align:left;border-radius:8px;">
+        <i class="ti ti-plus" style="font-size:18px;color:var(--accent);"></i><span>Crear grupo</span>
+      </button>
+      <button data-action="joinGroupModal" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:transparent;border:none;text-align:left;border-radius:8px;">
+        <i class="ti ti-login" style="font-size:18px;color:var(--accent);"></i><span>Unirse a grupo</span>
+      </button>
+      ${adm && groupPath() !== DEFAULT_GROUP ? `<button data-action="deleteGroupModal" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:transparent;border:none;text-align:left;color:var(--danger);border-radius:8px;">
+        <i class="ti ti-trash" style="font-size:18px;"></i><span>Eliminar este grupo</span>
+      </button>` : ''}
+    </div>
+
     <div class="section-label">Cuenta</div>
     <div class="card" style="margin-bottom:16px;padding:6px;">
       <button data-action="changeMyPin" style="width:100%;padding:14px 12px;display:flex;align-items:center;gap:12px;background:transparent;border:none;text-align:left;border-radius:8px;">
@@ -1276,14 +1583,19 @@ function renderSettings(){
 
     ${adm ? `<div class="section-label" style="margin-top:24px;">Admin</div>
     <div class="card" style="padding:6px;">
-      <button data-action="changeInvitationPw" style="width:100%;padding:14px 12px;display:flex;align-items:center;gap:12px;background:transparent;border:none;text-align:left;border-radius:8px;">
-        <i class="ti ti-shield-lock" style="font-size:18px;color:var(--accent);"></i>
-        <div style="flex:1;">
-          <div style="font-weight:500;">Contraseña de invitación</div>
-          <div class="muted mono" style="font-size:12px;margin-top:2px;">${esc(state.invitationPassword)}</div>
-        </div>
-        <i class="ti ti-chevron-right" style="color:var(--text-dim);"></i>
-      </button>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button data-action="changeInvitationPw" style="flex:1;padding:14px 12px;display:flex;align-items:center;gap:12px;background:transparent;border:none;text-align:left;border-radius:8px;">
+          <i class="ti ti-shield-lock" style="font-size:18px;color:var(--accent);"></i>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:500;">Contraseña de invitación</div>
+            <div class="muted mono" style="font-size:12px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(state.invitationPassword)}</div>
+          </div>
+          <i class="ti ti-chevron-right" style="color:var(--text-dim);"></i>
+        </button>
+        <button data-action="copyInvitationPw" title="Copiar contraseña" aria-label="Copiar contraseña" style="padding:8px 10px;border-color:var(--border);background:var(--bg-elev-2);color:var(--accent);">
+          <i class="ti ti-copy" style="font-size:16px;"></i>
+        </button>
+      </div>
     </div>` : ''}
 
     <div style="margin-top:32px;padding:14px;text-align:center;color:var(--text-dim);font-size:11px;font-family:var(--font-mono);">
@@ -1416,6 +1728,18 @@ async function handle(e){
   // ====== Setup / Auth ======
   if (a === 'newUser'){ state.setupStep = 'newUser'; render(); return; }
   if (a === 'backToPick'){ state.setupStep = state.users.length ? 'pickUser' : 'newUser'; render(); return; }
+  if (a === 'loginByName'){
+    const name = (document.getElementById('loginNameInput').value || '').trim();
+    const errEl = document.getElementById('loginNameError');
+    if (!name){ errEl.textContent = 'Escribe tu nombre'; return; }
+    const matches = state.users.filter(u => u.name.toLowerCase().trim() === name.toLowerCase());
+    if (!matches.length){ errEl.textContent = 'No encontré ese nombre en este grupo'; return; }
+    if (matches.length > 1){ errEl.textContent = 'Hay más de una cuenta con ese nombre. Pide a la admin que renombre una.'; return; }
+    state.pendingUserId = matches[0].id;
+    state.setupStep = 'enterPin';
+    render();
+    return;
+  }
   if (a === 'pickUser'){
     const uid = btn.dataset.uid;
     state.pendingUserId = uid;
@@ -1492,12 +1816,149 @@ async function handle(e){
     return;
   }
 
+  // ====== Groups ======
+  if (a === 'groupMenu'){
+    closeModal();
+    const groups = state.joinedGroups.map(g => `
+      <button data-action="switchGroup" data-group="${esc(g)}" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:${g===groupPath()?'var(--accent-bg)':'transparent'};border:none;text-align:left;border-radius:8px;">
+        <i class="ti ${g===groupPath()?'ti-circle-check':'ti-circle'}" style="font-size:17px;color:${g===groupPath()?'var(--accent)':'var(--text-dim)'};"></i>
+        <span style="flex:1;font-weight:${g===groupPath()?'600':'500'};">${esc(g)}</span>
+      </button>`).join('');
+    openModal(`
+      <h2 style="margin-bottom:4px;">Grupos</h2>
+      <p class="muted" style="font-size:13px;margin:0 0 12px;">Cada grupo tiene sus propios usuarios, rutinas y progreso.</p>
+      <div class="card" style="padding:6px;margin-bottom:12px;">${groups}</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <button data-action="createGroupModal" style="flex:1;padding:11px;"><i class="ti ti-plus" style="font-size:14px;vertical-align:-2px;color:var(--accent);"></i> Crear</button>
+        <button data-action="joinGroupModal" style="flex:1;padding:11px;"><i class="ti ti-login" style="font-size:14px;vertical-align:-2px;color:var(--accent);"></i> Unirse</button>
+      </div>
+      <button data-action="closeModal" style="width:100%;padding:10px;background:var(--bg-elev-2);">Cancelar</button>
+    `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+    return;
+  }
+  if (a === 'switchGroup'){
+    closeModal();
+    await switchGroup(btn.dataset.group);
+    return;
+  }
+  if (a === 'createGroupModal'){
+    closeModal();
+    openModal(`
+      <h2 style="margin-bottom:8px;">Crear grupo</h2>
+      <p class="muted" style="font-size:13px;margin:0 0 12px;">Tú serás admin de este grupo. Comparte el código y la contraseña con tu buddy.</p>
+      ${!state.currentUser ? `<div class="banner banner-info"><i class="ti ti-user-plus"></i><div>Como no has iniciado sesión, crea primero tu perfil de admin para este grupo.</div></div>
+      <label class="section-label" style="margin-bottom:6px;">Tu nombre</label>
+      <input id="newGroupAdminName" type="text" maxlength="24" placeholder="Ej. Jazmin" style="margin-bottom:10px;" />
+      <label class="section-label" style="margin-bottom:6px;">Tu PIN</label>
+      <input id="newGroupAdminPin" type="password" maxlength="20" inputmode="numeric" placeholder="Mínimo 4 caracteres" style="margin-bottom:12px;" />` : ''}
+      <label class="section-label" style="margin-bottom:6px;">Nombre del grupo</label>
+      <input id="newGroupName" type="text" maxlength="40" placeholder="Ej. gym-de-jaz" style="margin-bottom:10px;" />
+      <label class="section-label" style="margin-bottom:6px;">Contraseña de invitación</label>
+      <input id="newGroupPw" type="text" maxlength="40" placeholder="Mínimo 4 caracteres" style="margin-bottom:12px;" />
+      <label class="section-label" style="margin-bottom:6px;">Rutina inicial</label>
+      <select id="newGroupRoutine" style="margin-bottom:14px;">
+        <option value="copy-current">Copiar la rutina compartida actual</option>
+        <option value="default">Usar rutina base</option>
+        <option value="blank">Empezar desde cero</option>
+      </select>
+      <div id="groupErr" style="font-size:12px;color:var(--danger);min-height:14px;margin-bottom:8px;text-align:center;"></div>
+      <div style="display:flex;gap:8px;">
+        <button data-action="closeModal" style="flex:1;padding:10px;">Cancelar</button>
+        <button class="primary" data-action="submitCreateGroup" style="flex:1;padding:10px;font-weight:600;">Crear</button>
+      </div>
+    `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+    return;
+  }
+  if (a === 'submitCreateGroup'){
+    const name = (document.getElementById('newGroupName').value || '').trim();
+    const pw = (document.getElementById('newGroupPw').value || '').trim();
+    const mode = document.getElementById('newGroupRoutine').value;
+    const err = document.getElementById('groupErr');
+    const id = slugGroupName(name);
+    if (!id){ err.textContent = 'Escribe un nombre válido'; return; }
+    if (pw.length < 4){ err.textContent = 'La contraseña debe tener mínimo 4 caracteres'; return; }
+    if (!state.currentUser){
+      const adminName = (document.getElementById('newGroupAdminName').value || '').trim();
+      const adminPin = document.getElementById('newGroupAdminPin').value || '';
+      if (adminName.length < 2){ err.textContent = 'Escribe tu nombre'; return; }
+      if (adminPin.length < 4){ err.textContent = 'Tu PIN debe tener mínimo 4 caracteres'; return; }
+      window._pendingGroupCreator = {
+        id: 'u_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+        name: adminName,
+        color: userColor(0),
+        pinHash: await sha(adminPin),
+        createdAt: Date.now()
+      };
+    }
+    closeModal();
+    await createGroup(id, name, pw, mode);
+    return;
+  }
+  if (a === 'joinGroupModal'){
+    closeModal();
+    openModal(`
+      <h2 style="margin-bottom:8px;">Unirse a grupo</h2>
+      <p class="muted" style="font-size:13px;margin:0 0 12px;">Pide a la admin el código del grupo y la contraseña de invitación.</p>
+      <label class="section-label" style="margin-bottom:6px;">Código del grupo</label>
+      <input id="joinGroupId" type="text" maxlength="50" placeholder="ej. gym-de-jaz" style="margin-bottom:10px;" />
+      <label class="section-label" style="margin-bottom:6px;">Contraseña</label>
+      <input id="joinGroupPw" type="password" maxlength="40" style="margin-bottom:10px;" />
+      <div style="display:flex;gap:8px;">
+        <button data-action="closeModal" style="flex:1;padding:10px;">Cancelar</button>
+        <button class="primary" data-action="submitJoinGroup" style="flex:1;padding:10px;font-weight:600;">Unirse</button>
+      </div>
+    `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+    return;
+  }
+  if (a === 'submitJoinGroup'){
+    const id = (document.getElementById('joinGroupId').value || '').trim();
+    const pw = (document.getElementById('joinGroupPw').value || '').trim();
+    closeModal();
+    await joinGroup(id, pw);
+    return;
+  }
+  if (a === 'deleteGroupModal'){
+    if (!isAdmin()){ toast('Solo admin'); return; }
+    if (groupPath() === DEFAULT_GROUP){ toast('El grupo original está protegido'); return; }
+    openModal(`
+      <h2 style="margin-bottom:8px;color:var(--danger);">Eliminar grupo</h2>
+      <p style="font-size:14px;margin:0 0 12px;">Esto borra usuarios, rutinas y progreso de <strong>${esc(groupPath())}</strong>. No se puede deshacer.</p>
+      <label class="section-label" style="margin-bottom:6px;">Escribe el código del grupo para confirmar</label>
+      <input id="deleteGroupConfirm" type="text" placeholder="${esc(groupPath())}" style="margin-bottom:10px;" />
+      <div id="deleteGroupErr" style="font-size:12px;color:var(--danger);min-height:14px;margin-bottom:8px;text-align:center;"></div>
+      <div style="display:flex;gap:8px;">
+        <button data-action="closeModal" style="flex:1;padding:10px;">Cancelar</button>
+        <button class="danger" data-action="confirmDeleteGroup" style="flex:1;padding:10px;font-weight:600;">Eliminar</button>
+      </div>
+    `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+    return;
+  }
+  if (a === 'confirmDeleteGroup'){
+    const v = (document.getElementById('deleteGroupConfirm').value || '').trim();
+    const err = document.getElementById('deleteGroupErr');
+    if (v !== groupPath()){ err.textContent = 'El código no coincide'; return; }
+    closeModal();
+    await deleteCurrentGroup();
+    return;
+  }
+  if (a === 'copyGroupId'){
+    await copyText(groupPath(), 'Código del grupo');
+    return;
+  }
+  if (a === 'copyInvitationPw'){
+    await copyText(state.invitationPassword || INVITATION_PASSWORD_DEFAULT, 'Contraseña');
+    return;
+  }
+
   // ====== User menu ======
   if (a === 'userMenu'){
     openModal(`
       <h2 style="margin-bottom:12px;">Cuenta</h2>
       <button data-action="goSettings" data-modal="close" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:transparent;border:none;text-align:left;">
         <i class="ti ti-settings" style="font-size:18px;color:var(--text-muted);"></i> Configuración
+      </button>
+      <button data-action="groupMenu" data-modal="close" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:transparent;border:none;border-top:1px solid var(--border);text-align:left;">
+        <i class="ti ti-users-group" style="font-size:18px;color:var(--text-muted);"></i> Cambiar / crear grupo
       </button>
       <button data-action="switchUser" data-modal="close" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:transparent;border:none;border-top:1px solid var(--border);text-align:left;">
         <i class="ti ti-users" style="font-size:18px;color:var(--text-muted);"></i> Cambiar de usuario
@@ -1580,8 +2041,8 @@ async function handle(e){
     const uid = btn.dataset.uid;
     const u = state.users.find(x => x.id === uid);
     if (!u) return;
-    if (u.name.toLowerCase().trim() === ADMIN_NAME.toLowerCase().trim()){
-      toast('No puedes eliminar al admin'); return;
+    if (isUserAdmin(u)){
+      toast('No puedes eliminar a un admin'); return;
     }
     const hasLogs = !!state.logs[uid] && Object.keys(state.logs[uid]||{}).length > 0;
     openModal(`
@@ -1637,6 +2098,7 @@ async function handle(e){
   if (a === 'goSettings'){ closeModal(); state.view = 'settings'; render(); return; }
   if (a === 'goEditRoutine'){ state.view = 'editRoutine'; render(); return; }
   if (a === 'editRoutine'){ state.view = 'editRoutine'; render(); return; }
+  if (a === 'editRoutineNew'){ state.currentDay = btn.dataset.day || state.currentDay; state.view = 'editRoutine'; render(); return; }
 
   // ====== Source switch ======
   if (a === 'setSource'){
@@ -1646,13 +2108,33 @@ async function handle(e){
       // ensure a personal routine exists for this day, seeded from shared if available
       const pr = state.personalRoutines[state.currentUser] || {};
       if (!pr[state.currentDay]){
-        const shared = state.sharedRoutine && state.sharedRoutine[state.currentDay];
-        pr[state.currentDay] = shared ? JSON.parse(JSON.stringify(shared)) : { label:'Día', focus:'', icon:'ti-barbell', exercises: [] };
-        state.personalRoutines[state.currentUser] = pr;
-        await savePersonalRoutine(state.currentUser, pr);
-        toast('Rutina personal creada (copiada de la compartida)');
+        openModal(`
+          <h2 style="margin-bottom:8px;">Crear rutina personal</h2>
+          <p class="muted" style="font-size:13px;margin:0 0 14px;">Puedes copiar la rutina compartida como base o empezar desde cero.</p>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <button class="primary" data-action="createPersonalRoutine" data-mode="copy" style="padding:12px;">Copiar rutina compartida</button>
+            <button data-action="createPersonalRoutine" data-mode="blank" style="padding:12px;">Empezar desde cero</button>
+            <button data-action="closeModal" style="padding:10px;background:var(--bg-elev-2);">Cancelar</button>
+          </div>
+        `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+        return;
       }
     }
+    render(); return;
+  }
+  if (a === 'createPersonalRoutine'){
+    const mode = btn.dataset.mode;
+    const pr = state.personalRoutines[state.currentUser] || {};
+    const shared = state.sharedRoutine && state.sharedRoutine[state.currentDay];
+    if (mode === 'copy' && shared) pr[state.currentDay] = JSON.parse(JSON.stringify(shared));
+    else {
+      const base = (state.sharedRoutine && state.sharedRoutine[state.currentDay]) || DEFAULT_ROUTINE[state.currentDay] || { label:'Día', focus:'', icon:'ti-barbell', exercises: [] };
+      pr[state.currentDay] = { label: base.label || 'Día', focus: base.focus || '', icon: base.icon || 'ti-barbell', exercises: [] };
+    }
+    state.personalRoutines[state.currentUser] = pr;
+    await savePersonalRoutine(state.currentUser, pr);
+    closeModal();
+    toast(mode === 'copy' ? 'Rutina personal copiada' : 'Rutina personal creada desde cero');
     render(); return;
   }
 
@@ -1696,15 +2178,61 @@ async function handle(e){
     const ek = exerciseKey(state.currentDay, state.currentExerciseIdx);
     const userLogs = state.logs[state.currentUser] || {};
     if (!userLogs[ek]) userLogs[ek] = [];
+    if (state.editingSession && state.editingSession.ek === ek && state.editingSession.uid === state.currentUser && state.editingSession.date !== date){
+      userLogs[ek] = userLogs[ek].filter(e => e.date !== state.editingSession.date);
+    }
     const idx = userLogs[ek].findIndex(e => e.date === date);
     const entry = { date, sets }; if (sessionNote) entry.note = sessionNote;
     if (idx >= 0) userLogs[ek][idx] = entry; else userLogs[ek].push(entry);
     state.logs[state.currentUser] = userLogs;
     await saveUserLogs(state.currentUser, userLogs);
     status.style.color = 'var(--success)'; status.textContent = '✓ Guardado. Sigue así 💪';
+    state.editingSession = null;
     toast('Sesión guardada');
     setTimeout(()=> render(), 600);
     return;
+  }
+  if (a === 'cancelEditSession'){
+    state.editingSession = null;
+    render(); return;
+  }
+  if (a === 'editSession'){
+    const uid = btn.dataset.uid;
+    if (uid !== state.currentUser){ toast('Solo puedes editar tus sesiones'); return; }
+    const [day, idx] = btn.dataset.ek.split(':');
+    state.currentDay = day;
+    state.currentExerciseIdx = Number(idx);
+    state.editingSession = { uid, ek: btn.dataset.ek, date: btn.dataset.date };
+    state.view = 'exercise';
+    state.showAlts = false;
+    state.showMuscles = false;
+    render(); return;
+  }
+  if (a === 'deleteSession'){
+    const uid = btn.dataset.uid;
+    if (uid !== state.currentUser){ toast('Solo puedes borrar tus sesiones'); return; }
+    openModal(`
+      <h2 style="margin-bottom:8px;color:var(--danger);">Eliminar sesión</h2>
+      <p style="font-size:14px;margin:0 0 14px;">¿Seguro que quieres borrar la sesión de <strong>${esc(exerciseNameForKey(btn.dataset.ek))}</strong> del <strong>${esc(btn.dataset.date)}</strong>?</p>
+      <div style="display:flex;gap:8px;">
+        <button data-action="closeModal" style="flex:1;padding:10px;">Cancelar</button>
+        <button class="danger" data-action="confirmDeleteSession" data-uid="${uid}" data-ek="${btn.dataset.ek}" data-date="${btn.dataset.date}" style="flex:1;padding:10px;font-weight:600;">Eliminar</button>
+      </div>
+    `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+    return;
+  }
+  if (a === 'confirmDeleteSession'){
+    const uid = btn.dataset.uid;
+    const ek = btn.dataset.ek;
+    const date = btn.dataset.date;
+    if (uid !== state.currentUser){ toast('Solo puedes borrar tus sesiones'); return; }
+    const userLogs = state.logs[uid] || {};
+    userLogs[ek] = (userLogs[ek] || []).filter(e => e.date !== date);
+    if (!userLogs[ek].length) delete userLogs[ek];
+    state.logs[uid] = userLogs;
+    await saveUserLogs(uid, userLogs);
+    if (state.editingSession && state.editingSession.uid === uid && state.editingSession.ek === ek && state.editingSession.date === date) state.editingSession = null;
+    closeModal(); toast('Sesión eliminada'); render(); return;
   }
   if (a === 'setMode'){ state.compareMode = btn.dataset.mode; render(); return; }
 
@@ -1893,7 +2421,7 @@ function subscribeRealtime(){
   if (!firebaseReady) return;
   unsubs.forEach(u => u && u());
   unsubs = [];
-  unsubs.push(onSnapshot(doc(db,'salas',SALA,'meta','users'), (snap)=>{
+  unsubs.push(onSnapshot(doc(db,'salas',groupPath(),'meta','users'), (snap)=>{
     if (snap.exists()){
       const newUsers = snap.data().users || [];
       const changed = JSON.stringify(newUsers) !== JSON.stringify(state.users);
@@ -1908,12 +2436,13 @@ function subscribeRealtime(){
       if (changed) render();
     }
   }, console.error));
-  unsubs.push(onSnapshot(doc(db,'salas',SALA,'meta','config'), (snap)=>{
+  unsubs.push(onSnapshot(doc(db,'salas',groupPath(),'meta','config'), (snap)=>{
     if (snap.exists()){
-      state.invitationPassword = snap.data().invitationPassword || INVITATION_PASSWORD_DEFAULT;
+      state.groupConfig = normalizeGroupConfig(snap.data());
+      state.invitationPassword = state.groupConfig.invitationPassword || INVITATION_PASSWORD_DEFAULT;
     }
   }, console.error));
-  unsubs.push(onSnapshot(doc(db,'salas',SALA,'routines','shared'), (snap)=>{
+  unsubs.push(onSnapshot(doc(db,'salas',groupPath(),'routines','shared'), (snap)=>{
     if (snap.exists() && snap.data().routine){
       const r = snap.data().routine;
       if (JSON.stringify(r) !== JSON.stringify(state.sharedRoutine)){
@@ -1921,7 +2450,7 @@ function subscribeRealtime(){
       }
     }
   }, console.error));
-  unsubs.push(onSnapshot(collection(db,'salas',SALA,'logs'), (snap)=>{
+  unsubs.push(onSnapshot(collection(db,'salas',groupPath(),'logs'), (snap)=>{
     let changed = false;
     snap.docChanges().forEach(ch => {
       const id = ch.doc.id;
@@ -1936,7 +2465,7 @@ function subscribeRealtime(){
     });
     if (changed) render();
   }, console.error));
-  unsubs.push(onSnapshot(collection(db,'salas',SALA,'personalRoutines'), (snap)=>{
+  unsubs.push(onSnapshot(collection(db,'salas',groupPath(),'personalRoutines'), (snap)=>{
     let changed = false;
     snap.docChanges().forEach(ch => {
       const id = ch.doc.id;
@@ -1955,33 +2484,14 @@ function subscribeRealtime(){
 
 // ====== INIT ======
 async function init(){
-  const cfg = await loadConfig();
-  state.invitationPassword = cfg.invitationPassword || INVITATION_PASSWORD_DEFAULT;
-  // if Firebase is fresh and no config saved yet, seed default
-  if (firebaseReady && !cfg.invitationPassword){
-    await saveConfig({ invitationPassword: INVITATION_PASSWORD_DEFAULT });
-  }
-  state.users = await loadUsers();
-  state.sharedRoutine = await loadSharedRoutine();
-  state.personalRoutines = await loadAllPersonalRoutines();
-  state.logs = await loadAllLogs();
-  state.routineSource = loadRoutineSource();
-
-  const meId = loadMe();
-  if (meId && state.users.find(u=>u.id===meId) && authValid()){
-    state.currentUser = meId; state.view = 'home';
-  } else if (state.users.length === 0){
-    state.setupStep = 'newUser'; state.view = 'setup';
-  } else if (meId && state.users.find(u=>u.id===meId)){
-    // session expired, but user exists -> ask PIN
-    state.pendingUserId = meId; state.setupStep = 'enterPin'; state.view = 'setup';
-  } else {
-    state.setupStep = 'pickUser'; state.view = 'setup';
-  }
-  subscribeRealtime();
-  render();
+  rememberGroup(state.currentGroup);
+  await reloadGroup();
 }
 init();
 </script>
 </body>
 </html>
+
+
+
+
