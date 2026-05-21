@@ -881,6 +881,11 @@ function profileStats(u){
   const remaining = latest && goal ? latest - goal : 0;
   return { profile, logs, latest, first, goal, delta, remaining };
 }
+function colorSwatches(selected){
+  return ['#f97316','#22c55e','#3b82f6','#a855f7','#ec4899','#eab308','#06b6d4','#84cc16','#ef4444','#14b8a6']
+    .map(c => `<button type="button" data-action="pickProfileColor" data-color="${c}" aria-label="Elegir color ${c}" style="width:34px;height:34px;border-radius:50%;padding:0;background:${c};border:3px solid ${String(selected).toLowerCase()===c.toLowerCase()?'var(--text)':'var(--bg-elev-2)'};box-shadow:0 0 0 1px var(--border-strong);"></button>`)
+    .join('');
+}
 async function sha(s){
   if (!s) return '';
   const b = new TextEncoder().encode(s);
@@ -2791,6 +2796,11 @@ async function handle(e){
       </div>
       <label class="section-label" style="margin-bottom:6px;">Icono / avatar</label>
       <input id="profileEmoji" type="text" maxlength="4" placeholder="Ej. 💪, ⭐, 🏋️" value="${esc(u.profile?.avatarEmoji || '')}" style="margin-bottom:10px;" />
+      <label class="section-label" style="margin-bottom:6px;">Color del perfil</label>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <input id="profileColor" type="color" value="${esc(u.color || userColor(0))}" style="width:48px;height:42px;padding:4px;flex-shrink:0;" />
+        <div id="profileColorSwatches" style="display:flex;gap:7px;flex-wrap:wrap;">${colorSwatches(u.color || userColor(0))}</div>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
         <div>
           <label class="section-label" style="margin-bottom:6px;">Peso actual (lb)</label>
@@ -2816,6 +2826,15 @@ async function handle(e){
     `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
     return;
   }
+  if (a === 'pickProfileColor'){
+    const color = btn.dataset.color;
+    const input = document.getElementById('profileColor');
+    const swatches = document.getElementById('profileColorSwatches');
+    if (input && color) input.value = color;
+    if (swatches) swatches.innerHTML = colorSwatches(color);
+    modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle));
+    return;
+  }
   if (a === 'saveProfile'){
     const u = getMe();
     const err = document.getElementById('profileErr');
@@ -2825,6 +2844,7 @@ async function handle(e){
     if (currentWeight < 0 || goalWeight < 0){ err.textContent = 'El peso no puede ser negativo'; return; }
     const profile = { ...(u.profile || {}) };
     profile.avatarEmoji = (document.getElementById('profileEmoji').value || '').trim();
+    u.color = (document.getElementById('profileColor')?.value || u.color || userColor(0)).trim();
     profile.currentWeight = currentWeight || null;
     profile.goalWeight = goalWeight || null;
     profile.weightLogs = Array.isArray(profile.weightLogs) ? profile.weightLogs : [];
