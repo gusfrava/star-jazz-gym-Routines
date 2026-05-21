@@ -461,6 +461,12 @@ async function saveAccount(patch = {}){
 function linkedProfileForGroup(groupId = groupPath()){
   return state.account && state.account.linkedProfiles ? state.account.linkedProfiles[groupId] : null;
 }
+function visibleAccountGroups(){
+  if (state.authUser && state.account){
+    return Array.from(new Set(state.account.groups || [])).filter(Boolean);
+  }
+  return Array.from(new Set(state.joinedGroups || [])).filter(Boolean);
+}
 async function linkAuthToProfile(userId, groupId = groupPath()){
   if (!state.authUser || !userId || !groupId) return;
   const groups = Array.from(new Set([...(state.account?.groups || []), groupId]));
@@ -643,7 +649,9 @@ async function loadGroupState(){
 function chooseInitialViewForGroup(){
   const meId = loadMe();
   const linkedId = linkedProfileForGroup();
-  if (linkedId && state.users.find(u=>u.id===linkedId)){
+  if (state.authUser && !state.enteringGroup){
+    state.currentUser = null; state.setupStep = 'groupHub'; state.view = 'setup';
+  } else if (linkedId && state.users.find(u=>u.id===linkedId)){
     state.currentUser = linkedId; state.view = 'home'; state.setupStep = null; state.enteringGroup = false;
   } else if (state.authUser && state.enteringGroup){
     state.currentUser = null;
@@ -1127,7 +1135,7 @@ function headerBar(title, backFn){
 // ====== SETUP / AUTH ======
 function renderSetup(){
   if (state.setupStep === 'groupHub'){
-    const accountGroups = state.account && Array.isArray(state.account.groups) ? state.account.groups : [];
+    const accountGroups = visibleAccountGroups();
     const groupCards = accountGroups.length ? accountGroups.map(g => `
       <button data-action="selectAccountGroup" data-group="${esc(g)}" class="day-card fade-in" style="animation-delay:60ms;">
         <div class="row">
@@ -2246,7 +2254,7 @@ async function handle(e){
   if (a === 'groupMenu'){
     closeModal();
     const canShowGroups = !!state.currentUser;
-    const groups = canShowGroups ? state.joinedGroups.map(g => `
+    const groups = canShowGroups ? visibleAccountGroups().map(g => `
       <button data-action="switchGroup" data-group="${esc(g)}" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:${g===groupPath()?'var(--accent-bg)':'transparent'};border:none;text-align:left;border-radius:8px;">
         <i class="ti ${g===groupPath()?'ti-circle-check':'ti-circle'}" style="font-size:17px;color:${g===groupPath()?'var(--accent)':'var(--text-dim)'};"></i>
         <span style="flex:1;font-weight:${g===groupPath()?'600':'500'};">${esc(g)}</span>
