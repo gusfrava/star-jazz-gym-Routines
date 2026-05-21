@@ -198,6 +198,39 @@ input[type="date"]{color-scheme:dark}
 .chart-bar-rect:hover{filter:brightness(1.15)}
 @keyframes fadeInUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .fade-in{animation:fadeInUp 0.4s ease backwards}
+
+/* ========== ONBOARDING SLIDES ========== */
+.onboarding-wrap{position:fixed;inset:0;background:var(--bg-grad);background-attachment:fixed;z-index:350;display:flex;flex-direction:column;animation:fadeIn 0.3s ease}
+.onboarding-skip{position:absolute;top:16px;right:16px;background:var(--bg-elev-2);border:1px solid var(--border);color:var(--text-muted);font-size:13px;padding:7px 14px;border-radius:var(--radius-pill);cursor:pointer;z-index:5;font-family:inherit}
+.onboarding-skip:hover{background:var(--bg-elev-3);color:var(--text)}
+.onboarding-slides{flex:1;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.onboarding-slides::-webkit-scrollbar{display:none}
+.onboarding-slide{flex:0 0 100%;scroll-snap-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 28px;max-width:480px;margin:0 auto;text-align:center;min-width:100%}
+.onboarding-icon{font-size:80px;margin-bottom:24px;filter:drop-shadow(0 4px 20px var(--accent-glow));animation:floatY 3s ease-in-out infinite}
+@keyframes floatY{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+.onboarding-slide h2{font-size:28px;margin-bottom:12px;background:var(--accent-grad);-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:-0.02em}
+.onboarding-slide p{font-size:16px;color:var(--text-muted);line-height:1.55;max-width:360px;margin:0}
+.onboarding-features{margin-top:24px;display:flex;flex-direction:column;gap:10px;width:100%;max-width:340px}
+.onboarding-feature{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius-sm);text-align:left;font-size:14px}
+.onboarding-feature i{font-size:22px;color:var(--accent);flex-shrink:0}
+.onboarding-footer{padding:24px 28px calc(24px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:16px;align-items:center}
+.onboarding-dots{display:flex;gap:8px}
+.onboarding-dot{width:8px;height:8px;border-radius:50%;background:var(--bg-elev-3);transition:all 0.3s;cursor:pointer}
+.onboarding-dot.active{background:var(--accent);width:28px;border-radius:4px}
+.onboarding-cta{width:100%;max-width:360px;padding:14px;font-size:15px;font-weight:600}
+
+/* ========== HOME TOUR ========== */
+.tour-overlay{position:fixed;inset:0;z-index:360;pointer-events:none;animation:fadeIn 0.25s ease}
+.tour-bg{position:absolute;inset:0;background:rgba(5,10,25,0.78);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);pointer-events:auto}
+.tour-spotlight{position:absolute;border-radius:14px;box-shadow:0 0 0 9999px rgba(5,10,25,0.78), 0 0 0 4px var(--accent-glow), 0 0 30px var(--accent);background:transparent;pointer-events:none;transition:all 0.4s cubic-bezier(0.4,0,0.2,1)}
+.tour-tooltip{position:absolute;background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:var(--radius);padding:16px 18px;max-width:300px;box-shadow:var(--shadow-lg);pointer-events:auto;z-index:2;animation:tourPop 0.3s cubic-bezier(0.34,1.56,0.64,1)}
+@keyframes tourPop{from{opacity:0;transform:scale(0.9)}to{opacity:1;transform:scale(1)}}
+.tour-tooltip h3{font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text)}
+.tour-tooltip p{font-size:13px;color:var(--text-muted);margin:0 0 12px;line-height:1.5}
+.tour-progress{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.tour-step{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);letter-spacing:0.05em}
+.tour-actions{display:flex;gap:8px}
+.tour-actions button{padding:6px 12px;font-size:12px;border-radius:8px}
 </style>
 </head>
 <body>
@@ -481,10 +514,22 @@ function visibleAccountGroups(){
   return Array.from(new Set(state.joinedGroups || [])).filter(Boolean);
 }
 async function linkAuthToProfile(userId, groupId = groupPath()){
-  if (!state.authUser || !userId || !groupId) return;
+  if (!state.authUser || !userId || !groupId) return true;
+  const u = state.users.find(x => x.id === userId);
+  if (!u) throw new Error('No encontré ese usuario del gym.');
+  if (u.authOwnerUid && u.authOwnerUid !== state.authUser.uid){
+    throw new Error('Este usuario del gym ya está enlazado a otra cuenta. Pide a la admin que lo revise.');
+  }
+  if (!u.authOwnerUid){
+    u.authOwnerUid = state.authUser.uid;
+    u.authOwnerEmail = state.authUser.email || '';
+    u.authLinkedAt = Date.now();
+    await saveUsers(state.users);
+  }
   const groups = Array.from(new Set([...(state.account?.groups || []), groupId]));
   const linkedProfiles = { ...(state.account?.linkedProfiles || {}), [groupId]: userId };
   await saveAccount({ groups, linkedProfiles });
+  return true;
 }
 function normalizeRoutine(routine){ return { ...DEFAULT_ROUTINE, ...(routine || {}) }; }
 function defaultGroupConfig(groupId = groupPath()){
@@ -609,7 +654,10 @@ function loadMe(){ return localStorage.getItem(groupLocalKey(LS_ME)) || (groupPa
 function saveMe(id){ localStorage.setItem(groupLocalKey(LS_ME), id); if (groupPath() === DEFAULT_GROUP) localStorage.setItem(LS_ME, id); }
 function clearMe(){ localStorage.removeItem(groupLocalKey(LS_ME)); if (groupPath() === DEFAULT_GROUP) localStorage.removeItem(LS_ME); }
 function authValid(){
-  if (state.authUser && linkedProfileForGroup() === state.currentUser) return true;
+  if (state.authUser && linkedProfileForGroup() === state.currentUser){
+    const u = state.users.find(x => x.id === state.currentUser);
+    return !u?.authOwnerUid || u.authOwnerUid === state.authUser.uid;
+  }
   try {
     const a = JSON.parse(localStorage.getItem(groupLocalKey(LS_AUTH)) || (groupPath() === DEFAULT_GROUP ? localStorage.getItem(LS_AUTH) : 'null'));
     if (!a || !a.userId || !a.ts || (a.groupId && a.groupId !== groupPath())) return false;
@@ -630,6 +678,7 @@ async function afterLogin(userId){
   state.joinedGroups = Array.from(new Set([...(memberships || []), ...(accountGroups || []), ...(recoveredGroups || []), groupPath()]));
   await saveAccount({ groups: state.joinedGroups });
   saveJoinedGroups(state.joinedGroups);
+  return true;
 }
 function loadRoutineSource(){
   try { return JSON.parse(localStorage.getItem(groupLocalKey(LS_SOURCE))||'{}'); } catch { return {}; }
@@ -662,9 +711,18 @@ async function loadGroupState(){
 function chooseInitialViewForGroup(){
   const meId = loadMe();
   const linkedId = linkedProfileForGroup();
+  const linkedUser = linkedId ? state.users.find(u=>u.id===linkedId) : null;
+  const linkedAllowed = !!linkedUser && (!linkedUser.authOwnerUid || linkedUser.authOwnerUid === state.authUser?.uid);
+  if (linkedUser && state.authUser && linkedUser.authOwnerUid && linkedUser.authOwnerUid !== state.authUser.uid && state.account?.linkedProfiles){
+    const linkedProfiles = { ...state.account.linkedProfiles };
+    delete linkedProfiles[groupPath()];
+    saveAccount({ linkedProfiles });
+    clearMe(); clearAuth();
+  }
   if (state.authUser && !state.enteringGroup){
     state.currentUser = null; state.setupStep = 'groupHub'; state.view = 'setup';
-  } else if (linkedId && state.users.find(u=>u.id===linkedId)){
+  } else if (linkedAllowed){
+    if (linkedUser && !linkedUser.authOwnerUid && state.authUser) linkAuthToProfile(linkedId, groupPath()).catch(console.error);
     state.currentUser = linkedId; state.view = 'home'; state.setupStep = null; state.enteringGroup = false;
   } else if (state.authUser && state.enteringGroup){
     state.currentUser = null;
@@ -740,7 +798,8 @@ async function createGroup(groupId, groupName, invitationPassword, routineMode){
   rememberGroup(safeId);
   state.currentGroup = safeId;
   saveCurrentGroup(safeId);
-  await afterLogin(me.id);
+  try { await afterLogin(me.id); }
+  catch(err){ toast(err.message || 'No pude enlazar este usuario'); return; }
   await reloadGroup();
   toast('Grupo creado');
 }
@@ -781,7 +840,10 @@ async function joinGroup(groupId, password){
   state.showMuscles = false;
   state.showRoutineMuscles = false;
   await reloadGroup();
-  if (currentMe) await afterLogin(currentMe.id);
+  if (currentMe) {
+    try { await afterLogin(currentMe.id); }
+    catch(err){ toast(err.message || 'No pude enlazar este usuario'); return; }
+  }
   toast(currentMe ? 'Entraste con tu mismo usuario' : 'Grupo agregado');
 }
 async function deleteCurrentGroup(){
@@ -1290,8 +1352,158 @@ function openModal(html, onAttach){
 }
 function closeModal(){ modalRoot.innerHTML = ''; state.modalOpen = null; }
 
+// ====== ONBOARDING (slides + tour del home) ======
+const LS_ONBOARD = 'gym_onboarding_seen_v1';
+const LS_TOUR = 'gym_home_tour_seen_v1';
+
+function shouldShowOnboarding(){ return !localStorage.getItem(LS_ONBOARD); }
+function shouldShowTour(){ return !localStorage.getItem(LS_TOUR); }
+function markOnboardingSeen(){ localStorage.setItem(LS_ONBOARD, '1'); }
+function markTourSeen(){ localStorage.setItem(LS_TOUR, '1'); }
+
+const ONBOARDING_SLIDES = [
+  { icon:'💪', title:'Star Jazz Gym Buddy', subtitle:'Tu compañero digital de gym. Registra entrenos, sigue tu progreso y motívate con tu grupo.' },
+  { icon:'📊', title:'Registra cada sesión', subtitle:'Sets, reps y peso de cada ejercicio. Mira cómo creces semana a semana.',
+    features:[ {icon:'ti-barbell', text:'Tu rutina completa lista para usar'}, {icon:'ti-chart-line', text:'Gráficos de progreso por ejercicio'}, {icon:'ti-notes', text:'Notas por set y por sesión'} ] },
+  { icon:'👥', title:'Entrena en grupo', subtitle:'Comparte rutinas con tu buddy. Ve quién entrenó esta semana y mantente accountable.',
+    features:[ {icon:'ti-users', text:'Rutina compartida + rutina personal'}, {icon:'ti-eye', text:'Ve el progreso de tu compañero'}, {icon:'ti-trophy', text:'Motivación mutua'} ] },
+  { icon:'🎯', title:'Tus metas, tu progreso', subtitle:'Sigue tu peso corporal, define tus metas y celebra los avances.',
+    features:[ {icon:'ti-target', text:'Meta de peso corporal'}, {icon:'ti-trending-up', text:'Comparativas: semana, mes, año'}, {icon:'ti-body-scan', text:'Mapa de músculos trabajados'} ] },
+  { icon:'🔒', title:'Tus datos, tu grupo', subtitle:'Solo los miembros de tu grupo ven tu progreso. Tu información está protegida con autenticación segura.' },
+];
+
+function renderOnboarding(){
+  let currentSlide = 0;
+  const totalSlides = ONBOARDING_SLIDES.length;
+  const wrap = document.createElement('div');
+  wrap.className = 'onboarding-wrap';
+  wrap.innerHTML = `
+    <button class="onboarding-skip" id="obSkip">Saltar</button>
+    <div class="onboarding-slides" id="obSlides">
+      ${ONBOARDING_SLIDES.map((s, i) => `
+        <div class="onboarding-slide" data-i="${i}">
+          <div class="onboarding-icon">${s.icon}</div>
+          <h2>${esc(s.title)}</h2>
+          <p>${esc(s.subtitle)}</p>
+          ${s.features ? `<div class="onboarding-features">
+            ${s.features.map(f => `<div class="onboarding-feature"><i class="ti ${f.icon}"></i><span>${esc(f.text)}</span></div>`).join('')}
+          </div>` : ''}
+        </div>`).join('')}
+    </div>
+    <div class="onboarding-footer">
+      <div class="onboarding-dots" id="obDots">
+        ${ONBOARDING_SLIDES.map((_, i) => `<div class="onboarding-dot ${i===0?'active':''}" data-i="${i}"></div>`).join('')}
+      </div>
+      <button class="primary onboarding-cta" id="obCta">Siguiente</button>
+    </div>`;
+  document.body.appendChild(wrap);
+  const slidesEl = wrap.querySelector('#obSlides');
+  const dotsEl = wrap.querySelector('#obDots');
+  const ctaBtn = wrap.querySelector('#obCta');
+  const skipBtn = wrap.querySelector('#obSkip');
+  function close(){
+    markOnboardingSeen();
+    wrap.style.animation = 'fadeIn 0.25s ease reverse';
+    setTimeout(() => { wrap.remove(); render(); }, 240);
+  }
+  function goTo(i){
+    currentSlide = Math.max(0, Math.min(totalSlides - 1, i));
+    const slide = slidesEl.children[currentSlide];
+    slidesEl.scrollTo({ left: slide.offsetLeft, behavior: 'smooth' });
+    updateUI();
+  }
+  function updateUI(){
+    dotsEl.querySelectorAll('.onboarding-dot').forEach((d, i) => d.classList.toggle('active', i === currentSlide));
+    ctaBtn.textContent = currentSlide === totalSlides - 1 ? '¡Comenzar!' : 'Siguiente';
+  }
+  ctaBtn.addEventListener('click', () => { if (currentSlide === totalSlides - 1) close(); else goTo(currentSlide + 1); });
+  skipBtn.addEventListener('click', close);
+  dotsEl.querySelectorAll('.onboarding-dot').forEach(d => d.addEventListener('click', () => goTo(Number(d.dataset.i))));
+  let scrollTimer;
+  slidesEl.addEventListener('scroll', () => {
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(() => {
+      const i = Math.round(slidesEl.scrollLeft / slidesEl.offsetWidth);
+      if (i !== currentSlide){ currentSlide = i; updateUI(); }
+    }, 80);
+  });
+}
+
+const TOUR_STEPS = [
+  { selector:'[data-action="openDay"]', title:'💪 Tus días de entreno', body:'Cada tarjeta es un día. Toca uno para ver los ejercicios y registrar tu sesión.' },
+  { selector:'[data-action="goCompare"]', title:'📈 Ver progreso', body:'Aquí ves cómo evolucionas: peso máximo, volumen, comparado con tu buddy.' },
+  { selector:'[data-action="goSettings"]', title:'⚙️ Configuración', body:'Edita tu perfil, peso corporal, grupos y opciones de la app.' },
+  { selector:'[data-action="userMenu"]', title:'👤 Tu cuenta', body:'Cambia de usuario, edita tu PIN o cierra sesión.' },
+];
+
+function startHomeTour(){
+  if (!shouldShowTour()) return;
+  let step = 0;
+  const overlay = document.createElement('div');
+  overlay.className = 'tour-overlay';
+  overlay.innerHTML = `
+    <div class="tour-bg"></div>
+    <div class="tour-spotlight" id="tourSpot"></div>
+    <div class="tour-tooltip" id="tourTip">
+      <h3 id="tourTitle"></h3>
+      <p id="tourBody"></p>
+      <div class="tour-progress">
+        <span class="tour-step" id="tourStep"></span>
+        <div class="tour-actions">
+          <button id="tourSkip" style="background:transparent;border:none;color:var(--text-muted);">Saltar</button>
+          <button class="primary" id="tourNext" style="padding:6px 14px;">Siguiente</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const spot = overlay.querySelector('#tourSpot');
+  const tip = overlay.querySelector('#tourTip');
+  const titleEl = overlay.querySelector('#tourTitle');
+  const bodyEl = overlay.querySelector('#tourBody');
+  const stepEl = overlay.querySelector('#tourStep');
+  const nextBtn = overlay.querySelector('#tourNext');
+  const skipBtn = overlay.querySelector('#tourSkip');
+  function close(){
+    markTourSeen();
+    overlay.style.animation = 'fadeIn 0.2s ease reverse';
+    setTimeout(() => overlay.remove(), 200);
+  }
+  function showStep(){
+    const s = TOUR_STEPS[step];
+    if (!s){ close(); return; }
+    const target = document.querySelector(s.selector);
+    if (!target){ step++; showStep(); return; }
+    target.scrollIntoView({ behavior:'smooth', block:'center' });
+    setTimeout(() => {
+      const rect = target.getBoundingClientRect();
+      const pad = 8;
+      spot.style.left = (rect.left - pad) + 'px';
+      spot.style.top = (rect.top - pad) + 'px';
+      spot.style.width = (rect.width + pad * 2) + 'px';
+      spot.style.height = (rect.height + pad * 2) + 'px';
+      titleEl.textContent = s.title;
+      bodyEl.textContent = s.body;
+      stepEl.textContent = `${step + 1} / ${TOUR_STEPS.length}`;
+      nextBtn.textContent = step === TOUR_STEPS.length - 1 ? '¡Listo!' : 'Siguiente';
+      const tipW = 300; const tipH = 150;
+      const vpW = window.innerWidth; const vpH = window.innerHeight;
+      let left = rect.left + rect.width / 2 - tipW / 2;
+      left = Math.max(12, Math.min(vpW - tipW - 12, left));
+      let top = rect.bottom + 16;
+      if (top + tipH > vpH - 20) top = rect.top - tipH - 16;
+      tip.style.left = left + 'px';
+      tip.style.top = Math.max(12, top) + 'px';
+      tip.style.maxWidth = tipW + 'px';
+    }, 300);
+  }
+  nextBtn.addEventListener('click', () => { step++; showStep(); });
+  skipBtn.addEventListener('click', close);
+  showStep();
+}
+
 // ====== RENDER ======
 function render(){
+  if (shouldShowOnboarding()){ renderOnboarding(); return; }
   if (firebaseReady && !state.authReady) return renderAuthLoading();
   if (firebaseReady && !state.authUser) return renderAuthGate();
   if (state.view === 'setup') return renderSetup();
@@ -1649,6 +1861,9 @@ function renderHome(){
     ${dayCards}
     ${partnersBlock}`;
   attach();
+  if (state.currentUser && shouldShowTour()){
+    setTimeout(() => startHomeTour(), 500);
+  }
 }
 
 // ====== DAY ======
@@ -2467,7 +2682,8 @@ async function handle(e){
       u.pinHash = await sha(pin);
       await saveUsers(state.users);
       state.currentUser = u.id;
-      await afterLogin(u.id);
+      try { await afterLogin(u.id); }
+      catch(err){ errEl.textContent = err.message || 'No pude enlazar este usuario.'; state.currentUser = null; return; }
       state.view = 'home'; state.setupStep = null;
       toast('PIN creado. ¡Bienvenida! 💪');
       render(); return;
@@ -2475,7 +2691,8 @@ async function handle(e){
     const hash = await sha(pin);
     if (hash === u.pinHash){
       state.currentUser = u.id;
-      await afterLogin(u.id);
+      try { await afterLogin(u.id); }
+      catch(err){ errEl.textContent = err.message || 'No pude enlazar este usuario.'; state.currentUser = null; return; }
       state.view = 'home'; state.setupStep = null;
       toast('Bienvenida 💪');
       render();
@@ -2522,7 +2739,9 @@ async function handle(e){
     const pinHash = await sha(p1);
     state.users.push({ id, name: state.pendingNewName, color, pinHash, createdAt: Date.now() });
     await saveUsers(state.users);
-    state.currentUser = id; await afterLogin(id);
+    state.currentUser = id;
+    try { await afterLogin(id); }
+    catch(err){ errEl.textContent = err.message || 'No pude enlazar este usuario.'; state.currentUser = null; return; }
     state.view = 'home'; state.setupStep = null;
     state.pendingNewName = null;
     toast('¡Cuenta creada!');
@@ -3495,7 +3714,3 @@ init();
 </script>
 </body>
 </html>
-
-
-
-
