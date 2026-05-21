@@ -425,6 +425,22 @@ async function loadAccount(user){
     return defaultAccount(user);
   }
 }
+async function recoverAccountGroupsFromProfiles(account = state.account){
+  if (!account || !account.linkedProfiles) return account ? (account.groups || []) : [];
+  const profileIds = Array.from(new Set(Object.values(account.linkedProfiles).filter(Boolean)));
+  const recovered = new Set(account.groups || []);
+  for (const profileId of profileIds){
+    try {
+      const groups = await loadMembershipGroups(profileId);
+      groups.forEach(g => recovered.add(g));
+    } catch(e){ console.error(e); }
+  }
+  const groups = Array.from(recovered).filter(Boolean);
+  if (groups.length !== (account.groups || []).length || groups.some(g => !(account.groups || []).includes(g))){
+    await saveAccount({ groups });
+  }
+  return groups;
+}
 async function saveAccount(patch = {}){
   if (!firebaseReady || !state.authUser) return;
   const next = {
@@ -591,7 +607,9 @@ async function afterLogin(userId){
   await linkAuthToProfile(userId, groupPath());
   const memberships = await loadMembershipGroups(userId);
   const accountGroups = state.account && state.account.groups ? state.account.groups : [];
-  state.joinedGroups = Array.from(new Set([...(memberships || []), ...(accountGroups || []), groupPath()]));
+  const recoveredGroups = await recoverAccountGroupsFromProfiles();
+  state.joinedGroups = Array.from(new Set([...(memberships || []), ...(accountGroups || []), ...(recoveredGroups || []), groupPath()]));
+  await saveAccount({ groups: state.joinedGroups });
   saveJoinedGroups(state.joinedGroups);
 }
 function loadRoutineSource(){
@@ -648,8 +666,10 @@ async function reloadGroup(){
   unsubs.forEach(u => u && u());
   unsubs = [];
   await loadGroupState();
-  if (state.account && state.account.groups && state.account.groups.length){
-    state.joinedGroups = Array.from(new Set(state.account.groups));
+  if (state.account){
+    const recoveredGroups = await recoverAccountGroupsFromProfiles();
+    const groups = Array.from(new Set([...(state.account.groups || []), ...(recoveredGroups || [])]));
+    state.joinedGroups = groups.length ? groups : state.joinedGroups;
     saveJoinedGroups(state.joinedGroups);
   }
   chooseInitialViewForGroup();
@@ -2959,6 +2979,7 @@ async function init(){
       state.authReady = true;
       state.authUser = user || null;
       state.account = user ? await loadAccount(user) : null;
+      if (state.account) await recoverAccountGroupsFromProfiles();
       if (state.account && state.account.groups && state.account.groups.length){
         state.joinedGroups = Array.from(new Set(state.account.groups));
         saveJoinedGroups(state.joinedGroups);
