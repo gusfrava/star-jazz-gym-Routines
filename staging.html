@@ -341,6 +341,7 @@ const state = {
   showMuscles: false,
   syncing: false,
   modalOpen: null,
+  enteringGroup: false,
 };
 const root = document.getElementById('app');
 const modalRoot = document.getElementById('modalRoot');
@@ -625,7 +626,14 @@ function chooseInitialViewForGroup(){
   const meId = loadMe();
   const linkedId = linkedProfileForGroup();
   if (linkedId && state.users.find(u=>u.id===linkedId)){
-    state.currentUser = linkedId; state.view = 'home'; state.setupStep = null;
+    state.currentUser = linkedId; state.view = 'home'; state.setupStep = null; state.enteringGroup = false;
+  } else if (state.authUser && state.enteringGroup){
+    state.currentUser = null;
+    state.setupStep = state.users.length ? 'pickUser' : 'newUser';
+    state.view = 'setup';
+    state.enteringGroup = false;
+  } else if (state.authUser){
+    state.currentUser = null; state.setupStep = 'groupHub'; state.view = 'setup';
   } else if (meId && state.users.find(u=>u.id===meId) && authValid()){
     state.currentUser = meId; state.view = 'home'; state.setupStep = null;
   } else if (state.users.length === 0){
@@ -715,8 +723,15 @@ async function joinGroup(groupId, password){
     }
   }
   rememberGroup(safeId);
+  if (state.authUser){
+    const groups = Array.from(new Set([...(state.account?.groups || []), safeId]));
+    await saveAccount({ groups });
+    state.joinedGroups = groups;
+    saveJoinedGroups(groups);
+  }
   state.currentGroup = safeId;
   saveCurrentGroup(safeId);
+  state.enteringGroup = !currentMe;
   state.currentDay = null;
   state.currentExerciseIdx = null;
   state.editingSession = null;
@@ -1036,15 +1051,15 @@ function renderAuthGate(){
       <div class="fade-in" style="margin-bottom:22px;">
         <div style="font-size:48px;margin-bottom:8px;">💪</div>
         <h1 style="margin-bottom:6px;">Star Jazz Gym Buddy</h1>
-        <p class="muted" style="font-size:14px;margin:0;">Entra con tu cuenta para ver tus grupos y proteger tu progreso.</p>
+        <p class="muted" style="font-size:14px;margin:0;">Primero entra con email o Google. Despues enlazas tu usuario del gym.</p>
       </div>
       <div class="card fade-in" style="margin-bottom:14px;animation-delay:60ms;">
-        <label class="section-label" style="margin-bottom:6px;">Email</label>
-        <input id="authEmail" type="email" autocomplete="email" placeholder="tu@email.com" style="margin-bottom:10px;" />
-        <label class="section-label" style="margin-bottom:6px;">Contraseña</label>
-        <input id="authPassword" type="password" autocomplete="current-password" placeholder="Mínimo 6 caracteres" style="margin-bottom:12px;" />
+        <label class="section-label" style="margin-bottom:6px;">Email de tu cuenta</label>
+        <input id="authEmail" type="email" autocomplete="email" placeholder="tu@email.com (no tu nombre del gym)" style="margin-bottom:10px;" />
+        <label class="section-label" style="margin-bottom:6px;">Contraseña de cuenta</label>
+        <input id="authPassword" type="password" autocomplete="current-password" placeholder="Mínimo 6 caracteres, no tu PIN" style="margin-bottom:12px;" />
         <div style="display:flex;gap:8px;">
-          <button data-action="authEmailLogin" style="flex:1;padding:12px;">Entrar</button>
+          <button data-action="authEmailLogin" style="flex:1;padding:12px;">Ya tengo cuenta</button>
           <button class="primary" data-action="authEmailSignup" style="flex:1;padding:12px;font-weight:600;">Crear cuenta</button>
         </div>
         <div id="authError" style="color:var(--danger);font-size:12px;text-align:center;margin-top:10px;min-height:14px;"></div>
@@ -1054,7 +1069,7 @@ function renderAuthGate(){
       </button>
       <div class="banner banner-info fade-in" style="margin-top:16px;animation-delay:180ms;">
         <i class="ti ti-info-circle"></i>
-        <div>Si ya tenías usuario, después de entrar vas a escribir tu nombre y PIN una vez para enlazarlo. Tus rutinas y progreso no se mueven.</div>
+        <div>Si ya tenias usuario, primero crea/entra con tu email. Luego escribes tu nombre del gym y PIN una vez para enlazarlo. Tus rutinas y progreso no se mueven.</div>
       </div>
     </div>`;
   attach();
@@ -1091,6 +1106,66 @@ function headerBar(title, backFn){
 
 // ====== SETUP / AUTH ======
 function renderSetup(){
+  if (state.setupStep === 'groupHub'){
+    const accountGroups = state.account && Array.isArray(state.account.groups) ? state.account.groups : [];
+    const groupCards = accountGroups.length ? accountGroups.map(g => `
+      <button data-action="selectAccountGroup" data-group="${esc(g)}" class="day-card fade-in" style="animation-delay:60ms;">
+        <div class="row">
+          <div class="icon-tile"><i class="ti ti-users-group" style="font-size:20px;"></i></div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g)}</div>
+            <div class="muted" style="font-size:12px;">Entrar a este grupo</div>
+          </div>
+          <i class="ti ti-chevron-right" style="color:var(--text-dim);"></i>
+        </div>
+      </button>
+    `).join('') : `
+      <div class="card fade-in" style="text-align:center;padding:22px 18px;margin-bottom:14px;animation-delay:60ms;">
+        <i class="ti ti-users-plus" style="font-size:28px;color:var(--accent);display:block;margin-bottom:8px;"></i>
+        <h2 style="margin-bottom:6px;">Todavia no tienes grupos</h2>
+        <p class="muted" style="font-size:13px;margin:0;">Unete con un codigo de invitacion o crea tu propio grupo.</p>
+      </div>
+    `;
+    root.innerHTML = `
+      <div style="max-width:460px;margin:0 auto;padding-top:32px;">
+        ${configBanner()}
+        <div class="fade-in" style="margin-bottom:22px;">
+          <div class="row" style="align-items:flex-start;">
+            <div style="font-size:44px;">💪</div>
+            <div style="flex:1;">
+              <h1 style="margin-bottom:5px;">Mis grupos</h1>
+              <p class="muted" style="font-size:14px;margin:0;">${esc(state.authUser?.email || 'Cuenta activa')}</p>
+            </div>
+            <button data-action="logoutUser" style="padding:8px 10px;border-color:var(--border);" aria-label="Cerrar sesion">
+              <i class="ti ti-logout" style="font-size:16px;"></i>
+            </button>
+          </div>
+        </div>
+        ${groupCards}
+        <div class="card fade-in" style="padding:8px;margin-top:12px;animation-delay:120ms;">
+          <button data-action="joinGroupModal" style="width:100%;padding:13px;display:flex;align-items:center;gap:10px;background:transparent;border:none;text-align:left;border-radius:8px;">
+            <i class="ti ti-login" style="font-size:18px;color:var(--accent);"></i>
+            <div>
+              <div style="font-weight:700;">Unirme a un grupo</div>
+              <div class="muted" style="font-size:12px;">Usa el codigo y contrasena que te compartieron.</div>
+            </div>
+          </button>
+          <button data-action="createGroupModal" style="width:100%;padding:13px;display:flex;align-items:center;gap:10px;background:transparent;border:none;border-top:1px solid var(--border);text-align:left;border-radius:8px;">
+            <i class="ti ti-plus" style="font-size:18px;color:var(--accent);"></i>
+            <div>
+              <div style="font-weight:700;">Crear grupo nuevo</div>
+              <div class="muted" style="font-size:12px;">Empieza con rutina base, copia una rutina o desde cero.</div>
+            </div>
+          </button>
+        </div>
+        <div class="banner banner-info fade-in" style="margin-top:16px;animation-delay:180ms;">
+          <i class="ti ti-info-circle"></i>
+          <div>Tu cuenta puede pertenecer a varios grupos. Cada grupo mantiene sus rutinas y progreso separados.</div>
+        </div>
+      </div>`;
+    attach();
+    return;
+  }
   if (state.setupStep === 'pickUser'){
     root.innerHTML = `
       <div style="max-width:420px;margin:0 auto;padding-top:32px;">
@@ -2022,11 +2097,16 @@ async function handle(e){
     } catch(err){
       console.error(err);
       const code = err.code || '';
-      errEl.textContent = code.includes('email-already-in-use') ? 'Ese email ya tiene cuenta. Usa Entrar.' :
-        code.includes('invalid-credential') || code.includes('wrong-password') ? 'Email o contraseña incorrectos.' :
-        code.includes('user-not-found') ? 'No encontré una cuenta con ese email.' :
+      errEl.textContent = code.includes('email-already-in-use') ? 'Ese email ya tiene cuenta. Toca "Ya tengo cuenta".' :
+        code.includes('invalid-email') ? 'Escribe un email válido, no tu nombre del gym.' :
+        code.includes('weak-password') ? 'La contraseña debe tener mínimo 6 caracteres.' :
+        code.includes('invalid-credential') || code.includes('wrong-password') ? 'Email o contraseña incorrectos. Si es primera vez, toca "Crear cuenta".' :
+        code.includes('user-not-found') ? 'No encontré una cuenta con ese email. Toca "Crear cuenta".' :
         code.includes('operation-not-allowed') ? 'Activa Email/Password en Firebase Auth.' :
-        'No pude iniciar sesión. Revisa Firebase Auth.';
+        code.includes('configuration-not-found') ? 'Firebase Auth todavía no está activado en este proyecto.' :
+        code.includes('unauthorized-domain') ? 'Agrega este dominio en Firebase Auth > Authorized domains.' :
+        code.includes('network-request-failed') ? 'No hay conexión con Firebase. Revisa internet o bloqueadores.' :
+        `No pude iniciar sesión (${code || 'error desconocido'}).`;
     }
     return;
   }
@@ -2037,7 +2117,11 @@ async function handle(e){
       toast('Sesión iniciada');
     } catch(err){
       console.error(err);
-      toast((err.code || '').includes('operation-not-allowed') ? 'Activa Google en Firebase Auth' : 'No pude entrar con Google');
+      const code = err.code || '';
+      toast(code.includes('operation-not-allowed') ? 'Activa Google en Firebase Auth' :
+        code.includes('unauthorized-domain') ? 'Autoriza este dominio en Firebase' :
+        code.includes('popup-blocked') ? 'El navegador bloqueó el popup de Google' :
+        `No pude entrar con Google (${code || 'error'})`);
     }
     return;
   }
@@ -2097,6 +2181,11 @@ async function handle(e){
     state.currentUser = null; clearMe(); clearAuth();
     state.view = 'home'; state.setupStep = null;
     render(); return;
+  }
+  if (a === 'selectAccountGroup'){
+    state.enteringGroup = true;
+    await switchGroup(btn.dataset.group);
+    return;
   }
   if (a === 'checkInvite'){
     const name = (document.getElementById('nameInput').value || '').trim();
