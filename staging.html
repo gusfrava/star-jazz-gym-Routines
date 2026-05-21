@@ -351,6 +351,7 @@ const state = {
   pendingNewName: null,
   showAlts: false,
   showMuscles: false,
+  showRoutineMuscles: false,
   syncing: false,
   modalOpen: null,
   enteringGroup: false,
@@ -706,6 +707,7 @@ async function switchGroup(groupId){
   state.editingSession = null;
   state.showAlts = false;
   state.showMuscles = false;
+  state.showRoutineMuscles = false;
   await reloadGroup();
 }
 async function createGroup(groupId, groupName, invitationPassword, routineMode){
@@ -777,6 +779,7 @@ async function joinGroup(groupId, password){
   state.editingSession = null;
   state.showAlts = false;
   state.showMuscles = false;
+  state.showRoutineMuscles = false;
   await reloadGroup();
   if (currentMe) await afterLogin(currentMe.id);
   toast(currentMe ? 'Entraste con tu mismo usuario' : 'Grupo agregado');
@@ -803,12 +806,81 @@ async function deleteCurrentGroup(){
   await switchGroup(DEFAULT_GROUP);
   toast('Grupo eliminado');
 }
+function buildGroupBackup(){
+  return {
+    version: 1,
+    app: 'Star Jazz Gym Buddy',
+    exportedAt: new Date().toISOString(),
+    groupId: groupPath(),
+    config: state.groupConfig || {},
+    users: state.users || [],
+    sharedRoutine: state.sharedRoutine || {},
+    personalRoutines: state.personalRoutines || {},
+    logs: state.logs || {}
+  };
+}
+async function importGroupBackup(backup){
+  if (!backup || backup.app !== 'Star Jazz Gym Buddy'){
+    throw new Error('Este archivo no parece ser un backup de Star Jazz Gym Buddy.');
+  }
+  if (!backup.groupId || backup.groupId !== groupPath()){
+    throw new Error(`El backup es del grupo "${backup.groupId || 'desconocido'}", pero estas en "${groupPath()}".`);
+  }
+  if (!Array.isArray(backup.users) || !backup.sharedRoutine || !backup.logs){
+    throw new Error('El backup esta incompleto.');
+  }
+  state.groupConfig = normalizeGroupConfig(backup.config || {});
+  state.invitationPassword = state.groupConfig.invitationPassword || INVITATION_PASSWORD_DEFAULT;
+  state.users = backup.users || [];
+  state.sharedRoutine = normalizeRoutine(backup.sharedRoutine || {});
+  state.personalRoutines = backup.personalRoutines || {};
+  state.logs = backup.logs || {};
+  await saveConfig(state.groupConfig);
+  await saveUsers(state.users);
+  await saveSharedRoutine(state.sharedRoutine);
+  for (const [uid, routine] of Object.entries(state.personalRoutines)){
+    await savePersonalRoutine(uid, routine || {});
+  }
+  for (const [uid, logs] of Object.entries(state.logs)){
+    await saveUserLogs(uid, logs || {});
+  }
+}
 
 // ====== HELPERS ======
 const exerciseKey = (d,i) => d+':'+i;
 const today = () => dateKey();
 const userColor = (i) => ['#f97316','#22c55e','#3b82f6','#a855f7','#ec4899','#eab308','#06b6d4','#84cc16'][i % 8];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function prettyGroupName(id){
+  if (id === DEFAULT_GROUP) return 'Jazmin y Buddy';
+  return String(id || 'Grupo')
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+function groupDisplayName(id){
+  if (id === groupPath() && state.groupConfig && state.groupConfig.groupName && state.groupConfig.groupName !== id) return state.groupConfig.groupName;
+  return prettyGroupName(id);
+}
+function getMe(){ return state.users.find(u => u.id === state.currentUser); }
+function avatarHtml(u, size = 28){
+  const emoji = u && u.profile && u.profile.avatarEmoji;
+  if (emoji){
+    return `<span style="width:${size}px;height:${size}px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--accent-bg);border:1px solid var(--accent-border);font-size:${Math.round(size * 0.58)}px;flex-shrink:0;">${esc(emoji)}</span>`;
+  }
+  return `<span class="dot" style="background:${u?.color || 'var(--accent)'};width:${size}px;height:${size}px;border:2px solid var(--bg-elev);box-shadow:0 0 0 1px ${u?.color || 'var(--accent)'};"></span>`;
+}
+function profileStats(u){
+  const profile = (u && u.profile) || {};
+  const logs = Array.isArray(profile.weightLogs) ? profile.weightLogs.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))) : [];
+  const latest = logs.length ? Number(logs[logs.length - 1].weight) : Number(profile.currentWeight || 0);
+  const first = logs.length ? Number(logs[0].weight) : Number(profile.currentWeight || 0);
+  const goal = Number(profile.goalWeight || 0);
+  const delta = latest && first ? latest - first : 0;
+  const remaining = latest && goal ? latest - goal : 0;
+  return { profile, logs, latest, first, goal, delta, remaining };
+}
 async function sha(s){
   if (!s) return '';
   const b = new TextEncoder().encode(s);
@@ -819,6 +891,27 @@ function toast(msg){
   const el = document.getElementById('toast');
   el.textContent = msg; el.classList.add('show');
   setTimeout(()=> el.classList.remove('show'), 1800);
+}
+function downloadJson(filename, data){
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+}
+function readJsonFile(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try { resolve(JSON.parse(reader.result)); }
+      catch(e){ reject(e); }
+    };
+    reader.onerror = () => reject(reader.error || new Error('No se pudo leer el archivo'));
+    reader.readAsText(file);
+  });
 }
 async function copyText(text, label){
   try {
@@ -916,6 +1009,84 @@ function muscleLabels(prim, sec){
     secLabels: (sec||[]).map(id => MUSCLES[id]?.label).filter(Boolean)
   };
 }
+
+function routineMuscleStats(routine){
+  const scores = {};
+  let total = 0;
+  (routine?.exercises || []).forEach(ex => {
+    (ex.primary || []).forEach(id => {
+      if (!MUSCLES[id]) return;
+      scores[id] = (scores[id] || 0) + 1;
+      total += 1;
+    });
+    (ex.secondary || []).forEach(id => {
+      if (!MUSCLES[id]) return;
+      scores[id] = (scores[id] || 0) + 0.5;
+      total += 0.5;
+    });
+  });
+  const max = Math.max(0, ...Object.values(scores));
+  const rows = Object.entries(scores)
+    .map(([id, score]) => ({
+      id,
+      label: MUSCLES[id].label,
+      score,
+      percent: total ? Math.round((score / total) * 100) : 0,
+      intensity: max ? score / max : 0
+    }))
+    .sort((a,b) => b.score - a.score || a.label.localeCompare(b.label));
+  const map = {};
+  rows.forEach(row => { map[row.id] = row; });
+  return { rows, map, total };
+}
+
+function muscleHeatColor(intensity){
+  const t = Math.max(0, Math.min(1, Number(intensity) || 0));
+  if (!t) return 'var(--bg-elev-2)';
+  if (t >= 0.72) return '#f97316';
+  if (t >= 0.45) return '#3b9eff';
+  if (t >= 0.22) return '#72c8ff';
+  return '#b8e4ff';
+}
+
+function routineMuscleOverview(routine){
+  const stats = routineMuscleStats(routine);
+  if (!stats.rows.length){
+    return `<div class="card" style="margin-bottom:16px;text-align:center;color:var(--text-muted);font-size:13px;">
+      <i class="ti ti-body-scan" style="font-size:24px;color:var(--text-dim);display:block;margin-bottom:6px;"></i>
+      Esta rutina todavía no tiene músculos asignados.
+    </div>`;
+  }
+  const topRows = stats.rows.slice(0, 8).map(row => `
+    <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;margin-bottom:9px;">
+      <div style="min-width:0;">
+        <div class="row" style="justify-content:space-between;margin-bottom:5px;">
+          <span style="font-size:13px;font-weight:500;">${esc(row.label)}</span>
+          <span class="mono" style="font-size:11px;color:var(--text-muted);">${row.percent}%</span>
+        </div>
+        <div style="height:6px;background:var(--bg-elev-2);border-radius:999px;overflow:hidden;">
+          <div style="height:100%;width:${row.percent}%;background:${muscleHeatColor(row.intensity)};border-radius:999px;"></div>
+        </div>
+      </div>
+    </div>`).join('');
+  return `<div class="card fade-in" style="margin-bottom:16px;padding:16px;">
+    <div class="row" style="align-items:flex-start;margin-bottom:12px;">
+      <div>
+        <h2 style="margin-bottom:3px;">Mapa muscular de la rutina</h2>
+        <div class="muted" style="font-size:12px;">Primarios cuentan 1 punto; secundarios 0.5. El color muestra qué músculos aparecen más en este día.</div>
+      </div>
+    </div>
+    ${bodyDiagram([], [], stats.map)}
+    <div style="display:grid;grid-template-columns:1fr;gap:4px;margin-top:14px;">
+      ${topRows}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;font-size:11px;color:var(--text-muted);">
+      <span class="row" style="gap:5px;"><span style="width:12px;height:12px;border-radius:4px;background:#b8e4ff;"></span>Bajo</span>
+      <span class="row" style="gap:5px;"><span style="width:12px;height:12px;border-radius:4px;background:#3b9eff;"></span>Medio</span>
+      <span class="row" style="gap:5px;"><span style="width:12px;height:12px;border-radius:4px;background:#f97316;"></span>Alto</span>
+    </div>
+  </div>`;
+}
 function renderSetRow(i, set = null, lastSet = null, unilateralMode = false){
   const isUnilateral = !!(unilateralMode || (set && set.unilateral));
   const normalReps = set && !set.unilateral ? set.reps : '';
@@ -976,80 +1147,103 @@ function getAllDayKeys(){
 }
 
 // ====== BODY DIAGRAM SVG ======
-function bodyDiagram(primary, secondary){
-  const isPrim = id => (primary||[]).includes(id);
-  const isSec = id => (secondary||[]).includes(id);
-  const fillFor = id => isPrim(id) ? 'var(--accent)' : isSec(id) ? 'var(--warning)' : 'var(--bg-elev-2)';
-  const stroke = 'var(--border-strong)';
-  const skin = 'var(--bg-elev-2)';
-  const sw = 0.7;
-  return `<svg viewBox="0 0 320 360" xmlns="http://www.w3.org/2000/svg" style="display:block;max-width:100%;height:auto;" role="img" aria-label="Diagrama de músculos">
-    <g transform="translate(20,10)">
-      <ellipse cx="60" cy="22" rx="14" ry="17" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
-      <rect x="54" y="36" width="12" height="8" fill="${fillFor('neckF')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M30 50 Q28 75 32 110 L36 175 Q40 195 50 195 L70 195 Q80 195 84 175 L88 110 Q92 75 90 50 Q80 44 60 44 Q40 44 30 50 Z" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="30" cy="55" rx="9" ry="11" fill="${fillFor('shouldersF')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="90" cy="55" rx="9" ry="11" fill="${fillFor('shouldersF')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M36 55 Q45 50 58 52 L58 85 Q45 88 38 80 Z" fill="${fillFor('chest')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M84 55 Q75 50 62 52 L62 85 Q75 88 82 80 Z" fill="${fillFor('chest')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M52 88 L68 88 L68 140 Q60 145 52 140 Z" fill="${fillFor('abs')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <line x1="60" y1="92" x2="60" y2="138" stroke="${stroke}" stroke-width="${sw}"/>
-      <line x1="52" y1="105" x2="68" y2="105" stroke="${stroke}" stroke-width="${sw}"/>
-      <line x1="52" y1="118" x2="68" y2="118" stroke="${stroke}" stroke-width="${sw}"/>
-      <line x1="52" y1="130" x2="68" y2="130" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M38 95 Q34 120 40 145 L50 140 L52 95 Z" fill="${fillFor('obliques')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M82 95 Q86 120 80 145 L70 140 L68 95 Z" fill="${fillFor('obliques')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="22" cy="85" rx="8" ry="22" fill="${fillFor('bicepsF')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="98" cy="85" rx="8" ry="22" fill="${fillFor('bicepsF')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="18" cy="125" rx="7" ry="18" fill="${fillFor('forearmsF')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="102" cy="125" rx="7" ry="18" fill="${fillFor('forearmsF')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="16" cy="150" rx="5" ry="7" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="104" cy="150" rx="5" ry="7" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M40 175 Q35 195 38 210 L82 210 Q85 195 80 175 Z" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M40 210 Q35 235 40 275 L52 275 L54 215 Z" fill="${fillFor('quads')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M80 210 Q85 235 80 275 L68 275 L66 215 Z" fill="${fillFor('quads')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M54 215 L52 275 L58 275 L60 215 Z" fill="${fillFor('adductors')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M66 215 L68 275 L62 275 L60 215 Z" fill="${fillFor('adductors')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="48" cy="282" rx="6" ry="5" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="72" cy="282" rx="6" ry="5" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M44 288 Q40 315 46 335 L52 335 L52 288 Z" fill="${fillFor('calvesF')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M76 288 Q80 315 74 335 L68 335 L68 288 Z" fill="${fillFor('calvesF')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="48" cy="343" rx="7" ry="4" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="72" cy="343" rx="7" ry="4" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
-      <text x="60" y="358" text-anchor="middle" font-size="9" fill="var(--text-dim)">Frente</text>
+function bodyDiagram(primary = [], secondary = [], intensityMap = null){
+  const isPrim = id => (primary || []).includes(id);
+  const isSec = id => (secondary || []).includes(id);
+  const hasHeat = !!intensityMap;
+  const base = 'var(--bg-elev-2)';
+  const stroke = 'rgba(148,163,184,0.38)';
+  const innerStroke = 'rgba(15,23,42,0.20)';
+  const fillFor = id => {
+    if (hasHeat) return muscleHeatColor(intensityMap[id]?.intensity || 0);
+    if (isPrim(id)) return 'var(--accent)';
+    if (isSec(id)) return 'var(--warning)';
+    return base;
+  };
+  const opacityFor = id => {
+    if (hasHeat) return intensityMap[id] ? 1 : 0.34;
+    return (isPrim(id) || isSec(id)) ? 1 : 0.52;
+  };
+  const titleFor = id => {
+    if (!hasHeat || !intensityMap[id]) return MUSCLES[id]?.label || id;
+    return `${MUSCLES[id]?.label || id}: ${intensityMap[id].percent}%`;
+  };
+  const p = (id, d) => `<path d="${d}" fill="${fillFor(id)}" opacity="${opacityFor(id)}" stroke="${stroke}" stroke-width="1.1" stroke-linejoin="round"><title>${titleFor(id)}</title></path>`;
+  const e = (id, attrs) => `<ellipse ${attrs} fill="${fillFor(id)}" opacity="${opacityFor(id)}" stroke="${stroke}" stroke-width="1.1"><title>${titleFor(id)}</title></ellipse>`;
+  const panel = (x, label) => `
+    <g transform="translate(${x},14)">
+      <rect x="0" y="0" width="160" height="318" rx="24" fill="url(#musclePanel)" stroke="var(--border)" />
+      <text x="80" y="302" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--text-dim)" letter-spacing="1.5">${label}</text>
+    </g>`;
+  return `<svg viewBox="0 0 380 340" xmlns="http://www.w3.org/2000/svg" style="display:block;max-width:100%;height:auto;" role="img" aria-label="Diagrama de músculos">
+    <defs>
+      <linearGradient id="musclePanel" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="rgba(59,158,255,0.10)" />
+        <stop offset="100%" stop-color="rgba(148,163,184,0.05)" />
+      </linearGradient>
+      <filter id="softMuscleShadow" x="-25%" y="-25%" width="150%" height="150%">
+        <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="rgba(0,0,0,0.22)" />
+      </filter>
+      <radialGradient id="bodyCore" cx="50%" cy="8%" r="82%">
+        <stop offset="0%" stop-color="rgba(255,255,255,0.16)" />
+        <stop offset="100%" stop-color="rgba(255,255,255,0.02)" />
+      </radialGradient>
+    </defs>
+    ${panel(10, 'FRENTE')}
+    ${panel(210, 'ESPALDA')}
+    <g transform="translate(41,22)" filter="url(#softMuscleShadow)">
+      <ellipse cx="50" cy="21" rx="14" ry="17" fill="url(#bodyCore)" stroke="${stroke}" stroke-width="1.1"/>
+      ${p('neckF', 'M42 38 Q50 43 58 38 L62 52 Q50 58 38 52 Z')}
+      ${p('shouldersF', 'M17 58 Q26 45 43 50 Q39 66 29 76 Q19 76 17 58 Z')}
+      ${p('shouldersF', 'M83 58 Q74 45 57 50 Q61 66 71 76 Q81 76 83 58 Z')}
+      ${p('chest', 'M31 58 Q42 50 49 57 L49 94 Q36 93 29 80 Q26 69 31 58 Z')}
+      ${p('chest', 'M69 58 Q58 50 51 57 L51 94 Q64 93 71 80 Q74 69 69 58 Z')}
+      ${p('abs', 'M41 96 Q50 100 59 96 L61 151 Q50 160 39 151 Z')}
+      ${p('obliques', 'M28 89 Q35 96 40 99 L38 149 Q28 143 24 124 Q23 105 28 89 Z')}
+      ${p('obliques', 'M72 89 Q65 96 60 99 L62 149 Q72 143 76 124 Q77 105 72 89 Z')}
+      ${e('bicepsF', 'cx="14" cy="94" rx="9" ry="28"')}
+      ${e('bicepsF', 'cx="86" cy="94" rx="9" ry="28"')}
+      ${e('forearmsF', 'cx="10" cy="143" rx="8" ry="25"')}
+      ${e('forearmsF', 'cx="90" cy="143" rx="8" ry="25"')}
+      <ellipse cx="8" cy="174" rx="6" ry="8" fill="url(#bodyCore)" stroke="${stroke}" stroke-width="1.1"/>
+      <ellipse cx="92" cy="174" rx="6" ry="8" fill="url(#bodyCore)" stroke="${stroke}" stroke-width="1.1"/>
+      <path d="M34 160 Q50 170 66 160 L69 183 Q50 192 31 183 Z" fill="url(#bodyCore)" stroke="${stroke}" stroke-width="1.1"/>
+      ${p('quads', 'M31 184 Q42 190 48 187 L45 258 Q34 260 29 247 Q25 216 31 184 Z')}
+      ${p('quads', 'M69 184 Q58 190 52 187 L55 258 Q66 260 71 247 Q75 216 69 184 Z')}
+      ${p('adductors', 'M48 190 Q50 192 52 190 L54 253 Q50 258 46 253 Z')}
+      ${p('calvesF', 'M33 264 Q42 260 47 265 L44 307 Q35 309 31 300 Q29 281 33 264 Z')}
+      ${p('calvesF', 'M67 264 Q58 260 53 265 L56 307 Q65 309 69 300 Q71 281 67 264 Z')}
+      <line x1="50" y1="101" x2="50" y2="150" stroke="${innerStroke}" stroke-width="0.9"/>
+      <line x1="42" y1="113" x2="58" y2="113" stroke="${innerStroke}" stroke-width="0.9"/>
+      <line x1="42" y1="128" x2="58" y2="128" stroke="${innerStroke}" stroke-width="0.9"/>
+      <line x1="42" y1="142" x2="58" y2="142" stroke="${innerStroke}" stroke-width="0.9"/>
     </g>
-    <g transform="translate(180,10)">
-      <ellipse cx="60" cy="22" rx="14" ry="17" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M50 36 L70 36 L74 48 L46 48 Z" fill="${fillFor('upperBack')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M30 50 Q28 75 32 110 L36 175 Q40 195 50 195 L70 195 Q80 195 84 175 L88 110 Q92 75 90 50 Q80 44 60 44 Q40 44 30 50 Z" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="30" cy="55" rx="9" ry="11" fill="${fillFor('shouldersB')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="90" cy="55" rx="9" ry="11" fill="${fillFor('shouldersB')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M38 48 L82 48 L88 75 Q60 78 32 75 Z" fill="${fillFor('upperBack')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M40 76 L80 76 L78 105 L42 105 Z" fill="${fillFor('midBack')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <line x1="60" y1="78" x2="60" y2="103" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M32 80 Q28 115 36 145 L42 145 L42 100 Z" fill="${fillFor('lats')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M88 80 Q92 115 84 145 L78 145 L78 100 Z" fill="${fillFor('lats')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M44 110 L76 110 L74 165 L46 165 Z" fill="${fillFor('lowerBack')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <line x1="60" y1="113" x2="60" y2="162" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="22" cy="85" rx="8" ry="22" fill="${fillFor('triceps')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="98" cy="85" rx="8" ry="22" fill="${fillFor('triceps')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="18" cy="125" rx="7" ry="18" fill="${fillFor('forearmsB')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="102" cy="125" rx="7" ry="18" fill="${fillFor('forearmsB')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="16" cy="150" rx="5" ry="7" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="104" cy="150" rx="5" ry="7" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M38 170 Q34 200 42 215 L60 218 L60 170 Z" fill="${fillFor('glutes')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M82 170 Q86 200 78 215 L60 218 L60 170 Z" fill="${fillFor('glutes')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M34 175 Q30 200 36 218 L40 218 L40 175 Z" fill="${fillFor('abductors')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M86 175 Q90 200 84 218 L80 218 L80 175 Z" fill="${fillFor('abductors')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M40 220 Q36 250 42 278 L54 278 L56 220 Z" fill="${fillFor('hamstrings')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M80 220 Q84 250 78 278 L66 278 L64 220 Z" fill="${fillFor('hamstrings')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="48" cy="285" rx="6" ry="4" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="72" cy="285" rx="6" ry="4" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M42 290 Q36 315 46 335 L54 335 L54 290 Z" fill="${fillFor('calves')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <path d="M78 290 Q84 315 74 335 L66 335 L66 290 Z" fill="${fillFor('calves')}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="48" cy="343" rx="7" ry="4" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
-      <ellipse cx="72" cy="343" rx="7" ry="4" fill="${skin}" stroke="${stroke}" stroke-width="${sw}"/>
-      <text x="60" y="358" text-anchor="middle" font-size="9" fill="var(--text-dim)">Espalda</text>
+    <g transform="translate(241,22)" filter="url(#softMuscleShadow)">
+      <ellipse cx="50" cy="21" rx="14" ry="17" fill="url(#bodyCore)" stroke="${stroke}" stroke-width="1.1"/>
+      ${p('upperBack', 'M38 39 Q50 46 62 39 L68 59 Q50 69 32 59 Z')}
+      ${p('shouldersB', 'M17 59 Q27 45 42 51 Q39 69 29 78 Q19 77 17 59 Z')}
+      ${p('shouldersB', 'M83 59 Q73 45 58 51 Q61 69 71 78 Q81 77 83 59 Z')}
+      ${p('upperBack', 'M31 61 Q50 69 69 61 L74 91 Q50 101 26 91 Z')}
+      ${p('lats', 'M26 91 Q36 99 44 101 L42 151 Q29 145 23 125 Q21 105 26 91 Z')}
+      ${p('lats', 'M74 91 Q64 99 56 101 L58 151 Q71 145 77 125 Q79 105 74 91 Z')}
+      ${p('midBack', 'M42 96 Q50 101 58 96 L58 132 Q50 139 42 132 Z')}
+      ${p('lowerBack', 'M40 134 Q50 141 60 134 L63 171 Q50 181 37 171 Z')}
+      ${e('triceps', 'cx="14" cy="94" rx="9" ry="28"')}
+      ${e('triceps', 'cx="86" cy="94" rx="9" ry="28"')}
+      ${e('forearmsB', 'cx="10" cy="143" rx="8" ry="25"')}
+      ${e('forearmsB', 'cx="90" cy="143" rx="8" ry="25"')}
+      <ellipse cx="8" cy="174" rx="6" ry="8" fill="url(#bodyCore)" stroke="${stroke}" stroke-width="1.1"/>
+      <ellipse cx="92" cy="174" rx="6" ry="8" fill="url(#bodyCore)" stroke="${stroke}" stroke-width="1.1"/>
+      ${p('glutes', 'M32 171 Q43 164 50 174 L50 207 Q36 208 30 197 Q27 184 32 171 Z')}
+      ${p('glutes', 'M68 171 Q57 164 50 174 L50 207 Q64 208 70 197 Q73 184 68 171 Z')}
+      ${p('abductors', 'M27 178 Q31 183 31 197 L27 220 Q20 204 22 190 Q23 183 27 178 Z')}
+      ${p('abductors', 'M73 178 Q69 183 69 197 L73 220 Q80 204 78 190 Q77 183 73 178 Z')}
+      ${p('hamstrings', 'M31 207 Q41 213 48 210 L45 263 Q35 264 30 253 Q26 226 31 207 Z')}
+      ${p('hamstrings', 'M69 207 Q59 213 52 210 L55 263 Q65 264 70 253 Q74 226 69 207 Z')}
+      ${p('calves', 'M33 267 Q42 262 47 268 L44 307 Q35 309 31 300 Q29 282 33 267 Z')}
+      ${p('calves', 'M67 267 Q58 262 53 268 L56 307 Q65 309 69 300 Q71 282 67 267 Z')}
+      <line x1="50" y1="75" x2="50" y2="170" stroke="${innerStroke}" stroke-width="0.9"/>
+      <line x1="42" y1="113" x2="58" y2="113" stroke="${innerStroke}" stroke-width="0.9"/>
     </g>
   </svg>`;
 }
@@ -1131,7 +1325,7 @@ function configBanner(){
 function headerBar(title, backFn){
   const me = state.users.find(u=>u.id===state.currentUser);
   const userPill = me ? `<button class="user-pill" data-action="userMenu">
-    <span class="dot" style="background:${me.color};width:14px;height:14px;border:2px solid var(--bg-elev);box-shadow:0 0 0 1px ${me.color};"></span>${esc(me.name)}
+    ${avatarHtml(me, 22)}${esc(me.name)}
     ${isAdmin() ? '<span class="admin-pill">admin</span>' : ''}
     <i class="ti ti-chevron-down" style="font-size:14px;color:var(--text-muted);"></i>
   </button>` : '';
@@ -1153,8 +1347,8 @@ function renderSetup(){
         <div class="row">
           <div class="icon-tile"><i class="ti ti-users-group" style="font-size:20px;"></i></div>
           <div style="flex:1;min-width:0;">
-            <div style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g)}</div>
-            <div class="muted" style="font-size:12px;">Entrar a este grupo</div>
+            <div style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(groupDisplayName(g))}</div>
+            <div class="muted mono" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g)}</div>
           </div>
           <i class="ti ti-chevron-right" style="color:var(--text-dim);"></i>
         </div>
@@ -1475,12 +1669,19 @@ function renderDay(){
     <button data-action="editRoutine" style="margin-bottom:16px;padding:11px;width:100%;background:var(--bg-elev);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:500;">
       <i class="ti ti-edit" style="font-size:15px;color:var(--accent);"></i> Editar ${src==='personal' ? 'mi rutina' : 'rutina compartida'}
     </button>` : '';
+  const routineMapBtn = `
+    <button data-action="toggleRoutineMuscles" style="margin-bottom:12px;padding:11px;width:100%;background:${state.showRoutineMuscles?'var(--accent-bg-strong)':'var(--bg-elev)'};color:${state.showRoutineMuscles?'var(--accent)':'var(--text)'};border:1px solid ${state.showRoutineMuscles?'var(--accent-border)':'var(--border)'};display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:500;">
+      <i class="ti ti-body-scan" style="font-size:15px;"></i> ${state.showRoutineMuscles ? 'Ocultar mapa muscular' : 'Mapa muscular de la rutina'}
+    </button>`;
+  const routineOverview = state.showRoutineMuscles ? routineMuscleOverview(r) : '';
 
   root.innerHTML = `
     ${headerBar(r.label, 'goHome')}
     <div class="muted fade-in" style="font-size:13px;margin-top:-12px;margin-bottom:16px;">${esc(r.focus)}</div>
     ${switcher}
     ${editBtn}
+    ${routineMapBtn}
+    ${routineOverview}
     ${exList}`;
   attach();
 }
@@ -1884,20 +2085,28 @@ function renderDaily(insideProgress = false){
 // ====== SETTINGS ======
 function renderSettings(){
   const adm = isAdmin();
+  const me = getMe();
+  const myProfile = profileStats(me);
+  const weightSummary = myProfile.latest
+    ? `<div class="muted" style="font-size:12px;margin-top:3px;">Actual: <strong style="color:var(--text);">${myProfile.latest} lb</strong>${myProfile.goal ? ` · Meta: <strong style="color:var(--text);">${myProfile.goal} lb</strong>` : ''}${myProfile.delta ? ` · Cambio: <strong style="color:${myProfile.delta < 0 ? 'var(--success)' : 'var(--warning)'};">${myProfile.delta > 0 ? '+' : ''}${myProfile.delta.toFixed(1)} lb</strong>` : ''}</div>`
+    : `<div class="muted" style="font-size:12px;margin-top:3px;">Agrega tu peso actual y meta.</div>`;
   const usersList = state.users.map(u => `
     <div class="history-entry" style="margin-bottom:6px;">
       <div class="row">
-        <span class="dot" style="background:${u.color};width:14px;height:14px;border:2px solid var(--bg-elev);box-shadow:0 0 0 1px ${u.color};"></span>
+        ${avatarHtml(u, 22)}
         <div style="flex:1;">
           <div style="font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px;">${esc(u.name)} ${isUserAdmin(u) ? '<span class="admin-pill">admin</span>' : ''} ${u.id === state.currentUser ? '<span style="font-size:11px;color:var(--text-dim);">(tú)</span>' : ''}</div>
         </div>
         ${adm && u.id !== state.currentUser ? `<button data-action="deleteUser" data-uid="${u.id}" class="ghost-danger" style="padding:6px 12px;font-size:12px;">Eliminar</button>` : ''}
       </div>
     </div>`).join('');
-  const groupRows = state.joinedGroups.map(g => `
+  const groupRows = visibleAccountGroups().map(g => `
     <button data-action="switchGroup" data-group="${esc(g)}" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:${g===groupPath()?'var(--accent-bg)':'transparent'};border:none;text-align:left;border-radius:8px;">
       <i class="ti ${g===groupPath()?'ti-circle-check':'ti-circle'}" style="font-size:17px;color:${g===groupPath()?'var(--accent)':'var(--text-dim)'};"></i>
-      <span style="flex:1;font-weight:${g===groupPath()?'600':'500'};">${esc(g)}</span>
+      <span style="flex:1;min-width:0;">
+        <span style="display:block;font-weight:${g===groupPath()?'600':'500'};">${esc(groupDisplayName(g))}</span>
+        <span class="muted mono" style="display:block;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g)}</span>
+      </span>
     </button>`).join('');
 
   root.innerHTML = `
@@ -1906,7 +2115,7 @@ function renderSettings(){
     <div class="card" style="margin-bottom:16px;padding:6px;">
       <div style="padding:10px 12px 8px;display:flex;align-items:center;gap:10px;">
         <div style="flex:1;min-width:0;">
-          <div style="font-size:14px;font-weight:600;">${esc(state.groupConfig.groupName || groupPath())}</div>
+          <div style="font-size:14px;font-weight:600;">${esc(groupDisplayName(groupPath()))}</div>
           <div class="muted mono" style="font-size:11px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(groupPath())}</div>
         </div>
         <button data-action="copyGroupId" title="Copiar código del grupo" aria-label="Copiar código del grupo" style="padding:8px 10px;border-color:var(--border);background:var(--bg-elev-2);color:var(--accent);">
@@ -1929,6 +2138,15 @@ function renderSettings(){
 
     <div class="section-label">Cuenta</div>
     <div class="card" style="margin-bottom:16px;padding:6px;">
+      <button data-action="editProfile" style="width:100%;padding:14px 12px;display:flex;align-items:center;gap:12px;background:transparent;border:none;text-align:left;border-radius:8px;">
+        ${avatarHtml(me, 34)}
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:500;">Perfil y peso</div>
+          ${weightSummary}
+        </div>
+        <i class="ti ti-chevron-right" style="color:var(--text-dim);"></i>
+      </button>
+      <div style="height:1px;background:var(--border);margin:0 8px;"></div>
       <button data-action="changeMyPin" style="width:100%;padding:14px 12px;display:flex;align-items:center;gap:12px;background:transparent;border:none;text-align:left;border-radius:8px;">
         <i class="ti ti-key" style="font-size:18px;color:var(--accent);"></i>
         <span style="font-weight:500;">Cambiar mi PIN</span>
@@ -1960,6 +2178,21 @@ function renderSettings(){
           <i class="ti ti-copy" style="font-size:16px;"></i>
         </button>
       </div>
+      <div style="height:1px;background:var(--border);margin:6px 8px;"></div>
+      <button data-action="exportBackup" style="width:100%;padding:14px 12px;display:flex;align-items:center;gap:12px;background:transparent;border:none;text-align:left;border-radius:8px;">
+        <i class="ti ti-download" style="font-size:18px;color:var(--accent);"></i>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:500;">Exportar backup del grupo</div>
+          <div class="muted" style="font-size:12px;margin-top:2px;">Guarda usuarios, rutinas y progreso como JSON.</div>
+        </div>
+      </button>
+      <button data-action="importBackupModal" style="width:100%;padding:14px 12px;display:flex;align-items:center;gap:12px;background:transparent;border:none;text-align:left;border-radius:8px;">
+        <i class="ti ti-upload" style="font-size:18px;color:var(--warning);"></i>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:500;">Importar backup</div>
+          <div class="muted" style="font-size:12px;margin-top:2px;">Restaura este grupo desde un archivo JSON.</div>
+        </div>
+      </button>
     </div>` : ''}
 
     <div style="margin-top:32px;padding:14px;text-align:center;color:var(--text-dim);font-size:11px;font-family:var(--font-mono);">
@@ -2269,7 +2502,10 @@ async function handle(e){
     const groups = canShowGroups ? visibleAccountGroups().map(g => `
       <button data-action="switchGroup" data-group="${esc(g)}" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:${g===groupPath()?'var(--accent-bg)':'transparent'};border:none;text-align:left;border-radius:8px;">
         <i class="ti ${g===groupPath()?'ti-circle-check':'ti-circle'}" style="font-size:17px;color:${g===groupPath()?'var(--accent)':'var(--text-dim)'};"></i>
-        <span style="flex:1;font-weight:${g===groupPath()?'600':'500'};">${esc(g)}</span>
+        <span style="flex:1;min-width:0;">
+          <span style="display:block;font-weight:${g===groupPath()?'600':'500'};">${esc(groupDisplayName(g))}</span>
+          <span class="muted mono" style="display:block;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g)}</span>
+        </span>
       </button>`).join('') : '';
     openModal(`
       <h2 style="margin-bottom:4px;">Grupos</h2>
@@ -2397,6 +2633,52 @@ async function handle(e){
     await copyText(state.invitationPassword || INVITATION_PASSWORD_DEFAULT, 'Contraseña');
     return;
   }
+  if (a === 'exportBackup'){
+    if (!isAdmin()){ toast('Solo admin'); return; }
+    const filename = `star-jazz-backup-${groupPath()}-${today()}.json`;
+    downloadJson(filename, buildGroupBackup());
+    toast('Backup exportado');
+    return;
+  }
+  if (a === 'importBackupModal'){
+    if (!isAdmin()){ toast('Solo admin'); return; }
+    openModal(`
+      <h2 style="margin-bottom:8px;color:var(--warning);">Importar backup</h2>
+      <p class="muted" style="font-size:13px;margin:0 0 12px;">Esto puede sobrescribir usuarios, rutina compartida, rutinas personales y progreso del grupo actual.</p>
+      <div class="banner banner-warning" style="margin-bottom:14px;"><i class="ti ti-alert-triangle"></i>
+        <div>Primero exporta un backup actual. Importa solo archivos que pertenecen a <strong>${esc(groupPath())}</strong>.</div>
+      </div>
+      <label class="section-label" style="margin-bottom:6px;">Archivo JSON</label>
+      <input id="backupFile" type="file" accept="application/json,.json" style="margin-bottom:10px;" />
+      <label class="section-label" style="margin-bottom:6px;">Confirmación</label>
+      <input id="backupConfirm" type="text" placeholder="Escribe ${esc(groupPath())}" style="margin-bottom:8px;" />
+      <div id="backupErr" style="font-size:12px;color:var(--danger);min-height:14px;margin-bottom:8px;text-align:center;"></div>
+      <div style="display:flex;gap:8px;">
+        <button data-action="closeModal" style="flex:1;padding:10px;">Cancelar</button>
+        <button class="primary" data-action="confirmImportBackup" style="flex:1;padding:10px;font-weight:600;">Importar</button>
+      </div>
+    `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+    return;
+  }
+  if (a === 'confirmImportBackup'){
+    if (!isAdmin()){ toast('Solo admin'); return; }
+    const err = document.getElementById('backupErr');
+    const confirmText = (document.getElementById('backupConfirm').value || '').trim();
+    const file = document.getElementById('backupFile').files[0];
+    if (confirmText !== groupPath()){ err.textContent = 'El código del grupo no coincide'; return; }
+    if (!file){ err.textContent = 'Selecciona un archivo JSON'; return; }
+    try {
+      const backup = await readJsonFile(file);
+      await importGroupBackup(backup);
+      closeModal();
+      toast('Backup importado');
+      await reloadGroup();
+    } catch(ex){
+      console.error(ex);
+      err.textContent = ex.message || 'No se pudo importar';
+    }
+    return;
+  }
 
   // ====== User menu ======
   if (a === 'userMenu'){
@@ -2451,6 +2733,81 @@ async function handle(e){
         <button class="primary" data-action="submitChangePin" style="flex:1;padding:10px;font-weight:600;">Guardar</button>
       </div>
     `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+    return;
+  }
+  if (a === 'editProfile'){
+    const u = getMe();
+    if (!u) return;
+    const ps = profileStats(u);
+    const logs = ps.logs.slice().reverse().slice(0,6).map(l => `
+      <div class="history-entry" style="margin-bottom:6px;">
+        <div class="row">
+          <div>
+            <div class="mono" style="font-size:13px;font-weight:600;">${esc(l.weight)} lb</div>
+            <div class="muted" style="font-size:12px;">${esc(l.date || '')}${l.note ? ` · ${esc(l.note)}` : ''}</div>
+          </div>
+        </div>
+      </div>`).join('');
+    openModal(`
+      <h2 style="margin-bottom:12px;">Perfil</h2>
+      <div class="card" style="padding:12px;margin-bottom:12px;">
+        <div class="row">
+          ${avatarHtml(u, 46)}
+          <div>
+            <div style="font-weight:600;">${esc(u.name)}</div>
+            <div class="muted" style="font-size:12px;">${ps.latest ? `Peso actual ${ps.latest} lb` : 'Sin peso registrado'}${ps.goal ? ` · Meta ${ps.goal} lb` : ''}</div>
+          </div>
+        </div>
+      </div>
+      <label class="section-label" style="margin-bottom:6px;">Icono / avatar</label>
+      <input id="profileEmoji" type="text" maxlength="4" placeholder="Ej. 💪, ⭐, 🏋️" value="${esc(u.profile?.avatarEmoji || '')}" style="margin-bottom:10px;" />
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div>
+          <label class="section-label" style="margin-bottom:6px;">Peso actual (lb)</label>
+          <input id="profileCurrentWeight" type="number" min="0" step="0.1" value="${ps.latest || ''}" />
+        </div>
+        <div>
+          <label class="section-label" style="margin-bottom:6px;">Peso meta (lb)</label>
+          <input id="profileGoalWeight" type="number" min="0" step="0.1" value="${ps.goal || ''}" />
+        </div>
+      </div>
+      <div class="banner banner-info" style="margin-bottom:12px;"><i class="ti ti-info-circle"></i>
+        <div>Guardar peso actual agrega un registro al historial si cambió desde el último peso.</div>
+      </div>
+      <label class="section-label" style="margin-bottom:6px;">Nota del peso (opcional)</label>
+      <input id="profileWeightNote" type="text" maxlength="80" placeholder="Ej. despues de entrenar, en ayunas..." style="margin-bottom:12px;" />
+      <div class="section-label" style="margin-bottom:6px;">Historial reciente</div>
+      ${logs || '<div class="muted" style="font-size:13px;margin-bottom:12px;">Sin registros de peso todavía.</div>'}
+      <div id="profileErr" style="font-size:12px;color:var(--danger);min-height:14px;margin-bottom:8px;text-align:center;"></div>
+      <div style="display:flex;gap:8px;">
+        <button data-action="closeModal" style="flex:1;padding:10px;">Cancelar</button>
+        <button class="primary" data-action="saveProfile" style="flex:1;padding:10px;font-weight:600;">Guardar</button>
+      </div>
+    `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+    return;
+  }
+  if (a === 'saveProfile'){
+    const u = getMe();
+    const err = document.getElementById('profileErr');
+    if (!u) return;
+    const currentWeight = Number(document.getElementById('profileCurrentWeight').value || 0);
+    const goalWeight = Number(document.getElementById('profileGoalWeight').value || 0);
+    if (currentWeight < 0 || goalWeight < 0){ err.textContent = 'El peso no puede ser negativo'; return; }
+    const profile = { ...(u.profile || {}) };
+    profile.avatarEmoji = (document.getElementById('profileEmoji').value || '').trim();
+    profile.currentWeight = currentWeight || null;
+    profile.goalWeight = goalWeight || null;
+    profile.weightLogs = Array.isArray(profile.weightLogs) ? profile.weightLogs : [];
+    const latest = profile.weightLogs.slice().sort((x,y)=>String(x.date).localeCompare(String(y.date))).pop();
+    const note = (document.getElementById('profileWeightNote').value || '').trim();
+    if (currentWeight && (!latest || Number(latest.weight) !== currentWeight || latest.date !== today())){
+      profile.weightLogs.push({ date: today(), weight: currentWeight, note, createdAt: Date.now() });
+    }
+    u.profile = profile;
+    await saveUsers(state.users);
+    closeModal();
+    toast('Perfil actualizado');
+    render();
     return;
   }
   if (a === 'submitChangePin'){
@@ -2541,8 +2898,8 @@ async function handle(e){
   }
 
   // ====== Nav ======
-  if (a === 'openDay'){ state.currentDay = btn.dataset.day; state.view = 'day'; render(); return; }
-  if (a === 'goHome'){ state.view = 'home'; state.currentDay = null; state.currentExerciseIdx = null; state.showAlts = false; state.showMuscles = false; render(); return; }
+  if (a === 'openDay'){ state.currentDay = btn.dataset.day; state.view = 'day'; state.showRoutineMuscles = false; render(); return; }
+  if (a === 'goHome'){ state.view = 'home'; state.currentDay = null; state.currentExerciseIdx = null; state.showAlts = false; state.showMuscles = false; state.showRoutineMuscles = false; render(); return; }
   if (a === 'goDay'){ state.view = 'day'; state.currentExerciseIdx = null; state.showAlts = false; state.showMuscles = false; render(); return; }
   if (a === 'openEx'){ state.currentExerciseIdx = Number(btn.dataset.idx); state.view = 'exercise'; state.showAlts = false; state.showMuscles = false; render(); return; }
   if (a === 'goCompare'){ state.view = 'compare'; state.currentDay = null; state.currentExerciseIdx = null; render(); return; }
@@ -2593,6 +2950,7 @@ async function handle(e){
   // ====== Exercise view toggles ======
   if (a === 'toggleAlts'){ state.showAlts = !state.showAlts; render(); return; }
   if (a === 'toggleMuscles'){ state.showMuscles = !state.showMuscles; render(); return; }
+  if (a === 'toggleRoutineMuscles'){ state.showRoutineMuscles = !state.showRoutineMuscles; render(); return; }
   if (a === 'editExerciseFromView'){ state.view = 'editExercise'; render(); return; }
 
   // ====== Session save ======
