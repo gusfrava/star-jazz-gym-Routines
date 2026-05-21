@@ -982,6 +982,33 @@ function formatSetLine(set, idx){
 }
 const bestSet = (e) => !e.sets || !e.sets.length ? null : e.sets.reduce((b,s)=> setMaxWeight(s)>setMaxWeight(b)?s:b, e.sets[0]);
 const totalVolume = (e) => !e.sets ? 0 : e.sets.reduce((sum,x)=> sum + setVolume(x), 0);
+function publicTrainingStats(uid){
+  const userLogs = state.logs[uid] || {};
+  const sessions = [];
+  const byExercise = {};
+  let totalSets = 0;
+  let totalVolumeNum = 0;
+  let maxWeight = 0;
+  for (const [ek, entries] of Object.entries(userLogs)){
+    (entries || []).forEach(entry => {
+      const sets = entry.sets || [];
+      const volume = totalVolume(entry);
+      const best = bestSet(entry);
+      totalSets += sets.length;
+      totalVolumeNum += volume;
+      maxWeight = Math.max(maxWeight, best ? setMaxWeight(best) : 0);
+      if (!byExercise[ek]) byExercise[ek] = { ek, name: exerciseNameForKey(ek), sessions:0, sets:0, volume:0, maxWeight:0 };
+      byExercise[ek].sessions += 1;
+      byExercise[ek].sets += sets.length;
+      byExercise[ek].volume += volume;
+      byExercise[ek].maxWeight = Math.max(byExercise[ek].maxWeight, best ? setMaxWeight(best) : 0);
+      sessions.push({ ek, name: exerciseNameForKey(ek), date: entry.date, sets: sets.length, volume, maxWeight: best ? setMaxWeight(best) : 0 });
+    });
+  }
+  sessions.sort((a,b) => String(b.date).localeCompare(String(a.date)));
+  const topExercises = Object.values(byExercise).sort((a,b) => b.sessions - a.sessions || b.volume - a.volume).slice(0,5);
+  return { sessions, topExercises, totalSessions: sessions.length, totalSets, totalVolume: totalVolumeNum, maxWeight, lastDate: sessions[0]?.date || null };
+}
 const latestEntry = (uid, ek) => {
   const a = getEntries(uid, ek);
   return a.length ? a.slice().sort((x,y)=>x.date.localeCompare(y.date)).pop() : null;
@@ -1567,11 +1594,14 @@ function renderHome(){
         const lastTxt = last && last.latest ? `Último entreno: ${last.latest.date}` : 'Sin entrenos registrados';
         return `<div class="card fade-in" style="margin-bottom:6px;padding:12px 14px;animation-delay:${i*40}ms;">
           <div class="row">
-            <span class="dot" style="background:${u.color};width:14px;height:14px;border:2px solid var(--bg-elev);box-shadow:0 0 0 1px ${u.color};"></span>
+            ${avatarHtml(u, 28)}
             <div style="flex:1;">
               <div style="font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px;">${esc(u.name)} ${isUserAdmin(u) ? '<span class="admin-pill">admin</span>' : ''}</div>
               <div class="muted" style="font-size:12px;margin-top:2px;">${lastTxt}</div>
             </div>
+            <button data-action="viewPublicProfile" data-uid="${u.id}" aria-label="Ver perfil de ${esc(u.name)}" title="Ver perfil" style="padding:8px 10px;border-color:var(--border);background:var(--bg-elev);">
+              <i class="ti ti-eye" style="font-size:16px;color:var(--accent);"></i>
+            </button>
           </div>
         </div>`;
       }).join('')}
@@ -2895,6 +2925,66 @@ async function handle(e){
       delete state.personalRoutines[uid];
     }
     closeModal(); toast('Usuario eliminado'); render(); return;
+  }
+  if (a === 'viewPublicProfile'){
+    const uid = btn.dataset.uid;
+    const u = state.users.find(x => x.id === uid);
+    if (!u) return;
+    const stats = publicTrainingStats(uid);
+    const topExercises = stats.topExercises.length ? stats.topExercises.map(ex => `
+      <div style="padding:10px 0;border-bottom:1px solid var(--border);">
+        <div class="row" style="justify-content:space-between;align-items:flex-start;">
+          <div style="min-width:0;">
+            <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(ex.name)}</div>
+            <div class="muted mono" style="font-size:11px;margin-top:2px;">${ex.sessions} sesiones · ${ex.sets} sets · vol ${Math.round(ex.volume)}</div>
+          </div>
+          <span class="badge" style="background:var(--accent-bg);color:var(--accent);font-family:var(--font-mono);">${Math.round(ex.maxWeight)} lb</span>
+        </div>
+      </div>`).join('') : `<div class="muted" style="font-size:13px;text-align:center;padding:14px 0;">Todavía no tiene entrenos registrados.</div>`;
+    const recent = stats.sessions.slice(0,4).map(s => `
+      <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;">
+        <div style="min-width:0;">
+          <div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(s.name)}</div>
+          <div class="muted mono" style="font-size:11px;">${esc(s.date)} · ${s.sets} sets</div>
+        </div>
+        <div class="mono muted" style="white-space:nowrap;">vol ${Math.round(s.volume)}</div>
+      </div>`).join('');
+    openModal(`
+      <div class="row" style="align-items:center;margin-bottom:16px;">
+        ${avatarHtml(u, 54)}
+        <div style="min-width:0;">
+          <h2 style="margin-bottom:2px;">${esc(u.name)}</h2>
+          <div class="muted" style="font-size:12px;">Perfil público del grupo ${isUserAdmin(u) ? '<span class="admin-pill" style="margin-left:6px;">admin</span>' : ''}</div>
+        </div>
+      </div>
+      <div class="banner banner-info" style="margin-bottom:14px;">
+        <i class="ti ti-eye"></i>
+        <div>Vista de espectador: solo muestra progreso de entreno. Peso, meta y cambios corporales son privados.</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px;">
+        <div class="stat-card" style="padding:12px;">
+          <div class="stat-label">Sesiones</div>
+          <div class="stat-value" style="font-size:20px;">${stats.totalSessions}</div>
+        </div>
+        <div class="stat-card" style="padding:12px;">
+          <div class="stat-label">Sets</div>
+          <div class="stat-value" style="font-size:20px;">${stats.totalSets}</div>
+        </div>
+        <div class="stat-card" style="padding:12px;">
+          <div class="stat-label">Volumen</div>
+          <div class="stat-value" style="font-size:20px;">${Math.round(stats.totalVolume)}</div>
+        </div>
+        <div class="stat-card" style="padding:12px;">
+          <div class="stat-label">Max</div>
+          <div class="stat-value" style="font-size:20px;">${Math.round(stats.maxWeight)}<span style="font-size:11px;color:var(--text-muted);">lb</span></div>
+        </div>
+      </div>
+      <div class="section-label">Ejercicios más registrados</div>
+      <div style="margin-bottom:14px;">${topExercises}</div>
+      ${recent ? `<div class="section-label">Últimas sesiones</div><div style="margin-bottom:14px;">${recent}</div>` : ''}
+      <button data-action="closeModal" class="primary" style="width:100%;padding:12px;">Listo</button>
+    `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+    return;
   }
 
   // ====== Nav ======
