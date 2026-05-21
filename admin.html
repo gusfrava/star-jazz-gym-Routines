@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#0a0e1a">
+<title>Admin - Star Jazz Gym Buddy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.11.0/dist/tabler-icons.min.css">
+<style>
+:root {
+  --bg:#0a0e1a; --bg-elev:#10172a; --bg-elev-2:#1a2440; --border:rgba(255,255,255,0.08);
+  --border-strong:rgba(255,255,255,0.14); --text:#f0f4ff; --text-muted:#8b96b3; --text-dim:#5a6585;
+  --accent:#3b9eff; --accent-bg:rgba(59,158,255,0.12); --accent-border:rgba(59,158,255,0.35);
+  --accent-grad:linear-gradient(135deg,#3b9eff 0%,#6ec2ff 100%); --success:#34d399; --danger:#f87171;
+  --danger-bg:rgba(248,113,113,0.12); --warning:#fbbf24; --warning-bg:rgba(251,191,36,0.12);
+  --radius:14px; --font-sans:'Geist',-apple-system,BlinkMacSystemFont,sans-serif; --font-mono:'Geist Mono',ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:radial-gradient(ellipse 70% 45% at 50% -20%,rgba(59,158,255,0.16),transparent 70%),var(--bg);color:var(--text);font-family:var(--font-sans);font-size:15px;line-height:1.45}
+#app{max-width:1180px;margin:0 auto;padding:24px 18px 80px;min-height:100vh}
+h1,h2,h3{margin:0;font-weight:700;letter-spacing:-0.02em} h1{font-size:28px} h2{font-size:18px} h3{font-size:15px}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer;color:var(--text);background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:10px;padding:10px 14px;font-weight:600;transition:.15s}
+button:hover{background:var(--bg-elev-2);border-color:var(--accent-border)}
+button.primary{background:var(--accent-grad);border-color:transparent;color:white;box-shadow:0 4px 16px rgba(59,158,255,.25)}
+button.danger{background:transparent;border-color:rgba(248,113,113,.45);color:var(--danger)}
+button.danger:hover{background:var(--danger-bg)}
+input,select,textarea{width:100%;background:var(--bg-elev);color:var(--text);border:1px solid var(--border-strong);border-radius:10px;padding:11px 13px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-bg)}
+.card{background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:0 4px 18px rgba(0,0,0,.22)}
+.muted{color:var(--text-muted)} .dim{color:var(--text-dim)} .mono{font-family:var(--font-mono)}
+.row{display:flex;align-items:center;gap:10px}.spacer{flex:1}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.two-col{display:grid;grid-template-columns:340px minmax(0,1fr);gap:14px}
+.stat{padding:15px}.stat .value{font-family:var(--font-mono);font-size:28px;font-weight:700}.stat .label{font-family:var(--font-mono);font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.1em}
+.section-label{font-family:var(--font-mono);font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:999px;font-size:12px;background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-border);font-weight:700}
+.danger-pill{background:var(--danger-bg);color:var(--danger);border-color:rgba(248,113,113,.35)}
+.list-btn{display:block;width:100%;text-align:left;margin-bottom:8px;padding:12px;background:var(--bg-elev);border:1px solid var(--border);border-radius:12px}
+.list-btn.active{background:var(--accent-bg);border-color:var(--accent-border)}
+.table{width:100%;border-collapse:collapse}.table th,.table td{border-bottom:1px solid var(--border);padding:10px 8px;text-align:left;vertical-align:top}.table th{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em;font-family:var(--font-mono)}
+.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(10px);opacity:0;pointer-events:none;background:var(--bg-elev-2);border:1px solid var(--accent-border);border-radius:999px;padding:12px 20px;transition:.25s;z-index:20}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.loader{display:inline-block;width:16px;height:16px;border:2px solid var(--border-strong);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+.banner{display:flex;gap:10px;padding:12px 14px;border-radius:12px;font-size:13px;background:var(--warning-bg);border:1px solid rgba(251,191,36,.25);color:var(--warning)}
+@media (max-width:860px){.grid{grid-template-columns:repeat(2,1fr)}.two-col{grid-template-columns:1fr}#app{padding:18px 14px 70px}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div style="text-align:center;padding:60px 20px;color:var(--text-muted);">
+    <span class="loader"></span>
+    <div style="margin-top:12px;">Cargando dashboard...</div>
+  </div>
+</div>
+<div id="toast" class="toast"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import {
+  getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import {
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signOut
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCtBoM682hSEh2Og7PHbsO7wDGHwqiCiKU",
+  authDomain: "progreso-de-rutinas.firebaseapp.com",
+  projectId: "progreso-de-rutinas",
+  storageBucket: "progreso-de-rutinas.firebasestorage.app",
+  messagingSenderId: "1080289668591",
+  appId: "1:1080289668591:web:f902974b98717bc71b1a1a"
+};
+
+// Keep this private. Add extra admin emails here during beta if needed.
+const ADMIN_EMAILS = ["gusfraba96@gmail.com"];
+const DEFAULT_GROUP = "jazmin-y-buddy-2026";
+
+const fbApp = initializeApp(firebaseConfig);
+const db = getFirestore(fbApp);
+const auth = getAuth(fbApp);
+const root = document.getElementById('app');
+const state = {
+  authReady:false, user:null, accounts:[], memberships:[], groupIds:[DEFAULT_GROUP], groups:{}, selectedGroup:DEFAULT_GROUP, loading:false
+};
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const toast = msg => {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'), 2200);
+};
+const isAdminEmail = user => !!user && ADMIN_EMAILS.map(e=>e.toLowerCase()).includes((user.email || '').toLowerCase());
+const sum = arr => arr.reduce((a,b)=>a+b,0);
+function entryVolume(entry){
+  return (entry.sets || []).reduce((total,set)=>{
+    if (set.unilateral) {
+      return total + (Number(set.leftReps)||0)*(Number(set.leftWeight)||0) + (Number(set.rightReps)||0)*(Number(set.rightWeight)||0);
+    }
+    return total + (Number(set.reps)||0)*(Number(set.weight)||0);
+  }, 0);
+}
+function logStats(logs){
+  let sessions = 0, sets = 0, volume = 0, last = '';
+  Object.values(logs || {}).forEach(userLogs => {
+    Object.values(userLogs || {}).forEach(entries => {
+      (entries || []).forEach(entry => {
+        sessions++;
+        sets += (entry.sets || []).length;
+        volume += entryVolume(entry);
+        if (!last || entry.date > last) last = entry.date;
+      });
+    });
+  });
+  return { sessions, sets, volume, last };
+}
+
+async function readGroup(groupId){
+  const [cfgSnap, usersSnap, routineSnap, logsSnap, personalSnap] = await Promise.all([
+    getDoc(doc(db,'salas',groupId,'meta','config')),
+    getDoc(doc(db,'salas',groupId,'meta','users')),
+    getDoc(doc(db,'salas',groupId,'routines','shared')),
+    getDocs(collection(db,'salas',groupId,'logs')),
+    getDocs(collection(db,'salas',groupId,'personalRoutines'))
+  ]);
+  const logs = {};
+  logsSnap.forEach(d => logs[d.id] = d.data());
+  const personalRoutines = {};
+  personalSnap.forEach(d => personalRoutines[d.id] = d.data().routine || {});
+  const users = usersSnap.exists() ? (usersSnap.data().users || []) : [];
+  const config = cfgSnap.exists() ? cfgSnap.data() : { groupName: groupId, adminIds: [] };
+  const routine = routineSnap.exists() ? (routineSnap.data().routine || {}) : {};
+  return { id: groupId, config, users, routine, logs, personalRoutines, stats: logStats(logs) };
+}
+
+async function discoverGroupIds(){
+  const ids = new Set([DEFAULT_GROUP]);
+  state.accounts.forEach(a => (a.groups || []).forEach(g => ids.add(g)));
+  state.memberships.forEach(m => (m.groups || []).forEach(g => ids.add(g)));
+  return [...ids].filter(Boolean).sort();
+}
+
+async function loadDashboard(){
+  state.loading = true; render();
+  try {
+    const [accountSnap, membershipSnap] = await Promise.all([
+      getDocs(collection(db,'accounts')),
+      getDocs(collection(db,'memberships'))
+    ]);
+    state.accounts = accountSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+    state.memberships = membershipSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+    state.groupIds = await discoverGroupIds();
+    const groups = {};
+    for (const groupId of state.groupIds){
+      try { groups[groupId] = await readGroup(groupId); }
+      catch(e){ console.error(e); groups[groupId] = { id:groupId, error:e.message, users:[], logs:{}, personalRoutines:{}, config:{ groupName: groupId }, stats:logStats({}) }; }
+    }
+    state.groups = groups;
+    if (!state.groups[state.selectedGroup]) state.selectedGroup = state.groupIds[0] || DEFAULT_GROUP;
+  } catch(e){
+    console.error(e);
+    toast('No pude cargar el dashboard. Revisa reglas de Firestore.');
+  }
+  state.loading = false; render();
+}
+
+function renderLogin(){
+  root.innerHTML = `
+    <div style="max-width:420px;margin:0 auto;padding-top:42px;">
+      <div style="font-size:42px;margin-bottom:8px;">🛠️</div>
+      <h1 style="margin-bottom:6px;">Admin Dashboard</h1>
+      <p class="muted" style="margin:0 0 20px;">Entra con una cuenta admin para ver grupos, usuarios y herramientas de soporte.</p>
+      <div class="card" style="margin-bottom:14px;">
+        <label class="section-label">Email admin</label>
+        <input id="email" type="email" placeholder="admin@email.com" style="margin-bottom:10px;">
+        <label class="section-label">Contraseña</label>
+        <input id="password" type="password" placeholder="Contraseña" style="margin-bottom:12px;">
+        <button class="primary" data-action="emailLogin" style="width:100%;padding:13px;">Entrar</button>
+        <div id="loginErr" style="color:var(--danger);font-size:12px;text-align:center;margin-top:10px;min-height:16px;"></div>
+      </div>
+      <button data-action="googleLogin" style="width:100%;padding:13px;"><i class="ti ti-brand-google" style="color:var(--accent);"></i> Continuar con Google</button>
+      <div class="banner" style="margin-top:16px;">
+        <i class="ti ti-alert-triangle"></i>
+        <div>Este dashboard es para beta privada. No lo publiques como herramienta consumer hasta tener reglas seguras por rol.</div>
+      </div>
+    </div>`;
+  attach();
+}
+
+function renderForbidden(){
+  root.innerHTML = `
+    <div style="max-width:520px;margin:0 auto;padding-top:42px;">
+      <h1 style="margin-bottom:8px;">Acceso restringido</h1>
+      <p class="muted">Entraste como <strong>${esc(state.user?.email)}</strong>, pero ese email no está en la lista admin.</p>
+      <div class="card" style="margin:18px 0;">
+        <div class="section-label">Admins permitidos</div>
+        ${ADMIN_EMAILS.map(e => `<div class="mono">${esc(e)}</div>`).join('')}
+      </div>
+      <button data-action="logout">Cerrar sesión</button>
+    </div>`;
+  attach();
+}
+
+function render(){
+  if (!state.authReady){
+    root.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--text-muted);"><span class="loader"></span><div style="margin-top:12px;">Revisando sesión...</div></div>`;
+    return;
+  }
+  if (!state.user) return renderLogin();
+  if (!isAdminEmail(state.user)) return renderForbidden();
+  renderDashboard();
+}
+
+function renderDashboard(){
+  const selected = state.groups[state.selectedGroup] || {};
+  const stats = selected.stats || logStats({});
+  const totalUsers = sum(Object.values(state.groups).map(g => (g.users || []).length));
+  const totalSessions = sum(Object.values(state.groups).map(g => (g.stats || {}).sessions || 0));
+  root.innerHTML = `
+    <div class="row" style="margin-bottom:22px;">
+      <div>
+        <h1>Admin Dashboard</h1>
+        <div class="muted" style="font-size:13px;">${esc(state.user.email)} · private beta</div>
+      </div>
+      <div class="spacer"></div>
+      <button data-action="refresh"><i class="ti ti-refresh"></i> Refrescar</button>
+      <button data-action="logout"><i class="ti ti-logout"></i> Salir</button>
+    </div>
+
+    <div class="grid" style="margin-bottom:14px;">
+      <div class="card stat"><div class="label">Grupos</div><div class="value">${state.groupIds.length}</div></div>
+      <div class="card stat"><div class="label">Usuarios</div><div class="value">${totalUsers}</div></div>
+      <div class="card stat"><div class="label">Sesiones</div><div class="value">${totalSessions}</div></div>
+      <div class="card stat"><div class="label">Cuentas Auth</div><div class="value">${state.accounts.length}</div></div>
+    </div>
+
+    <div class="two-col">
+      <div>
+        <div class="card" style="margin-bottom:12px;">
+          <div class="section-label">Cargar grupo por código</div>
+          <div class="row">
+            <input id="manualGroupId" placeholder="codigo-del-grupo">
+            <button data-action="loadManualGroup">Cargar</button>
+          </div>
+        </div>
+        <div class="section-label">Grupos descubiertos</div>
+        ${state.groupIds.map(g => {
+          const item = state.groups[g] || {};
+          const s = item.stats || {};
+          return `<button data-action="selectGroup" data-group="${esc(g)}" class="list-btn ${g === state.selectedGroup ? 'active' : ''}">
+            <div class="row">
+              <strong style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc((item.config && item.config.groupName) || g)}</strong>
+              ${g === DEFAULT_GROUP ? '<span class="pill">original</span>' : ''}
+            </div>
+            <div class="muted mono" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g)}</div>
+            <div class="muted" style="font-size:12px;margin-top:4px;">${(item.users || []).length} usuarios · ${s.sessions || 0} sesiones</div>
+          </button>`;
+        }).join('')}
+      </div>
+      <div>${renderGroupDetail(selected, stats)}</div>
+    </div>`;
+  attach();
+}
+
+function renderGroupDetail(group, stats){
+  if (!group || !group.id) return `<div class="card">Selecciona un grupo.</div>`;
+  const users = group.users || [];
+  const admins = (group.config && group.config.adminIds) || [];
+  return `
+    <div class="card" style="margin-bottom:12px;">
+      <div class="row" style="align-items:flex-start;">
+        <div style="min-width:0;">
+          <h2>${esc((group.config && group.config.groupName) || group.id)}</h2>
+          <div class="muted mono" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;">${esc(group.id)}</div>
+        </div>
+        <div class="spacer"></div>
+        <button data-action="copyGroupCode" data-group="${esc(group.id)}">Copiar código</button>
+        <button data-action="exportGroup" data-group="${esc(group.id)}">Exportar JSON</button>
+      </div>
+      ${group.error ? `<div class="banner" style="margin-top:12px;"><i class="ti ti-alert-triangle"></i><div>${esc(group.error)}</div></div>` : ''}
+    </div>
+    <div class="grid" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:12px;">
+      <div class="card stat"><div class="label">Usuarios</div><div class="value">${users.length}</div></div>
+      <div class="card stat"><div class="label">Sesiones</div><div class="value">${stats.sessions || 0}</div></div>
+      <div class="card stat"><div class="label">Sets</div><div class="value">${stats.sets || 0}</div></div>
+      <div class="card stat"><div class="label">Volumen</div><div class="value">${Math.round(stats.volume || 0)}</div></div>
+    </div>
+    <div class="card" style="margin-bottom:12px;">
+      <div class="row" style="margin-bottom:10px;">
+        <h2>Usuarios</h2><div class="spacer"></div><span class="muted">Ultima sesión: ${esc(stats.last || 'n/a')}</span>
+      </div>
+      ${users.length ? `<table class="table">
+        <thead><tr><th>Nombre</th><th>ID</th><th>Rol</th><th>Sesiones</th><th>Acciones</th></tr></thead>
+        <tbody>
+          ${users.map(u => {
+            const userLog = group.logs && group.logs[u.id] ? group.logs[u.id] : {};
+            const userStats = logStats({ [u.id]: userLog });
+            const admin = admins.includes(u.id) || String(u.name || '').toLowerCase() === 'jazmin';
+            return `<tr>
+              <td><strong>${esc(u.name)}</strong></td>
+              <td class="mono" style="font-size:11px;">${esc(u.id)}</td>
+              <td>${admin ? '<span class="pill">admin</span>' : '<span class="muted">member</span>'}</td>
+              <td>${userStats.sessions}</td>
+              <td>
+                <button data-action="inspectUser" data-group="${esc(group.id)}" data-uid="${esc(u.id)}">Ver</button>
+                ${admin ? '' : `<button class="danger" data-action="removeUserSoft" data-group="${esc(group.id)}" data-uid="${esc(u.id)}">Quitar</button>`}
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>` : `<div class="muted">No hay usuarios guardados en este grupo.</div>`}
+    </div>
+    <div class="card">
+      <h2 style="margin-bottom:10px;">Troubleshooting</h2>
+      <div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr));">
+        <button data-action="showRawConfig" data-group="${esc(group.id)}">Ver config raw</button>
+        <button data-action="showRawLogs" data-group="${esc(group.id)}">Ver logs raw</button>
+        <button data-action="showRoutineSummary" data-group="${esc(group.id)}">Resumen rutina</button>
+      </div>
+    </div>`;
+}
+
+function openModal(title, body){
+  const existing = document.getElementById('modal');
+  if (existing) existing.remove();
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="modal" style="position:fixed;inset:0;background:rgba(5,10,25,.72);backdrop-filter:blur(8px);z-index:10;display:flex;align-items:center;justify-content:center;padding:16px;">
+      <div class="card" style="width:min(760px,100%);max-height:86vh;overflow:auto;">
+        <div class="row" style="margin-bottom:12px;"><h2>${esc(title)}</h2><div class="spacer"></div><button data-action="closeModal">Cerrar</button></div>
+        ${body}
+      </div>
+    </div>`);
+  document.querySelectorAll('#modal [data-action]').forEach(el => el.addEventListener('click', handle));
+}
+function closeModal(){ document.getElementById('modal')?.remove(); }
+function downloadJson(name, data){
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function handle(e){
+  const btn = e.currentTarget;
+  const action = btn.dataset.action;
+  if (action === 'emailLogin'){
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    const err = document.getElementById('loginErr');
+    try { await signInWithEmailAndPassword(auth, email, password); }
+    catch(ex){ console.error(ex); err.textContent = ex.code || 'No pude entrar'; }
+    return;
+  }
+  if (action === 'googleLogin'){
+    try { await signInWithPopup(auth, new GoogleAuthProvider()); }
+    catch(ex){ console.error(ex); toast(ex.code || 'No pude entrar con Google'); }
+    return;
+  }
+  if (action === 'logout'){ await signOut(auth); return; }
+  if (action === 'refresh'){ await loadDashboard(); return; }
+  if (action === 'selectGroup'){ state.selectedGroup = btn.dataset.group; render(); return; }
+  if (action === 'loadManualGroup'){
+    const id = document.getElementById('manualGroupId').value.trim();
+    if (!id) return toast('Escribe un código');
+    state.groups[id] = await readGroup(id);
+    state.groupIds = Array.from(new Set([...state.groupIds, id])).sort();
+    state.selectedGroup = id;
+    render(); return;
+  }
+  if (action === 'copyGroupCode'){
+    await navigator.clipboard.writeText(btn.dataset.group);
+    toast('Código copiado'); return;
+  }
+  if (action === 'exportGroup'){
+    const g = state.groups[btn.dataset.group];
+    downloadJson(`gym-group-${btn.dataset.group}.json`, g);
+    return;
+  }
+  if (action === 'inspectUser'){
+    const g = state.groups[btn.dataset.group];
+    const u = (g.users || []).find(x => x.id === btn.dataset.uid);
+    const logs = (g.logs || {})[btn.dataset.uid] || {};
+    const personalRoutine = (g.personalRoutines || {})[btn.dataset.uid] || {};
+    openModal(`Usuario: ${u ? u.name : btn.dataset.uid}`, `<pre class="mono" style="white-space:pre-wrap;font-size:12px;">${esc(JSON.stringify({ user:u, stats:logStats({ [btn.dataset.uid]: logs }), logs, personalRoutine }, null, 2))}</pre>`);
+    return;
+  }
+  if (action === 'removeUserSoft'){
+    const groupId = btn.dataset.group;
+    const uid = btn.dataset.uid;
+    const g = state.groups[groupId];
+    const u = (g.users || []).find(x => x.id === uid);
+    if (!u) return;
+    const ok = confirm(`Quitar a ${u.name} del grupo ${groupId}? Sus logs se mantienen.`);
+    if (!ok) return;
+    const users = (g.users || []).filter(x => x.id !== uid);
+    await setDoc(doc(db,'salas',groupId,'meta','users'), { users });
+    state.groups[groupId] = await readGroup(groupId);
+    toast('Usuario quitado');
+    render(); return;
+  }
+  if (action === 'showRawConfig'){
+    const g = state.groups[btn.dataset.group];
+    openModal('Config raw', `<pre class="mono" style="white-space:pre-wrap;font-size:12px;">${esc(JSON.stringify(g.config || {}, null, 2))}</pre>`);
+    return;
+  }
+  if (action === 'showRawLogs'){
+    const g = state.groups[btn.dataset.group];
+    openModal('Logs raw', `<pre class="mono" style="white-space:pre-wrap;font-size:12px;">${esc(JSON.stringify(g.logs || {}, null, 2))}</pre>`);
+    return;
+  }
+  if (action === 'showRoutineSummary'){
+    const g = state.groups[btn.dataset.group];
+    const days = Object.entries(g.routine || {}).map(([key, day]) => ({ day:key, label:day.label, focus:day.focus, exercises:(day.exercises || []).length }));
+    openModal('Resumen de rutina', `<pre class="mono" style="white-space:pre-wrap;font-size:12px;">${esc(JSON.stringify(days, null, 2))}</pre>`);
+    return;
+  }
+  if (action === 'closeModal'){ closeModal(); return; }
+}
+function attach(){ document.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); }
+
+onAuthStateChanged(auth, async user => {
+  state.authReady = true;
+  state.user = user;
+  if (user && isAdminEmail(user)) await loadDashboard();
+  else render();
+});
+</script>
+</body>
+</html>
