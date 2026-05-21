@@ -248,6 +248,18 @@ try {
   firebaseReady = !firebaseConfig.apiKey.startsWith("REEMPLAZA");
 } catch (e) { console.error("Firebase init error:", e); }
 
+function dateKey(date = new Date()){
+  const d = date instanceof Date ? date : new Date(date);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function parseDateKey(key){
+  const [y,m,d] = String(key || '').split('-').map(Number);
+  return new Date(y || new Date().getFullYear(), (m || 1) - 1, d || 1);
+}
+
 // ====== MUSCLES ======
 const MUSCLES = {
   chest:{label:'Pecho'}, abs:{label:'Abdominales'}, obliques:{label:'Oblicuos'},
@@ -332,7 +344,7 @@ const state = {
   routineSource: {},      // { dayKey: 'shared'|'personal' }
   invitationPassword: '',
   groupConfig: {},
-  dailyDate: new Date().toISOString().slice(0,10),
+  dailyDate: dateKey(),
   editingSession: null,
   setupStep: null,
   pendingUserId: null,
@@ -794,7 +806,7 @@ async function deleteCurrentGroup(){
 
 // ====== HELPERS ======
 const exerciseKey = (d,i) => d+':'+i;
-const today = () => new Date().toISOString().slice(0,10);
+const today = () => dateKey();
 const userColor = (i) => ['#f97316','#22c55e','#3b82f6','#a855f7','#ec4899','#eab308','#06b6d4','#84cc16'][i % 8];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function sha(s){
@@ -886,8 +898,8 @@ function bucketEntries(entries, mode){
   for (const e of entries){
     let key;
     if (mode==='week'){
-      const d = new Date(e.date); const day = (d.getDay()+6)%7;
-      d.setDate(d.getDate()-day); key = d.toISOString().slice(0,10);
+      const d = parseDateKey(e.date); const day = (d.getDay()+6)%7;
+      d.setDate(d.getDate()-day); key = dateKey(d);
     } else if (mode==='month'){ key = e.date.slice(0,7); }
     else { key = e.date.slice(0,4); }
     if (!b[key]) b[key] = { key, maxWeight:0, totalVolume:0, sessions:0 };
@@ -1325,7 +1337,7 @@ function renderHome(){
     const totalEx = r.exercises.length;
     let logged = 0;
     const ws = new Date(); ws.setDate(ws.getDate()-((ws.getDay()+6)%7));
-    const wss = ws.toISOString().slice(0,10);
+    const wss = dateKey(ws);
     for (let j=0;j<totalEx;j++){
       const ek = exerciseKey(dk,j);
       if (state.currentUser && getEntries(state.currentUser, ek).some(e => e.date >= wss)) logged++;
