@@ -376,6 +376,11 @@ const state = {
   sharedRoutine: null,
   personalRoutines: {},
   routineSource: {},      // { dayKey: 'shared'|'personal' }
+  // ====== Library (Fase 1) ======
+  library: {},            // { routineId: {id, name, focus, icon, exercises[], scope:'shared', updatedAt} }
+  personalLibrary: {},    // { routineId: {... scope:'personal'} } — del usuario actual
+  libraryView: 'shared',  // 'shared' | 'personal'
+  editingLibraryRoutineId: null,
   invitationPassword: '',
   groupConfig: {},
   dailyDate: dateKey(),
@@ -686,6 +691,114 @@ async function deletePersonalRoutineDoc(userId){
   try { await deleteDoc(doc(db,'salas',groupPath(),'personalRoutines',userId)); }
   catch(e){ console.error(e); }
 }
+
+// ====== LIBRARY (Fase 1) — biblioteca de rutinas independientes de días ======
+// Estructura:
+//   /salas/{gid}/library/{routineId}  → { id, name, focus, icon, exercises[], scope:'shared', updatedAt, createdAt }
+//   /salas/{gid}/personalLibraries/{userId}  → { routines: { routineId: {...} } }
+function libRoutineFromDay(day, routine){
+  // Convierte un día tradicional (martes, miércoles...) en una plantilla de biblioteca
+  return {
+    id: 'lib_'+day,
+    name: routine.label || day,
+    focus: routine.focus || '',
+    icon: routine.icon || 'ti-barbell',
+    exercises: Array.isArray(routine.exercises) ? JSON.parse(JSON.stringify(routine.exercises)) : [],
+    scope: 'shared',
+    originDay: day,           // mantenemos referencia al día original para que el log key siga igual
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+}
+async function loadSharedLibrary(groupId = groupPath()){
+  if (!firebaseReady){
+    return JSON.parse(localStorage.getItem(groupLocalKey('library', groupId))||'{}');
+  }
+  try {
+    const out = {};
+    const snap = await getDocs(collection(db,'salas',groupId,'library'));
+    snap.forEach(d => { out[d.id] = d.data(); });
+    return out;
+  } catch(e){ console.error(e); return {}; }
+}
+async function saveLibraryRoutine(routine){
+  if (!routine || !routine.id) return;
+  routine.updatedAt = Date.now();
+  if (!firebaseReady){
+    const lib = JSON.parse(localStorage.getItem(groupLocalKey('library'))||'{}');
+    lib[routine.id] = routine;
+    localStorage.setItem(groupLocalKey('library'), JSON.stringify(lib));
+    return;
+  }
+  state.syncing = true;
+  try { await setDoc(doc(db,'salas',groupPath(),'library',routine.id), routine); }
+  catch(e){ console.error(e); toast('Error al guardar plantilla'); }
+  state.syncing = false;
+}
+async function deleteLibraryRoutine(routineId){
+  if (!firebaseReady){
+    const lib = JSON.parse(localStorage.getItem(groupLocalKey('library'))||'{}');
+    delete lib[routineId];
+    localStorage.setItem(groupLocalKey('library'), JSON.stringify(lib));
+    return;
+  }
+  try { await deleteDoc(doc(db,'salas',groupPath(),'library',routineId)); }
+  catch(e){ console.error(e); toast('Error al eliminar'); }
+}
+async function loadPersonalLibrary(userId, groupId = groupPath()){
+  if (!userId) return {};
+  if (!firebaseReady){
+    return JSON.parse(localStorage.getItem(groupLocalKey('personalLibrary:'+userId, groupId))||'{}');
+  }
+  try {
+    const snap = await getDoc(doc(db,'salas',groupId,'personalLibraries',userId));
+    return snap.exists() ? (snap.data().routines || {}) : {};
+  } catch(e){ console.error(e); return {}; }
+}
+async function savePersonalLibrary(userId, routines){
+  if (!userId) return;
+  if (!firebaseReady){
+    localStorage.setItem(groupLocalKey('personalLibrary:'+userId), JSON.stringify(routines));
+    return;
+  }
+  state.syncing = true;
+  try { await setDoc(doc(db,'salas',groupPath(),'personalLibraries',userId), { routines }); }
+  catch(e){ console.error(e); toast('Error al guardar biblioteca'); }
+  state.syncing = false;
+}
+async function migrateSharedRoutineToLibrary(){
+  // Si la biblioteca ya tiene plantillas, no hacemos nada (idempotente)
+  if (state.library && Object.keys(state.library).length > 0) return false;
+  if (!state.sharedRoutine) return false;
+  const lib = {};
+  for (const dayKey of Object.keys(state.sharedRoutine)){
+    const day = state.sharedRoutine[dayKey];
+    if (!day || !day.exercises || !day.exercises.length) continue;
+    const r = libRoutineFromDay(dayKey, day);
+    lib[r.id] = r;
+    // Guardamos cada plantilla en Firestore por separado
+    await saveLibraryRoutine(r);
+  }
+  state.library = lib;
+  console.log('[migration] Created library from sharedRoutine:', Object.keys(lib).length, 'routines');
+  return true;
+}
+
+function newRoutineId(){ return 'lib_'+Date.now()+'_'+Math.random().toString(36).slice(2,7); }
+function createEmptyLibraryRoutine(scope = 'shared'){
+  return {
+    id: newRoutineId(),
+    name: 'Nueva Rutina',
+    focus: '',
+    icon: 'ti-barbell',
+    exercises: [],
+    scope,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+}
+
+
 function loadMe(groupId = groupPath()){ return localStorage.getItem(groupLocalKey(LS_ME, groupId)) || (groupId === DEFAULT_GROUP ? localStorage.getItem(LS_ME) : null); }
 function saveMe(id){ localStorage.setItem(groupLocalKey(LS_ME), id); if (groupPath() === DEFAULT_GROUP) localStorage.setItem(LS_ME, id); }
 function clearMe(){ localStorage.removeItem(groupLocalKey(LS_ME)); if (groupPath() === DEFAULT_GROUP) localStorage.removeItem(LS_ME); }
@@ -757,12 +870,13 @@ function blankRoutine(){
 }
 async function readGroupState(groupId = groupPath()){
   const gid = groupId || DEFAULT_GROUP;
-  const [cfg, rawUsers, sharedRoutine, personalRoutines, logs] = await Promise.all([
+  const [cfg, rawUsers, sharedRoutine, personalRoutines, logs, library] = await Promise.all([
     loadConfig(gid),
     loadUsers(gid),
     loadSharedRoutine(gid),
     loadAllPersonalRoutines(gid),
-    loadAllLogs(gid)
+    loadAllLogs(gid),
+    loadSharedLibrary(gid)
   ]);
   const users = await filterUsersForGroup(gid, rawUsers, cfg, [loadMe(gid)]);
   if (gid !== DEFAULT_GROUP && JSON.stringify(rawUsers) !== JSON.stringify(users)){
@@ -775,6 +889,7 @@ async function readGroupState(groupId = groupPath()){
     sharedRoutine: normalizeRoutine(sharedRoutine),
     personalRoutines,
     logs,
+    library,
     routineSource: loadRoutineSource(gid)
   };
 }
@@ -786,7 +901,18 @@ async function loadGroupState(groupId = groupPath()){
   state.sharedRoutine = data.sharedRoutine;
   state.personalRoutines = data.personalRoutines;
   state.logs = data.logs;
+  state.library = data.library || {};
   state.routineSource = data.routineSource;
+  // Auto-migración no destructiva: si no hay biblioteca, la creamos desde sharedRoutine
+  if (Object.keys(state.library).length === 0 && state.sharedRoutine){
+    await migrateSharedRoutineToLibrary();
+  }
+  // Cargar biblioteca personal si hay usuario actual
+  if (state.currentUser){
+    state.personalLibrary = await loadPersonalLibrary(state.currentUser, groupId);
+  } else {
+    state.personalLibrary = {};
+  }
 }
 function chooseInitialViewForGroup(){
   const meId = loadMe();
@@ -863,7 +989,17 @@ async function switchGroup(groupId){
     state.sharedRoutine = data.sharedRoutine;
     state.personalRoutines = data.personalRoutines;
     state.logs = data.logs;
+    state.library = data.library || {};
     state.routineSource = data.routineSource;
+    // Migración / personal library después de set
+    if (Object.keys(state.library).length === 0 && state.sharedRoutine){
+      try { await migrateSharedRoutineToLibrary(); } catch(e){ console.error(e); }
+    }
+    if (state.currentUser){
+      try { state.personalLibrary = await loadPersonalLibrary(state.currentUser, groupId); } catch(e){ console.error(e); state.personalLibrary = {}; }
+    } else {
+      state.personalLibrary = {};
+    }
     if (state.account){
       const recoveredGroups = await recoverAccountGroupsFromProfiles();
       const groups = Array.from(new Set([...(state.account.groups || []), ...(recoveredGroups || [])]));
@@ -1511,6 +1647,111 @@ function openModal(html, onAttach){
 }
 function closeModal(){ modalRoot.innerHTML = ''; state.modalOpen = null; }
 
+// ====== LIBRARY exercise editor (modal) ======
+function openLibExerciseEditor(initial, onSave){
+  const ex = JSON.parse(JSON.stringify(initial || { name:'', video:'', primary:[], secondary:[], alts:[] }));
+  window._libExDraft = ex;
+
+  function renderMuscles(){
+    return MUSCLE_IDS.map(m => {
+      const isP = ex.primary.includes(m);
+      const isS = ex.secondary.includes(m);
+      const cls = isP ? 'primary' : isS ? 'secondary' : '';
+      return `<div class="muscle-chip ${cls}" data-mid="${m}">
+        <span>${MUSCLES[m].label}</span>
+        <span style="font-size:10px;font-weight:600;">${isP?'●●':isS?'●':''}</span>
+      </div>`;
+    }).join('');
+  }
+  function renderAlts(){
+    return (ex.alts || []).map((a, i) => `
+      <div class="alt-row">
+        <input type="text" data-alt-i="${i}" value="${esc(a)}" maxlength="80" />
+        <button data-rm-alt="${i}" style="padding:6px;border:none;color:var(--danger);"><i class="ti ti-x" style="font-size:14px;"></i></button>
+      </div>`).join('');
+  }
+
+  function rebuild(){
+    modalRoot.innerHTML = `<div class="modal-backdrop" id="mb">
+      <div class="modal" onclick="event.stopPropagation()" style="max-width:520px;">
+        <h2 style="margin-bottom:14px;">${ex.name ? 'Editar ejercicio' : 'Nuevo ejercicio'}</h2>
+        <label class="section-label" style="margin-bottom:6px;">Nombre</label>
+        <input id="libExName" type="text" value="${esc(ex.name)}" maxlength="80" style="margin-bottom:12px;" />
+        <label class="section-label" style="margin-bottom:6px;">Búsqueda del video en YouTube</label>
+        <input id="libExVideo" type="text" value="${esc(ex.video || '')}" maxlength="120" placeholder="ej: lat pulldown technique" />
+        <div class="muted" style="font-size:11px;margin-top:6px;margin-bottom:14px;">En inglés funciona mejor.</div>
+
+        <div class="section-label">Músculos trabajados</div>
+        <div class="muted" style="font-size:12px;margin-bottom:10px;">Toca: vacío → <strong style="color:var(--accent);">principal ●●</strong> → <strong style="color:var(--warning);">secundario ●</strong> → vacío</div>
+        <div class="muscle-grid" id="libMuscleGrid">${renderMuscles()}</div>
+
+        <div class="section-label" style="margin-top:18px;">Alternativas</div>
+        <div id="libAltsContainer">${renderAlts()}</div>
+        <button id="libAddAlt" style="margin-top:6px;width:100%;padding:11px;border-style:dashed;color:var(--text-muted);">
+          <i class="ti ti-plus" style="font-size:14px;vertical-align:-2px;"></i> Agregar alternativa
+        </button>
+
+        <div class="row" style="gap:8px;margin-top:18px;">
+          <button id="libCancel" style="flex:1;padding:12px;">Cancelar</button>
+          <button class="primary" id="libSave" style="flex:1;padding:12px;font-weight:600;">Guardar</button>
+        </div>
+      </div>
+    </div>`;
+    document.getElementById('mb').addEventListener('click', (e) => { if (e.target.id === 'mb') closeModal(); });
+    document.getElementById('libCancel').addEventListener('click', closeModal);
+    document.getElementById('libSave').addEventListener('click', () => {
+      ex.name = (document.getElementById('libExName').value || '').trim();
+      ex.video = (document.getElementById('libExVideo').value || '').trim();
+      ex.alts = Array.from(document.querySelectorAll('[data-alt-i]')).map(i => i.value.trim()).filter(Boolean);
+      closeModal();
+      onSave(ex);
+    });
+    document.querySelectorAll('#libMuscleGrid [data-mid]').forEach(el => {
+      el.addEventListener('click', () => {
+        const m = el.dataset.mid;
+        const inP = ex.primary.indexOf(m);
+        const inS = ex.secondary.indexOf(m);
+        if (inP === -1 && inS === -1){ ex.primary.push(m); }
+        else if (inP !== -1){ ex.primary.splice(inP, 1); ex.secondary.push(m); }
+        else { ex.secondary.splice(inS, 1); }
+        // Rebuild only the muscle grid
+        document.getElementById('libMuscleGrid').innerHTML = renderMuscles();
+        // Re-attach handlers for muscle chips
+        document.querySelectorAll('#libMuscleGrid [data-mid]').forEach(el2 => el2.addEventListener('click', () => {
+          const m2 = el2.dataset.mid;
+          const inP2 = ex.primary.indexOf(m2);
+          const inS2 = ex.secondary.indexOf(m2);
+          if (inP2 === -1 && inS2 === -1){ ex.primary.push(m2); }
+          else if (inP2 !== -1){ ex.primary.splice(inP2, 1); ex.secondary.push(m2); }
+          else { ex.secondary.splice(inS2, 1); }
+          rebuild();
+        }));
+      });
+    });
+    document.getElementById('libAddAlt').addEventListener('click', () => {
+      ex.alts = Array.from(document.querySelectorAll('[data-alt-i]')).map(i => i.value.trim());
+      ex.alts.push('');
+      document.getElementById('libAltsContainer').innerHTML = renderAlts();
+      attachAltHandlers();
+      document.querySelector(`[data-alt-i="${ex.alts.length-1}"]`)?.focus();
+    });
+    attachAltHandlers();
+  }
+  function attachAltHandlers(){
+    document.querySelectorAll('[data-rm-alt]').forEach(b => {
+      b.addEventListener('click', () => {
+        const i = Number(b.dataset.rmAlt);
+        ex.alts = Array.from(document.querySelectorAll('[data-alt-i]')).map(inp => inp.value.trim());
+        ex.alts.splice(i, 1);
+        document.getElementById('libAltsContainer').innerHTML = renderAlts();
+        attachAltHandlers();
+      });
+    });
+  }
+  rebuild();
+}
+
+
 // ====== ONBOARDING (slides + tour del home) ======
 const LS_ONBOARD = 'gym_onboarding_seen_v1';
 const LS_TOUR = 'gym_home_tour_seen_v1';
@@ -1683,6 +1924,8 @@ function render(){
   if (state.view === 'exercise') return renderExercise();
   if (state.view === 'compare') return renderCompare();
   if (state.view === 'settings') return renderSettings();
+  if (state.view === 'library') return renderLibrary();
+  if (state.view === 'libraryEdit') return renderLibraryEdit();
   if (state.view === 'editRoutine') return renderEditRoutine();
   if (state.view === 'editExercise') return renderEditExercise();
   return renderHome();
@@ -2640,6 +2883,18 @@ function renderSettings(){
       </button>
     </div>
 
+    <div class="section-label">Rutinas</div>
+    <div class="card" style="margin-bottom:16px;padding:6px;">
+      <button data-action="goLibrary" style="width:100%;padding:14px 12px;display:flex;align-items:center;gap:12px;background:transparent;border:none;text-align:left;border-radius:8px;">
+        <i class="ti ti-book-2" style="font-size:18px;color:var(--accent);"></i>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:500;">Biblioteca de Rutinas</div>
+          <div class="muted" style="font-size:12px;margin-top:2px;">${Object.keys(state.library||{}).length} compartidas · ${Object.keys(state.personalLibrary||{}).length} personales <span class="pill" style="font-size:9px;margin-left:4px;">BETA</span></div>
+        </div>
+        <i class="ti ti-chevron-right" style="color:var(--text-dim);"></i>
+      </button>
+    </div>
+
     <div class="section-label">Usuarios</div>
     ${usersList}
 
@@ -2682,7 +2937,128 @@ function renderSettings(){
   attach();
 }
 
-// ====== EDIT ROUTINE ======
+// ====== LIBRARY (Fase 1) ======
+function renderLibrary(){
+  const view = state.libraryView || 'shared';
+  const lib = view === 'shared' ? (state.library || {}) : (state.personalLibrary || {});
+  const routines = Object.values(lib).sort((a,b) => (a.name || '').localeCompare(b.name || ''));
+  const canEdit = view === 'personal' || isAdmin();
+  const me = getMe();
+
+  const cards = routines.map(r => {
+    const exCount = (r.exercises || []).length;
+    const muscles = [...new Set((r.exercises || []).flatMap(e => e.primary || []))].slice(0, 3).map(m => MUSCLES[m]?.label).filter(Boolean).join(' · ');
+    return `<button class="day-card fade-in" data-action="openLibraryRoutine" data-rid="${esc(r.id)}" style="text-align:left;">
+      <div class="row" style="position:relative;z-index:1;">
+        <div class="icon-tile">
+          <i class="ti ${r.icon || 'ti-barbell'}" style="font-size:20px;"></i>
+        </div>
+        <div style="min-width:0;flex:1;">
+          <div style="font-size:15px;font-weight:600;">${esc(r.name)}</div>
+          <div class="muted" style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">
+            ${exCount} ejercicio${exCount===1?'':'s'}${muscles ? ' · '+esc(muscles) : ''}
+          </div>
+        </div>
+        <i class="ti ti-chevron-right" style="font-size:18px;color:var(--text-dim);"></i>
+      </div>
+    </button>`;
+  }).join('');
+
+  const empty = routines.length === 0 ? `
+    <div class="card" style="padding:40px 20px;text-align:center;">
+      <i class="ti ti-book-off" style="font-size:36px;color:var(--text-dim);display:block;margin-bottom:8px;"></i>
+      <div class="muted" style="font-size:13px;">
+        ${view === 'shared' ? 'No hay rutinas compartidas todavía.' : 'No tienes rutinas personales aún.'}
+      </div>
+      ${canEdit ? `<button class="primary" data-action="createLibraryRoutine" style="margin-top:14px;">
+        <i class="ti ti-plus" style="font-size:14px;vertical-align:-2px;"></i> Crear primera rutina
+      </button>` : ''}
+    </div>` : '';
+
+  root.innerHTML = `
+    ${headerBar('Biblioteca de Rutinas', 'goSettings')}
+    <div class="banner banner-info" style="margin-bottom:16px;">
+      <i class="ti ti-info-circle"></i>
+      <div>Esta es tu nueva biblioteca de rutinas (Fase 1). Por ahora puedes verlas y editarlas. En Fase 2 podrás asignarlas a los días de la semana.</div>
+    </div>
+    <div class="tab-bar">
+      <button class="${view==='shared'?'active':''}" data-action="libView" data-v="shared">
+        <i class="ti ti-users" style="font-size:13px;vertical-align:-1px;"></i> Del grupo (${Object.keys(state.library||{}).length})
+      </button>
+      <button class="${view==='personal'?'active':''}" data-action="libView" data-v="personal">
+        <i class="ti ti-user" style="font-size:13px;vertical-align:-1px;"></i> Mis personales (${Object.keys(state.personalLibrary||{}).length})
+      </button>
+    </div>
+    ${empty}
+    ${cards}
+    ${canEdit && routines.length > 0 ? `
+      <button data-action="createLibraryRoutine" style="margin-top:14px;width:100%;padding:14px;border-style:dashed;color:var(--text-muted);">
+        <i class="ti ti-plus" style="font-size:14px;vertical-align:-2px;"></i> Crear nueva rutina
+      </button>` : ''}
+    ${!canEdit ? `<div class="muted" style="text-align:center;font-size:12px;margin-top:14px;">Solo admins pueden editar las rutinas compartidas. Tú puedes crear tus propias rutinas personales.</div>` : ''}`;
+  attach();
+}
+
+function getLibraryRoutine(routineId){
+  return (state.library && state.library[routineId]) || (state.personalLibrary && state.personalLibrary[routineId]) || null;
+}
+
+function renderLibraryEdit(){
+  const r = state.editingLibraryRoutineId ? getLibraryRoutine(state.editingLibraryRoutineId) : null;
+  if (!r){
+    root.innerHTML = `${headerBar('Editar Rutina', 'goLibrary')}<div class="muted" style="text-align:center;padding:30px;">Rutina no encontrada.</div>`;
+    attach(); return;
+  }
+  const scope = r.scope || 'shared';
+  const canEdit = scope === 'personal' || isAdmin();
+
+  // Save a working copy
+  window._editLibRoutine = JSON.parse(JSON.stringify(r));
+
+  const exList = (r.exercises || []).map((ex, idx) => {
+    const primNames = (ex.primary || []).map(m => MUSCLES[m]?.label).filter(Boolean).slice(0, 3).join(' · ');
+    return `<div class="history-entry" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:14px;font-weight:500;">${esc(ex.name)}</div>
+        <div class="muted" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(primNames || 'Sin músculos asignados')}</div>
+      </div>
+      ${canEdit ? `
+        <button data-action="moveLibEx" data-dir="up" data-idx="${idx}" aria-label="Subir" style="padding:6px;border-color:var(--border);" ${idx===0?'disabled':''}><i class="ti ti-arrow-up" style="font-size:14px;"></i></button>
+        <button data-action="moveLibEx" data-dir="down" data-idx="${idx}" aria-label="Bajar" style="padding:6px;border-color:var(--border);" ${idx===(r.exercises||[]).length-1?'disabled':''}><i class="ti ti-arrow-down" style="font-size:14px;"></i></button>
+        <button data-action="editLibEx" data-idx="${idx}" aria-label="Editar" style="padding:6px;border-color:var(--border);"><i class="ti ti-edit" style="font-size:14px;color:var(--accent);"></i></button>
+        <button data-action="deleteLibEx" data-idx="${idx}" aria-label="Eliminar" style="padding:6px;border:none;color:var(--danger);"><i class="ti ti-trash" style="font-size:14px;"></i></button>
+      ` : ''}
+    </div>`;
+  }).join('');
+
+  root.innerHTML = `
+    ${headerBar('Editar Rutina', 'goLibrary')}
+    <div class="card" style="margin-bottom:18px;">
+      <label class="section-label" style="margin-bottom:6px;">Nombre</label>
+      <input id="libName" type="text" value="${esc(r.name)}" maxlength="40" style="margin-bottom:12px;" ${canEdit?'':'disabled'} />
+      <label class="section-label" style="margin-bottom:6px;">Enfoque (opcional)</label>
+      <input id="libFocus" type="text" value="${esc(r.focus||'')}" maxlength="60" placeholder="ej: Pierna, Pull, Full Body…" ${canEdit?'':'disabled'} />
+      <div class="row" style="margin-top:14px;justify-content:space-between;align-items:center;">
+        <span class="pill ${scope==='shared'?'':'warning-pill'}" style="font-size:10px;">${scope==='shared'?'COMPARTIDA':'PERSONAL'}</span>
+        ${canEdit ? `<button data-action="duplicateLibRoutine" style="padding:6px 10px;font-size:12px;"><i class="ti ti-copy" style="font-size:13px;"></i> Duplicar</button>` : ''}
+      </div>
+    </div>
+
+    <div class="section-label">Ejercicios</div>
+    ${exList || '<div class="card" style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">Aún no hay ejercicios.</div>'}
+
+    ${canEdit ? `<button data-action="addLibEx" style="margin-top:10px;width:100%;padding:14px;border-style:dashed;color:var(--text-muted);">
+      <i class="ti ti-plus" style="font-size:14px;vertical-align:-2px;"></i> Agregar ejercicio
+    </button>` : ''}
+
+    ${canEdit ? `<div class="row" style="gap:8px;margin-top:18px;">
+      <button class="primary" data-action="saveLibRoutine" style="flex:1;padding:14px;font-weight:600;">Guardar Cambios</button>
+      <button class="ghost-danger" data-action="deleteLibRoutine" style="padding:14px;"><i class="ti ti-trash" style="font-size:15px;"></i></button>
+    </div>` : `<div class="muted" style="text-align:center;font-size:12px;margin-top:14px;">No tienes permisos para editar esta rutina.</div>`}`;
+  attach();
+}
+
+
 function renderEditRoutine(){
   const dayKey = state.currentDay;
   const src = getCurrentSource(dayKey);
@@ -3480,6 +3856,131 @@ async function handle(e){
   if (a === 'editRoutine'){ state.view = 'editRoutine'; render(); return; }
   if (a === 'editRoutineNew'){ state.currentDay = btn.dataset.day || state.currentDay; state.view = 'editRoutine'; render(); return; }
 
+  // ====== LIBRARY (Fase 1) ======
+  if (a === 'goLibrary'){ state.view = 'library'; state.libraryView = state.libraryView || 'shared'; render(); return; }
+  if (a === 'libView'){ state.libraryView = btn.dataset.v || 'shared'; render(); return; }
+  if (a === 'openLibraryRoutine'){
+    state.editingLibraryRoutineId = btn.dataset.rid;
+    state.view = 'libraryEdit';
+    render(); return;
+  }
+  if (a === 'createLibraryRoutine'){
+    const scope = state.libraryView === 'personal' ? 'personal' : 'shared';
+    if (scope === 'shared' && !isAdmin()){ toast('Solo admins pueden crear rutinas compartidas'); return; }
+    const r = createEmptyLibraryRoutine(scope);
+    if (scope === 'shared'){
+      state.library[r.id] = r;
+      await saveLibraryRoutine(r);
+    } else {
+      state.personalLibrary[r.id] = r;
+      await savePersonalLibrary(state.currentUser, state.personalLibrary);
+    }
+    state.editingLibraryRoutineId = r.id;
+    state.view = 'libraryEdit';
+    toast('Rutina creada', 'success');
+    render(); return;
+  }
+  if (a === 'saveLibRoutine'){
+    const ed = window._editLibRoutine;
+    if (!ed) return;
+    ed.name = (document.getElementById('libName')?.value || '').trim() || 'Rutina sin nombre';
+    ed.focus = (document.getElementById('libFocus')?.value || '').trim();
+    ed.updatedAt = Date.now();
+    if (ed.scope === 'shared'){
+      if (!isAdmin()){ toast('Solo admins pueden editar rutinas compartidas'); return; }
+      state.library[ed.id] = ed;
+      await saveLibraryRoutine(ed);
+    } else {
+      state.personalLibrary[ed.id] = ed;
+      await savePersonalLibrary(state.currentUser, state.personalLibrary);
+    }
+    toast('Cambios guardados', 'success');
+    state.view = 'library';
+    render(); return;
+  }
+  if (a === 'deleteLibRoutine'){
+    const ed = window._editLibRoutine;
+    if (!ed) return;
+    if (!confirm(`¿Eliminar la rutina "${ed.name}"? Esta acción no se puede deshacer.`)) return;
+    if (ed.scope === 'shared'){
+      if (!isAdmin()){ toast('Solo admins'); return; }
+      delete state.library[ed.id];
+      await deleteLibraryRoutine(ed.id);
+    } else {
+      delete state.personalLibrary[ed.id];
+      await savePersonalLibrary(state.currentUser, state.personalLibrary);
+    }
+    toast('Rutina eliminada');
+    state.view = 'library';
+    state.editingLibraryRoutineId = null;
+    render(); return;
+  }
+  if (a === 'duplicateLibRoutine'){
+    const ed = window._editLibRoutine;
+    if (!ed) return;
+    const dup = JSON.parse(JSON.stringify(ed));
+    dup.id = newRoutineId();
+    dup.name = ed.name + ' (copia)';
+    dup.createdAt = Date.now();
+    dup.updatedAt = Date.now();
+    if (dup.scope === 'shared'){
+      if (!isAdmin()){ toast('Solo admins'); return; }
+      state.library[dup.id] = dup;
+      await saveLibraryRoutine(dup);
+    } else {
+      state.personalLibrary[dup.id] = dup;
+      await savePersonalLibrary(state.currentUser, state.personalLibrary);
+    }
+    state.editingLibraryRoutineId = dup.id;
+    toast('Rutina duplicada', 'success');
+    render(); return;
+  }
+  if (a === 'moveLibEx'){
+    const ed = window._editLibRoutine;
+    const idx = Number(btn.dataset.idx);
+    const dir = btn.dataset.dir;
+    const swap = dir === 'up' ? idx - 1 : idx + 1;
+    if (!ed || !ed.exercises) return;
+    if (swap < 0 || swap >= ed.exercises.length) return;
+    [ed.exercises[idx], ed.exercises[swap]] = [ed.exercises[swap], ed.exercises[idx]];
+    if (ed.scope === 'shared'){ state.library[ed.id] = ed; await saveLibraryRoutine(ed); }
+    else { state.personalLibrary[ed.id] = ed; await savePersonalLibrary(state.currentUser, state.personalLibrary); }
+    render(); return;
+  }
+  if (a === 'deleteLibEx'){
+    const ed = window._editLibRoutine;
+    const idx = Number(btn.dataset.idx);
+    if (!ed || !ed.exercises || !ed.exercises[idx]) return;
+    if (!confirm(`¿Eliminar "${ed.exercises[idx].name}"?`)) return;
+    ed.exercises.splice(idx, 1);
+    if (ed.scope === 'shared'){ state.library[ed.id] = ed; await saveLibraryRoutine(ed); }
+    else { state.personalLibrary[ed.id] = ed; await savePersonalLibrary(state.currentUser, state.personalLibrary); }
+    toast('Ejercicio eliminado');
+    render(); return;
+  }
+  if (a === 'addLibEx' || a === 'editLibEx'){
+    const ed = window._editLibRoutine;
+    if (!ed) return;
+    const isNew = a === 'addLibEx';
+    const idx = isNew ? -1 : Number(btn.dataset.idx);
+    const existing = isNew ? { name:'', video:'', primary:[], secondary:[], alts:[] } : (ed.exercises[idx] || {});
+    openLibExerciseEditor(existing, async (updated) => {
+      if (!updated.name || !updated.name.trim()){ toast('Ingresa un nombre'); return; }
+      if (isNew) ed.exercises.push(updated);
+      else ed.exercises[idx] = updated;
+      if (ed.scope === 'shared'){
+        state.library[ed.id] = ed;
+        await saveLibraryRoutine(ed);
+      } else {
+        state.personalLibrary[ed.id] = ed;
+        await savePersonalLibrary(state.currentUser, state.personalLibrary);
+      }
+      toast(isNew ? 'Ejercicio agregado' : 'Ejercicio actualizado', 'success');
+      render();
+    });
+    return;
+  }
+
   // ====== Source switch ======
   if (a === 'setSource'){
     const src = btn.dataset.src;
@@ -3951,6 +4452,24 @@ function subscribeRealtime(){
         const data = ch.doc.data().routine || {};
         if (JSON.stringify(state.personalRoutines[id]) !== JSON.stringify(data)){
           state.personalRoutines[id] = data; changed = true;
+        }
+      }
+    });
+    if (changed) requestRealtimeRender();
+  }, console.error));
+  // Library (shared) realtime
+  unsubs.push(onSnapshot(collection(db,'salas',gid,'library'), (snap)=>{
+    if (gid !== state.currentGroup) return;
+    if (state.suppressRealtimeRender) return;
+    let changed = false;
+    snap.docChanges().forEach(ch => {
+      const id = ch.doc.id;
+      if (ch.type === 'removed'){
+        if (state.library[id]){ delete state.library[id]; changed = true; }
+      } else {
+        const data = ch.doc.data();
+        if (JSON.stringify(state.library[id]) !== JSON.stringify(data)){
+          state.library[id] = data; changed = true;
         }
       }
     });
