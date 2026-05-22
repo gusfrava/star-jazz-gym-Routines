@@ -1,4 +1,4 @@
-\<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -515,6 +515,36 @@ function visibleAccountGroups(){
   }
   return Array.from(new Set(state.joinedGroups || [])).filter(Boolean);
 }
+function removeStrayBodyTextNodes(){
+  Array.from(document.body.childNodes).forEach(node => {
+    if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()){
+      node.remove();
+    }
+  });
+}
+async function filterUsersForGroup(groupId, users, cfg = null, keepIds = []){
+  const clean = Array.isArray(users) ? users : [];
+  if (groupId === DEFAULT_GROUP) return clean;
+  const keep = new Set((keepIds || []).filter(Boolean));
+  const admins = new Set(((cfg || state.groupConfig || {}).adminIds || []).filter(Boolean));
+  const linkedCurrent = linkedProfileForGroup(groupId);
+  if (linkedCurrent) keep.add(linkedCurrent);
+  const out = [];
+  for (const user of clean){
+    if (!user || !user.id) continue;
+    if (keep.has(user.id) || admins.has(user.id) || user.joinedAt){
+      out.push(user);
+      continue;
+    }
+    if (user.authOwnerUid){
+      try {
+        const groups = await loadMembershipGroups(user.id);
+        if (groups.includes(groupId)) out.push(user);
+      } catch(e){ console.error(e); }
+    }
+  }
+  return out;
+}
 async function linkAuthToProfile(userId, groupId = groupPath()){
   if (!state.authUser || !userId || !groupId) return true;
   const u = state.users.find(x => x.id === userId);
@@ -720,13 +750,18 @@ function blankRoutine(){
   return out;
 }
 async function loadGroupState(){
+  const gid = groupPath();
   const cfg = await loadConfig();
   state.groupConfig = cfg;
   state.invitationPassword = cfg.invitationPassword || INVITATION_PASSWORD_DEFAULT;
   if (firebaseReady && !cfg.createdAt){
     await saveConfig(defaultGroupConfig());
   }
-  state.users = await loadUsers();
+  const rawUsers = await loadUsers();
+  state.users = await filterUsersForGroup(gid, rawUsers, cfg, [loadMe()]);
+  if (gid !== DEFAULT_GROUP && JSON.stringify(rawUsers) !== JSON.stringify(state.users)){
+    await saveUsersForGroup(gid, state.users);
+  }
   state.sharedRoutine = normalizeRoutine(await loadSharedRoutine());
   state.personalRoutines = await loadAllPersonalRoutines();
   state.logs = await loadAllLogs();
@@ -863,11 +898,11 @@ async function joinGroup(groupId, password){
   if (!cfg){ toast('No encontré ese grupo'); return; }
   if ((cfg.invitationPassword || INVITATION_PASSWORD_DEFAULT) !== password){ toast('Contraseña incorrecta'); return; }
   if (currentMe && currentMe.pinHash){
-    const targetUsers = await loadUsersForGroup(safeId);
+    let targetUsers = await filterUsersForGroup(safeId, await loadUsersForGroup(safeId), cfg, [currentMe.id]);
     if (!targetUsers.some(u => u.id === currentMe.id)){
       targetUsers.push({ ...currentMe, joinedAt: Date.now() });
-      await saveUsersForGroup(safeId, targetUsers);
     }
+    await saveUsersForGroup(safeId, targetUsers);
   }
   rememberGroup(safeId);
   if (state.authUser){
@@ -2811,7 +2846,9 @@ async function handle(e){
     const id = 'u_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
     const color = userColor(state.users.length);
     const pinHash = await sha(p1);
-    state.users.push({ id, name: state.pendingNewName, color, pinHash, createdAt: Date.now() });
+    const user = { id, name: state.pendingNewName, color, pinHash, createdAt: Date.now() };
+    if (groupPath() !== DEFAULT_GROUP) user.joinedAt = Date.now();
+    state.users.push(user);
     await saveUsers(state.users);
     state.currentUser = id;
     try { await afterLogin(id); }
@@ -3692,9 +3729,14 @@ function subscribeRealtime(){
   if (!firebaseReady) return;
   unsubs.forEach(u => u && u());
   unsubs = [];
-  unsubs.push(onSnapshot(doc(db,'salas',groupPath(),'meta','users'), (snap)=>{
+  unsubs.push(onSnapshot(doc(db,'salas',groupPath(),'meta','users'), async (snap)=>{
     if (snap.exists()){
-      const newUsers = snap.data().users || [];
+      const gid = groupPath();
+      const rawUsers = snap.data().users || [];
+      const newUsers = await filterUsersForGroup(gid, rawUsers, state.groupConfig, [state.currentUser, loadMe()]);
+      if (gid !== DEFAULT_GROUP && JSON.stringify(rawUsers) !== JSON.stringify(newUsers)){
+        await saveUsersForGroup(gid, newUsers);
+      }
       const changed = JSON.stringify(newUsers) !== JSON.stringify(state.users);
       state.users = newUsers;
       // if current user got deleted, log out
@@ -3756,6 +3798,7 @@ function subscribeRealtime(){
 
 // ====== INIT ======
 async function init(){
+  removeStrayBodyTextNodes();
   rememberGroup(state.currentGroup);
   if (firebaseReady && auth){
     onAuthStateChanged(auth, handleAuthState);
