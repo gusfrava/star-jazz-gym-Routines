@@ -1373,6 +1373,8 @@ const ONBOARDING_SLIDES = [
 ];
 
 function renderOnboarding(){
+  // Bail if already mounted (render() may be called multiple times by realtime listeners)
+  if (document.querySelector('.onboarding-wrap')) return;
   let currentSlide = 0;
   const totalSlides = ONBOARDING_SLIDES.length;
   const wrap = document.createElement('div');
@@ -1403,8 +1405,12 @@ function renderOnboarding(){
   const skipBtn = wrap.querySelector('#obSkip');
   function close(){
     markOnboardingSeen();
-    wrap.style.animation = 'fadeIn 0.25s ease reverse';
-    setTimeout(() => { wrap.remove(); render(); }, 240);
+    // Render the underlying app FIRST (login or home), THEN fade out the slides on top
+    try { render(); } catch(e){ console.error(e); }
+    wrap.style.transition = 'opacity 0.3s ease';
+    wrap.style.opacity = '0';
+    wrap.style.pointerEvents = 'none';
+    setTimeout(() => wrap.remove(), 320);
   }
   function goTo(i){
     currentSlide = Math.max(0, Math.min(totalSlides - 1, i));
@@ -1438,6 +1444,7 @@ const TOUR_STEPS = [
 
 function startHomeTour(){
   if (!shouldShowTour()) return;
+  if (document.querySelector('.tour-overlay')) return; // already showing
   let step = 0;
   const overlay = document.createElement('div');
   overlay.className = 'tour-overlay';
