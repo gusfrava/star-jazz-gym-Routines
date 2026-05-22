@@ -391,6 +391,7 @@ const state = {
   enteringGroup: false,
   switchingGroup: false,
   suppressRealtimeRender: false,
+  realtimeQuietUntil: 0,
 };
 const root = document.getElementById('app');
 const modalRoot = document.getElementById('modalRoot');
@@ -816,6 +817,12 @@ async function reloadGroup(options = {}){
 }
 async function switchGroup(groupId){
   if (!groupId) return;
+  if (groupId === state.currentGroup){
+    state.enteringGroup = false;
+    if (state.view === 'setup') chooseInitialViewForGroup();
+    render();
+    return;
+  }
   state.switchingGroup = true;
   state.suppressRealtimeRender = true;
   render();
@@ -833,6 +840,7 @@ async function switchGroup(groupId){
     await reloadGroup({ skipRender: true });
   } finally {
     state.suppressRealtimeRender = false;
+    state.realtimeQuietUntil = Date.now() + 700;
     state.switchingGroup = false;
     render();
   }
@@ -1629,6 +1637,26 @@ function render(){
   if (state.view === 'editRoutine') return renderEditRoutine();
   if (state.view === 'editExercise') return renderEditExercise();
   return renderHome();
+}
+
+let realtimeRenderTimer = null;
+function requestRealtimeRender(){
+  if (state.suppressRealtimeRender) return;
+  const wait = Math.max(0, (state.realtimeQuietUntil || 0) - Date.now());
+  if (wait > 0){
+    if (!realtimeRenderTimer){
+      realtimeRenderTimer = setTimeout(() => {
+        realtimeRenderTimer = null;
+        render();
+      }, wait + 30);
+    }
+    return;
+  }
+  if (realtimeRenderTimer){
+    clearTimeout(realtimeRenderTimer);
+    realtimeRenderTimer = null;
+  }
+  render();
 }
 
 function renderGroupSwitchLoading(){
@@ -3809,7 +3837,7 @@ function subscribeRealtime(){
         state.view = 'setup'; state.setupStep = state.users.length ? 'pickUser' : 'newUser';
         render(); return;
       }
-      if (changed && !state.suppressRealtimeRender) render();
+      if (changed) requestRealtimeRender();
     }
   }, console.error));
   unsubs.push(onSnapshot(doc(db,'salas',groupPath(),'meta','config'), (snap)=>{
@@ -3823,7 +3851,7 @@ function subscribeRealtime(){
       const r = snap.data().routine;
       if (JSON.stringify(r) !== JSON.stringify(state.sharedRoutine)){
         state.sharedRoutine = r;
-        if (!state.suppressRealtimeRender) render();
+        requestRealtimeRender();
       }
     }
   }, console.error));
@@ -3840,7 +3868,7 @@ function subscribeRealtime(){
         }
       }
     });
-    if (changed && !state.suppressRealtimeRender) render();
+    if (changed) requestRealtimeRender();
   }, console.error));
   unsubs.push(onSnapshot(collection(db,'salas',groupPath(),'personalRoutines'), (snap)=>{
     let changed = false;
@@ -3855,7 +3883,7 @@ function subscribeRealtime(){
         }
       }
     });
-    if (changed && !state.suppressRealtimeRender) render();
+    if (changed) requestRealtimeRender();
   }, console.error));
 }
 
