@@ -719,9 +719,7 @@ function chooseInitialViewForGroup(){
     saveAccount({ linkedProfiles });
     clearMe(); clearAuth();
   }
-  if (state.authUser && !state.enteringGroup){
-    state.currentUser = null; state.setupStep = 'groupHub'; state.view = 'setup';
-  } else if (linkedAllowed){
+  if (linkedAllowed){
     if (linkedUser && !linkedUser.authOwnerUid && state.authUser) linkAuthToProfile(linkedId, groupPath()).catch(console.error);
     state.currentUser = linkedId; state.view = 'home'; state.setupStep = null; state.enteringGroup = false;
   } else if (state.authUser && state.enteringGroup){
