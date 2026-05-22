@@ -783,7 +783,7 @@ function chooseInitialViewForGroup(){
     state.currentUser = linkedId; state.view = 'home'; state.setupStep = null; state.enteringGroup = false;
   } else if (state.authUser && state.enteringGroup){
     state.currentUser = null;
-    state.setupStep = state.users.length ? 'pickUser' : 'newUser';
+    state.setupStep = 'newUser';
     state.view = 'setup';
     state.enteringGroup = false;
   } else if (state.authUser){
@@ -1830,7 +1830,7 @@ function renderSetup(){
         </div>
         <button class="primary" data-action="checkInvite" style="width:100%;padding:14px;font-weight:600;font-size:15px;">Continuar</button>
         <div id="invError" style="color:var(--danger);font-size:12px;text-align:center;margin-top:10px;min-height:14px;"></div>
-        ${state.users.length > 0 ? `<button data-action="backToPick" style="margin-top:14px;width:100%;padding:10px;background:transparent;border:none;font-size:13px;color:var(--text-muted);">← Volver a la lista</button>` : ''}
+        ${state.users.length > 0 ? `<button data-action="backToPick" style="margin-top:14px;width:100%;padding:10px;background:transparent;border:none;font-size:13px;color:var(--text-muted);">Ya Tengo Usuario En Este Grupo</button>` : ''}
       </div>`;
     attach();
     return;
