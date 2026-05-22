@@ -1670,6 +1670,22 @@ function openLibExerciseEditor(initial, onSave){
         <button data-rm-alt="${i}" style="padding:6px;border:none;color:var(--danger);"><i class="ti ti-x" style="font-size:14px;"></i></button>
       </div>`).join('');
   }
+  function cycleLibMuscle(m){
+    const inP = ex.primary.indexOf(m);
+    const inS = ex.secondary.indexOf(m);
+    if (inP === -1 && inS === -1){ ex.primary.push(m); }
+    else if (inP !== -1){ ex.primary.splice(inP, 1); ex.secondary.push(m); }
+    else { ex.secondary.splice(inS, 1); }
+    const grid = document.getElementById('libMuscleGrid');
+    if (!grid) return;
+    grid.innerHTML = renderMuscles();
+    attachMuscleHandlers();
+  }
+  function attachMuscleHandlers(){
+    document.querySelectorAll('#libMuscleGrid [data-mid]').forEach(el => {
+      el.addEventListener('click', () => cycleLibMuscle(el.dataset.mid));
+    });
+  }
 
   function rebuild(){
     modalRoot.innerHTML = `<div class="modal-backdrop" id="mb">
@@ -1706,28 +1722,7 @@ function openLibExerciseEditor(initial, onSave){
       closeModal();
       onSave(ex);
     });
-    document.querySelectorAll('#libMuscleGrid [data-mid]').forEach(el => {
-      el.addEventListener('click', () => {
-        const m = el.dataset.mid;
-        const inP = ex.primary.indexOf(m);
-        const inS = ex.secondary.indexOf(m);
-        if (inP === -1 && inS === -1){ ex.primary.push(m); }
-        else if (inP !== -1){ ex.primary.splice(inP, 1); ex.secondary.push(m); }
-        else { ex.secondary.splice(inS, 1); }
-        // Rebuild only the muscle grid
-        document.getElementById('libMuscleGrid').innerHTML = renderMuscles();
-        // Re-attach handlers for muscle chips
-        document.querySelectorAll('#libMuscleGrid [data-mid]').forEach(el2 => el2.addEventListener('click', () => {
-          const m2 = el2.dataset.mid;
-          const inP2 = ex.primary.indexOf(m2);
-          const inS2 = ex.secondary.indexOf(m2);
-          if (inP2 === -1 && inS2 === -1){ ex.primary.push(m2); }
-          else if (inP2 !== -1){ ex.primary.splice(inP2, 1); ex.secondary.push(m2); }
-          else { ex.secondary.splice(inS2, 1); }
-          rebuild();
-        }));
-      });
-    });
+    attachMuscleHandlers();
     document.getElementById('libAddAlt').addEventListener('click', () => {
       ex.alts = Array.from(document.querySelectorAll('[data-alt-i]')).map(i => i.value.trim());
       ex.alts.push('');
@@ -2941,7 +2936,16 @@ function renderSettings(){
 function renderLibrary(){
   const view = state.libraryView || 'shared';
   const lib = view === 'shared' ? (state.library || {}) : (state.personalLibrary || {});
-  const routines = Object.values(lib).sort((a,b) => (a.name || '').localeCompare(b.name || ''));
+  const routines = Object.values(lib).sort((a,b) => {
+    const ai = DAY_ORDER.indexOf(a.originDay);
+    const bi = DAY_ORDER.indexOf(b.originDay);
+    if (ai !== -1 || bi !== -1){
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    }
+    return (a.createdAt || 0) - (b.createdAt || 0) || (a.name || '').localeCompare(b.name || '');
+  });
   const canEdit = view === 'personal' || isAdmin();
   const me = getMe();
 
@@ -4492,3 +4496,7 @@ init();
 </script>
 </body>
 </html>
+
+
+
+
