@@ -390,6 +390,7 @@ const state = {
   modalOpen: null,
   enteringGroup: false,
   switchingGroup: false,
+  groupSwitchToken: 0,
   suppressRealtimeRender: false,
   realtimeQuietUntil: 0,
 };
@@ -753,20 +754,25 @@ function blankRoutine(){
 }
 async function loadGroupState(){
   const gid = groupPath();
-  const cfg = await loadConfig();
+  const [cfg, rawUsers, sharedRoutine, personalRoutines, logs] = await Promise.all([
+    loadConfig(),
+    loadUsers(),
+    loadSharedRoutine(),
+    loadAllPersonalRoutines(),
+    loadAllLogs()
+  ]);
   state.groupConfig = cfg;
   state.invitationPassword = cfg.invitationPassword || INVITATION_PASSWORD_DEFAULT;
   if (firebaseReady && !cfg.createdAt){
     await saveConfig(defaultGroupConfig());
   }
-  const rawUsers = await loadUsers();
   state.users = await filterUsersForGroup(gid, rawUsers, cfg, [loadMe()]);
   if (gid !== DEFAULT_GROUP && JSON.stringify(rawUsers) !== JSON.stringify(state.users)){
     await saveUsersForGroup(gid, state.users);
   }
-  state.sharedRoutine = normalizeRoutine(await loadSharedRoutine());
-  state.personalRoutines = await loadAllPersonalRoutines();
-  state.logs = await loadAllLogs();
+  state.sharedRoutine = normalizeRoutine(sharedRoutine);
+  state.personalRoutines = personalRoutines;
+  state.logs = logs;
   state.routineSource = loadRoutineSource();
 }
 function chooseInitialViewForGroup(){
@@ -819,13 +825,10 @@ async function switchGroup(groupId){
   if (!groupId) return;
   if (groupId === state.currentGroup){
     state.enteringGroup = false;
-    if (state.view === 'setup') chooseInitialViewForGroup();
-    render();
     return;
   }
-  state.switchingGroup = true;
+  const token = ++state.groupSwitchToken;
   state.suppressRealtimeRender = true;
-  render();
   state.currentGroup = groupId;
   saveCurrentGroup(groupId);
   rememberGroup(groupId);
@@ -838,11 +841,14 @@ async function switchGroup(groupId){
   state.showGlobalRoutineMuscles = false;
   try {
     await reloadGroup({ skipRender: true });
+    if (token !== state.groupSwitchToken) return;
   } finally {
-    state.suppressRealtimeRender = false;
-    state.realtimeQuietUntil = Date.now() + 700;
-    state.switchingGroup = false;
-    render();
+    if (token === state.groupSwitchToken){
+      state.suppressRealtimeRender = false;
+      state.realtimeQuietUntil = Date.now() + 700;
+      state.switchingGroup = false;
+      render();
+    }
   }
 }
 async function createGroup(groupId, groupName, invitationPassword, routineMode){
