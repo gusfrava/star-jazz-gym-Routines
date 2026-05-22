@@ -221,8 +221,8 @@ input[type="date"]{color-scheme:dark}
 
 /* ========== HOME TOUR ========== */
 .tour-overlay{position:fixed;inset:0;z-index:360;pointer-events:none;animation:fadeIn 0.25s ease}
-.tour-bg{position:absolute;inset:0;background:rgba(5,10,25,0.78);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);pointer-events:auto}
-.tour-spotlight{position:absolute;border-radius:14px;box-shadow:0 0 0 9999px rgba(5,10,25,0.78), 0 0 0 4px var(--accent-glow), 0 0 30px var(--accent);background:transparent;pointer-events:none;transition:all 0.4s cubic-bezier(0.4,0,0.2,1)}
+.tour-bg{position:absolute;inset:0;background:rgba(5,10,25,0.55);backdrop-filter:blur(1px);-webkit-backdrop-filter:blur(1px);pointer-events:auto}
+.tour-spotlight{position:absolute;border-radius:14px;box-shadow:0 0 0 9999px rgba(5,10,25,0.55), 0 0 0 4px var(--accent-glow), 0 0 30px var(--accent);background:transparent;pointer-events:none;transition:all 0.4s cubic-bezier(0.4,0,0.2,1)}
 .tour-tooltip{position:absolute;background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:var(--radius);padding:16px 18px;max-width:300px;box-shadow:var(--shadow-lg);pointer-events:auto;z-index:2;animation:tourPop 0.3s cubic-bezier(0.34,1.56,0.64,1)}
 @keyframes tourPop{from{opacity:0;transform:scale(0.9)}to{opacity:1;transform:scale(1)}}
 .tour-tooltip h3{font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text)}
@@ -785,19 +785,33 @@ async function createGroup(groupId, groupName, invitationPassword, routineMode){
   let routine = normalizeRoutine(DEFAULT_ROUTINE);
   if (routineMode === 'blank') routine = blankRoutine();
   if (routineMode === 'copy-current') routine = JSON.parse(JSON.stringify(state.sharedRoutine || DEFAULT_ROUTINE));
+  const newGroupUsers = [{ ...me }];
   if (!firebaseReady){
     localStorage.setItem(groupLocalKey('config', safeId), JSON.stringify(config));
-    localStorage.setItem(groupLocalKey('users', safeId), JSON.stringify([{ ...me }]));
+    localStorage.setItem(groupLocalKey('users', safeId), JSON.stringify(newGroupUsers));
     localStorage.setItem(groupLocalKey('sharedRoutine', safeId), JSON.stringify(routine));
   } else {
     await setDoc(doc(db,'salas',safeId,'meta','config'), config);
-    await setDoc(doc(db,'salas',safeId,'meta','users'), { users: [{ ...me }] });
+    await setDoc(doc(db,'salas',safeId,'meta','users'), { users: newGroupUsers });
     await setDoc(doc(db,'salas',safeId,'routines','shared'), { routine });
   }
   window._pendingGroupCreator = null;
+  // CRITICAL: reset local state BEFORE switching to the new group so any
+  // subsequent saveUsers() calls don't write old users into the new group's Firestore.
+  state.users = newGroupUsers;
+  state.logs = {};
+  state.personalRoutines = {};
+  state.sharedRoutine = normalizeRoutine(routine);
+  state.groupConfig = config;
+  state.invitationPassword = invitationPassword;
+  state.routineSource = 'shared';
+  state.currentDay = null;
+  state.currentExerciseIdx = null;
+  state.editingSession = null;
   rememberGroup(safeId);
   state.currentGroup = safeId;
   saveCurrentGroup(safeId);
+  state.currentUser = me.id;
   try { await afterLogin(me.id); }
   catch(err){ toast(err.message || 'No pude enlazar este usuario'); return; }
   await reloadGroup();
@@ -3721,3 +3735,7 @@ init();
 </script>
 </body>
 </html>
+
+
+
+
