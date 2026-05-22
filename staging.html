@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+\<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -388,6 +388,8 @@ const state = {
   syncing: false,
   modalOpen: null,
   enteringGroup: false,
+  switchingGroup: false,
+  suppressRealtimeRender: false,
 };
 const root = document.getElementById('app');
 const modalRoot = document.getElementById('modalRoot');
@@ -680,6 +682,28 @@ async function afterLogin(userId){
   saveJoinedGroups(state.joinedGroups);
   return true;
 }
+async function handleAuthState(user){
+  state.authReady = true;
+  state.authUser = user || null;
+  state.account = user ? await loadAccount(user) : null;
+  if (state.account) await recoverAccountGroupsFromProfiles();
+  if (state.account && state.account.groups && state.account.groups.length){
+    state.joinedGroups = Array.from(new Set(state.account.groups));
+    saveJoinedGroups(state.joinedGroups);
+    if (!state.joinedGroups.includes(state.currentGroup)){
+      state.currentGroup = state.joinedGroups[0] || DEFAULT_GROUP;
+      saveCurrentGroup(state.currentGroup);
+    }
+  }
+  if (!user){
+    state.currentUser = null;
+    state.setupStep = null;
+    state.view = 'setup';
+    render();
+    return;
+  }
+  await reloadGroup();
+}
 function loadRoutineSource(){
   try { return JSON.parse(localStorage.getItem(groupLocalKey(LS_SOURCE))||'{}'); } catch { return {}; }
 }
@@ -739,7 +763,8 @@ function chooseInitialViewForGroup(){
     state.currentUser = null; state.setupStep = 'pickUser'; state.view = 'setup';
   }
 }
-async function reloadGroup(){
+async function reloadGroup(options = {}){
+  const { skipRender = false } = options;
   unsubs.forEach(u => u && u());
   unsubs = [];
   await loadGroupState();
@@ -751,10 +776,13 @@ async function reloadGroup(){
   }
   chooseInitialViewForGroup();
   subscribeRealtime();
-  render();
+  if (!skipRender) render();
 }
 async function switchGroup(groupId){
   if (!groupId) return;
+  state.switchingGroup = true;
+  state.suppressRealtimeRender = true;
+  render();
   state.currentGroup = groupId;
   saveCurrentGroup(groupId);
   rememberGroup(groupId);
@@ -764,7 +792,13 @@ async function switchGroup(groupId){
   state.showAlts = false;
   state.showMuscles = false;
   state.showRoutineMuscles = false;
-  await reloadGroup();
+  try {
+    await reloadGroup({ skipRender: true });
+  } finally {
+    state.suppressRealtimeRender = false;
+    state.switchingGroup = false;
+    render();
+  }
 }
 async function createGroup(groupId, groupName, invitationPassword, routineMode){
   let me = state.users.find(u => u.id === state.currentUser);
@@ -1525,6 +1559,7 @@ function render(){
   if (shouldShowOnboarding()){ renderOnboarding(); return; }
   if (firebaseReady && !state.authReady) return renderAuthLoading();
   if (firebaseReady && !state.authUser) return renderAuthGate();
+  if (state.switchingGroup) return renderGroupSwitchLoading();
   if (state.view === 'setup') return renderSetup();
   if (state.view === 'day') return renderDay();
   if (state.view === 'exercise') return renderExercise();
@@ -1533,6 +1568,17 @@ function render(){
   if (state.view === 'editRoutine') return renderEditRoutine();
   if (state.view === 'editExercise') return renderEditExercise();
   return renderHome();
+}
+
+function renderGroupSwitchLoading(){
+  root.innerHTML = `
+    <div style="min-height:70vh;display:flex;align-items:center;justify-content:center;padding:24px;">
+      <div class="card fade-in" style="width:min(420px,100%);text-align:center;padding:28px 22px;">
+        <div class="loader" style="margin:0 auto 16px;"></div>
+        <h2 style="margin-bottom:6px;">Cambiando Grupo</h2>
+        <p class="muted" style="margin:0;font-size:14px;">Cargando rutina, usuarios y progreso...</p>
+      </div>
+    </div>`;
 }
 
 function renderAuthLoading(){
@@ -2626,20 +2672,25 @@ async function handle(e){
     if (!email){ errEl.textContent = 'Escribe tu email'; return; }
     if (password.length < 6){ errEl.textContent = 'La contraseña debe tener mínimo 6 caracteres'; return; }
     try {
+      errEl.textContent = '';
+      btn.disabled = true;
+      btn.textContent = a === 'authEmailSignup' ? 'Creando...' : 'Entrando...';
       if (a === 'authEmailSignup'){
         const cred = await createUserWithEmailAndPassword(auth, email, password);
         if (cred.user && !cred.user.displayName){
           await updateProfile(cred.user, { displayName: email.split('@')[0] });
         }
+        await handleAuthState(cred.user);
         toast('Cuenta creada');
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        const cred = await signInWithEmailAndPassword(auth, email, password);
+        await handleAuthState(cred.user);
         toast('Sesión iniciada');
       }
     } catch(err){
       console.error(err);
       const code = err.code || '';
-      errEl.textContent = code.includes('email-already-in-use') ? 'Ese email ya tiene cuenta. Toca "Ya tengo cuenta".' :
+      errEl.textContent = code.includes('email-already-in-use') ? 'Ese email ya tiene cuenta. Toca "Iniciar Sesión".' :
         code.includes('invalid-email') ? 'Escribe un email válido, no tu nombre del gym.' :
         code.includes('weak-password') ? 'La contraseña debe tener mínimo 6 caracteres.' :
         code.includes('invalid-credential') || code.includes('wrong-password') ? 'Email o contraseña incorrectos. Si es primera vez, toca "Crear Cuenta".' :
@@ -2649,13 +2700,17 @@ async function handle(e){
         code.includes('unauthorized-domain') ? 'Agrega este dominio en Firebase Auth > Authorized domains.' :
         code.includes('network-request-failed') ? 'No hay conexión con Firebase. Revisa internet o bloqueadores.' :
         `No pude iniciar sesión (${code || 'error desconocido'}).`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = a === 'authEmailSignup' ? 'Crear Cuenta' : 'Iniciar Sesión';
     }
     return;
   }
   if (a === 'authGoogle'){
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      const cred = await signInWithPopup(auth, provider);
+      await handleAuthState(cred.user);
       toast('Sesión iniciada');
     } catch(err){
       console.error(err);
@@ -3649,7 +3704,7 @@ function subscribeRealtime(){
         state.view = 'setup'; state.setupStep = state.users.length ? 'pickUser' : 'newUser';
         render(); return;
       }
-      if (changed) render();
+      if (changed && !state.suppressRealtimeRender) render();
     }
   }, console.error));
   unsubs.push(onSnapshot(doc(db,'salas',groupPath(),'meta','config'), (snap)=>{
@@ -3662,7 +3717,8 @@ function subscribeRealtime(){
     if (snap.exists() && snap.data().routine){
       const r = snap.data().routine;
       if (JSON.stringify(r) !== JSON.stringify(state.sharedRoutine)){
-        state.sharedRoutine = r; render();
+        state.sharedRoutine = r;
+        if (!state.suppressRealtimeRender) render();
       }
     }
   }, console.error));
@@ -3679,7 +3735,7 @@ function subscribeRealtime(){
         }
       }
     });
-    if (changed) render();
+    if (changed && !state.suppressRealtimeRender) render();
   }, console.error));
   unsubs.push(onSnapshot(collection(db,'salas',groupPath(),'personalRoutines'), (snap)=>{
     let changed = false;
@@ -3694,7 +3750,7 @@ function subscribeRealtime(){
         }
       }
     });
-    if (changed) render();
+    if (changed && !state.suppressRealtimeRender) render();
   }, console.error));
 }
 
@@ -3702,28 +3758,7 @@ function subscribeRealtime(){
 async function init(){
   rememberGroup(state.currentGroup);
   if (firebaseReady && auth){
-    onAuthStateChanged(auth, async (user)=>{
-      state.authReady = true;
-      state.authUser = user || null;
-      state.account = user ? await loadAccount(user) : null;
-      if (state.account) await recoverAccountGroupsFromProfiles();
-      if (state.account && state.account.groups && state.account.groups.length){
-        state.joinedGroups = Array.from(new Set(state.account.groups));
-        saveJoinedGroups(state.joinedGroups);
-        if (!state.joinedGroups.includes(state.currentGroup)){
-          state.currentGroup = state.joinedGroups[0] || DEFAULT_GROUP;
-          saveCurrentGroup(state.currentGroup);
-        }
-      }
-      if (!user){
-        state.currentUser = null;
-        state.setupStep = null;
-        state.view = 'setup';
-        render();
-        return;
-      }
-      await reloadGroup();
-    });
+    onAuthStateChanged(auth, handleAuthState);
     render();
     return;
   }
