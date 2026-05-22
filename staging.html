@@ -167,6 +167,7 @@ input[type="date"]{color-scheme:dark}
   border-radius:var(--radius-pill);font-size:13px;background:var(--bg-elev);border:1px solid var(--border);
   font-weight:500;cursor:pointer;transition:all 0.15s;font-family:inherit}
 .user-pill:hover{background:var(--bg-elev-2);border-color:var(--border-strong)}
+.group-pill:hover{background:var(--bg-elev-2)!important;border-color:var(--border-strong)!important;color:var(--text)!important}
 .section-label{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.1em;
   color:var(--text-dim);margin-bottom:10px;font-weight:500}
 .set-row{margin-bottom:8px;padding:10px;background:var(--bg-elev-2);border:1px solid var(--border);
@@ -876,10 +877,15 @@ async function switchGroup(groupId){
     toast('No pude cambiar de grupo. Intenta de nuevo.');
   } finally {
     if (token === state.groupSwitchToken){
-      state.suppressRealtimeRender = false;
-      state.realtimeQuietUntil = Date.now() + 400;
+      // Keep suppressing realtime renders briefly so the initial snapshot callbacks
+      // (which fire immediately after onSnapshot) don't trigger extra re-renders.
+      state.realtimeQuietUntil = Date.now() + 1200;
       state.switchingGroup = false;
       render();
+      // Release the hard suppression after the initial snapshots settle
+      setTimeout(() => {
+        if (token === state.groupSwitchToken) state.suppressRealtimeRender = false;
+      }, 800);
     }
   }
 }
@@ -2043,6 +2049,14 @@ function renderHome(){
       <div>Modo solo lectura. <button data-action="switchUser" style="background:transparent;border:none;color:var(--info);text-decoration:underline;cursor:pointer;padding:0;font-size:13px;font-family:inherit;">Inicia sesión</button> para registrar entrenos.</div>
     </div>` : '';
 
+  const currentGroupName = state.currentGroup ? groupDisplayName(state.currentGroup) : '';
+  const groupPill = state.currentGroup ? `
+    <button data-action="goGroupHub" class="group-pill" style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px 4px 8px;margin-top:6px;border-radius:var(--radius-pill);background:var(--bg-elev);border:1px solid var(--border);font-size:12px;color:var(--text-muted);font-family:inherit;cursor:pointer;transition:all 0.15s;">
+      <i class="ti ti-users-group" style="font-size:13px;color:var(--accent);"></i>
+      <span style="color:var(--text);font-weight:500;">${esc(currentGroupName)}</span>
+      <i class="ti ti-chevron-right" style="font-size:12px;opacity:0.5;"></i>
+    </button>` : '';
+
   root.innerHTML = `
     ${configBanner()}
     ${viewOnlyBanner}
@@ -2050,6 +2064,7 @@ function renderHome(){
       <div>
         <h1>Mi Rutina</h1>
         <div class="muted" style="font-size:13px;margin-top:2px;">${new Date().toLocaleDateString('es-ES', {weekday:'long', day:'numeric', month:'long'})}</div>
+        ${groupPill}
       </div>
       <div class="spacer"></div>
       ${syncIndicator()}
@@ -3460,6 +3475,7 @@ async function handle(e){
   if (a === 'goCompare'){ state.view = 'compare'; state.currentDay = null; state.currentExerciseIdx = null; render(); return; }
   if (a === 'goCompareEx'){ state.view = 'compare'; render(); return; }
   if (a === 'goSettings'){ closeModal(); state.view = 'settings'; render(); return; }
+  if (a === 'goGroupHub'){ closeModal(); state.setupStep = 'groupHub'; state.view = 'setup'; render(); return; }
   if (a === 'goEditRoutine'){ state.view = 'editRoutine'; render(); return; }
   if (a === 'editRoutine'){ state.view = 'editRoutine'; render(); return; }
   if (a === 'editRoutineNew'){ state.currentDay = btn.dataset.day || state.currentDay; state.view = 'editRoutine'; render(); return; }
@@ -3866,24 +3882,27 @@ function subscribeRealtime(){
   const gid = groupPath();
   unsubs.push(onSnapshot(doc(db,'salas',gid,'meta','users'), async (snap)=>{
     if (gid !== state.currentGroup) return;
-    if (snap.exists()){
-      const rawUsers = snap.data().users || [];
-      const newUsers = await filterUsersForGroup(gid, rawUsers, state.groupConfig, [state.currentUser, loadMe(gid)]);
-      if (gid !== state.currentGroup) return;
-      if (gid !== DEFAULT_GROUP && JSON.stringify(rawUsers) !== JSON.stringify(newUsers)){
-        await saveUsersForGroup(gid, newUsers);
-      }
-      const changed = JSON.stringify(newUsers) !== JSON.stringify(state.users);
-      state.users = newUsers;
-      // if current user got deleted, log out
-      if (state.currentUser && !state.users.find(u => u.id === state.currentUser)){
-        state.currentUser = null; clearMe(); clearAuth();
-        toast('Tu usuario fue eliminado');
-        state.view = 'setup'; state.setupStep = state.users.length ? 'pickUser' : 'newUser';
-        render(); return;
-      }
-      if (changed) requestRealtimeRender();
+    if (state.suppressRealtimeRender) return; // skip during group switch
+    if (!snap.exists()) return;
+    const rawUsers = snap.data().users || [];
+    // Quick path: if raw matches current state, no work needed
+    if (JSON.stringify(rawUsers) === JSON.stringify(state.users)) return;
+    const newUsers = await filterUsersForGroup(gid, rawUsers, state.groupConfig, [state.currentUser, loadMe(gid)]);
+    if (gid !== state.currentGroup) return;
+    if (state.suppressRealtimeRender) return;
+    if (gid !== DEFAULT_GROUP && JSON.stringify(rawUsers) !== JSON.stringify(newUsers)){
+      await saveUsersForGroup(gid, newUsers);
     }
+    const changed = JSON.stringify(newUsers) !== JSON.stringify(state.users);
+    state.users = newUsers;
+    // if current user got deleted, log out
+    if (state.currentUser && !state.users.find(u => u.id === state.currentUser)){
+      state.currentUser = null; clearMe(); clearAuth();
+      toast('Tu usuario fue eliminado');
+      state.view = 'setup'; state.setupStep = state.users.length ? 'pickUser' : 'newUser';
+      render(); return;
+    }
+    if (changed) requestRealtimeRender();
   }, console.error));
   unsubs.push(onSnapshot(doc(db,'salas',gid,'meta','config'), (snap)=>{
     if (gid !== state.currentGroup) return;
@@ -3894,6 +3913,7 @@ function subscribeRealtime(){
   }, console.error));
   unsubs.push(onSnapshot(doc(db,'salas',gid,'routines','shared'), (snap)=>{
     if (gid !== state.currentGroup) return;
+    if (state.suppressRealtimeRender) return;
     if (snap.exists() && snap.data().routine){
       const r = snap.data().routine;
       if (JSON.stringify(r) !== JSON.stringify(state.sharedRoutine)){
@@ -3904,6 +3924,7 @@ function subscribeRealtime(){
   }, console.error));
   unsubs.push(onSnapshot(collection(db,'salas',gid,'logs'), (snap)=>{
     if (gid !== state.currentGroup) return;
+    if (state.suppressRealtimeRender) return;
     let changed = false;
     snap.docChanges().forEach(ch => {
       const id = ch.doc.id;
@@ -3920,6 +3941,7 @@ function subscribeRealtime(){
   }, console.error));
   unsubs.push(onSnapshot(collection(db,'salas',gid,'personalRoutines'), (snap)=>{
     if (gid !== state.currentGroup) return;
+    if (state.suppressRealtimeRender) return;
     let changed = false;
     snap.docChanges().forEach(ch => {
       const id = ch.doc.id;
@@ -3951,7 +3973,3 @@ init();
 </script>
 </body>
 </html>
-
-
-
-
