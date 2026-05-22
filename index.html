@@ -167,6 +167,7 @@ input[type="date"]{color-scheme:dark}
   border-radius:var(--radius-pill);font-size:13px;background:var(--bg-elev);border:1px solid var(--border);
   font-weight:500;cursor:pointer;transition:all 0.15s;font-family:inherit}
 .user-pill:hover{background:var(--bg-elev-2);border-color:var(--border-strong)}
+.group-pill:hover{background:var(--bg-elev-2)!important;border-color:var(--border-strong)!important;color:var(--text)!important}
 .section-label{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.1em;
   color:var(--text-dim);margin-bottom:10px;font-weight:500}
 .set-row{margin-bottom:8px;padding:10px;background:var(--bg-elev-2);border:1px solid var(--border);
@@ -198,6 +199,39 @@ input[type="date"]{color-scheme:dark}
 .chart-bar-rect:hover{filter:brightness(1.15)}
 @keyframes fadeInUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .fade-in{animation:fadeInUp 0.4s ease backwards}
+
+/* ========== ONBOARDING SLIDES ========== */
+.onboarding-wrap{position:fixed;inset:0;background:var(--bg-grad);background-attachment:fixed;z-index:350;display:flex;flex-direction:column;animation:fadeIn 0.3s ease}
+.onboarding-skip{position:absolute;top:16px;right:16px;background:var(--bg-elev-2);border:1px solid var(--border);color:var(--text-muted);font-size:13px;padding:7px 14px;border-radius:var(--radius-pill);cursor:pointer;z-index:5;font-family:inherit}
+.onboarding-skip:hover{background:var(--bg-elev-3);color:var(--text)}
+.onboarding-slides{flex:1;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.onboarding-slides::-webkit-scrollbar{display:none}
+.onboarding-slide{flex:0 0 100%;scroll-snap-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 28px;max-width:480px;margin:0 auto;text-align:center;min-width:100%}
+.onboarding-icon{font-size:80px;margin-bottom:24px;filter:drop-shadow(0 4px 20px var(--accent-glow));animation:floatY 3s ease-in-out infinite}
+@keyframes floatY{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+.onboarding-slide h2{font-size:28px;margin-bottom:12px;background:var(--accent-grad);-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:-0.02em}
+.onboarding-slide p{font-size:16px;color:var(--text-muted);line-height:1.55;max-width:360px;margin:0}
+.onboarding-features{margin-top:24px;display:flex;flex-direction:column;gap:10px;width:100%;max-width:340px}
+.onboarding-feature{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius-sm);text-align:left;font-size:14px}
+.onboarding-feature i{font-size:22px;color:var(--accent);flex-shrink:0}
+.onboarding-footer{padding:24px 28px calc(24px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:16px;align-items:center}
+.onboarding-dots{display:flex;gap:8px}
+.onboarding-dot{width:8px;height:8px;border-radius:50%;background:var(--bg-elev-3);transition:all 0.3s;cursor:pointer}
+.onboarding-dot.active{background:var(--accent);width:28px;border-radius:4px}
+.onboarding-cta{width:100%;max-width:360px;padding:14px;font-size:15px;font-weight:600}
+
+/* ========== HOME TOUR ========== */
+.tour-overlay{position:fixed;inset:0;z-index:360;pointer-events:none;animation:fadeIn 0.25s ease}
+.tour-bg{position:absolute;inset:0;background:rgba(5,10,25,0.55);backdrop-filter:blur(1px);-webkit-backdrop-filter:blur(1px);pointer-events:auto}
+.tour-spotlight{position:absolute;border-radius:14px;box-shadow:0 0 0 9999px rgba(5,10,25,0.55), 0 0 0 4px var(--accent-glow), 0 0 30px var(--accent);background:transparent;pointer-events:none;transition:all 0.4s cubic-bezier(0.4,0,0.2,1)}
+.tour-tooltip{position:absolute;background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:var(--radius);padding:16px 18px;max-width:300px;box-shadow:var(--shadow-lg);pointer-events:auto;z-index:2;animation:tourPop 0.3s cubic-bezier(0.34,1.56,0.64,1)}
+@keyframes tourPop{from{opacity:0;transform:scale(0.9)}to{opacity:1;transform:scale(1)}}
+.tour-tooltip h3{font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text)}
+.tour-tooltip p{font-size:13px;color:var(--text-muted);margin:0 0 12px;line-height:1.5}
+.tour-progress{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.tour-step{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);letter-spacing:0.05em}
+.tour-actions{display:flex;gap:8px}
+.tour-actions button{padding:6px 12px;font-size:12px;border-radius:8px}
 </style>
 </head>
 <body>
@@ -352,9 +386,14 @@ const state = {
   showAlts: false,
   showMuscles: false,
   showRoutineMuscles: false,
+  showGlobalRoutineMuscles: false,
   syncing: false,
   modalOpen: null,
   enteringGroup: false,
+  switchingGroup: false,
+  groupSwitchToken: 0,
+  suppressRealtimeRender: false,
+  realtimeQuietUntil: 0,
 };
 const root = document.getElementById('app');
 const modalRoot = document.getElementById('modalRoot');
@@ -480,6 +519,36 @@ function visibleAccountGroups(){
   }
   return Array.from(new Set(state.joinedGroups || [])).filter(Boolean);
 }
+function removeStrayBodyTextNodes(){
+  Array.from(document.body.childNodes).forEach(node => {
+    if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()){
+      node.remove();
+    }
+  });
+}
+async function filterUsersForGroup(groupId, users, cfg = null, keepIds = []){
+  const clean = Array.isArray(users) ? users : [];
+  if (groupId === DEFAULT_GROUP) return clean;
+  const keep = new Set((keepIds || []).filter(Boolean));
+  const admins = new Set(((cfg || state.groupConfig || {}).adminIds || []).filter(Boolean));
+  const linkedCurrent = linkedProfileForGroup(groupId);
+  if (linkedCurrent) keep.add(linkedCurrent);
+  const out = [];
+  for (const user of clean){
+    if (!user || !user.id) continue;
+    if (keep.has(user.id) || admins.has(user.id) || user.joinedAt){
+      out.push(user);
+      continue;
+    }
+    if (user.authOwnerUid){
+      try {
+        const groups = await loadMembershipGroups(user.id);
+        if (groups.includes(groupId)) out.push(user);
+      } catch(e){ console.error(e); }
+    }
+  }
+  return out;
+}
 async function linkAuthToProfile(userId, groupId = groupPath()){
   if (!state.authUser || !userId || !groupId) return true;
   const u = state.users.find(x => x.id === userId);
@@ -506,12 +575,12 @@ function normalizeGroupConfig(cfg, groupId = groupPath()){
   return { ...defaultGroupConfig(groupId), ...(cfg || {}), invitationPassword: (cfg && cfg.invitationPassword) || INVITATION_PASSWORD_DEFAULT };
 }
 // ====== STORAGE ======
-async function loadConfig(){
-  if (!firebaseReady) return normalizeGroupConfig(JSON.parse(localStorage.getItem(groupLocalKey('config'))||'null'));
+async function loadConfig(groupId = groupPath()){
+  if (!firebaseReady) return normalizeGroupConfig(JSON.parse(localStorage.getItem(groupLocalKey('config', groupId))||'null'), groupId);
   try {
-    const snap = await getDoc(doc(db,'salas',groupPath(),'meta','config'));
-    return normalizeGroupConfig(snap.exists() ? snap.data() : null);
-  } catch(e){ console.error(e); return defaultGroupConfig(); }
+    const snap = await getDoc(doc(db,'salas',groupId,'meta','config'));
+    return normalizeGroupConfig(snap.exists() ? snap.data() : null, groupId);
+  } catch(e){ console.error(e); return defaultGroupConfig(groupId); }
 }
 async function saveConfig(cfg){
   const merged = normalizeGroupConfig({ ...state.groupConfig, ...cfg });
@@ -521,10 +590,10 @@ async function saveConfig(cfg){
   try { await setDoc(doc(db,'salas',groupPath(),'meta','config'), merged); }
   catch(e){ console.error(e); toast('Error al guardar config'); }
 }
-async function loadUsers(){
-  if (!firebaseReady) return JSON.parse(localStorage.getItem(groupLocalKey('users'))||'[]');
+async function loadUsers(groupId = groupPath()){
+  if (!firebaseReady) return JSON.parse(localStorage.getItem(groupLocalKey('users', groupId))||'[]');
   try {
-    const snap = await getDoc(doc(db,'salas',groupPath(),'meta','users'));
+    const snap = await getDoc(doc(db,'salas',groupId,'meta','users'));
     return snap.exists() ? (snap.data().users || []) : [];
   } catch(e){ console.error(e); return []; }
 }
@@ -546,17 +615,17 @@ async function saveUsersForGroup(groupId, users){
   if (!firebaseReady){ localStorage.setItem(groupLocalKey('users', groupId), JSON.stringify(users)); return; }
   await setDoc(doc(db,'salas',groupId,'meta','users'), { users });
 }
-async function loadSharedRoutine(){
+async function loadSharedRoutine(groupId = groupPath()){
   if (!firebaseReady){
-    const r = JSON.parse(localStorage.getItem(groupLocalKey('sharedRoutine'))||'null');
+    const r = JSON.parse(localStorage.getItem(groupLocalKey('sharedRoutine', groupId))||'null');
     if (r) return normalizeRoutine(r);
-    localStorage.setItem(groupLocalKey('sharedRoutine'), JSON.stringify(normalizeRoutine(DEFAULT_ROUTINE)));
+    localStorage.setItem(groupLocalKey('sharedRoutine', groupId), JSON.stringify(normalizeRoutine(DEFAULT_ROUTINE)));
     return normalizeRoutine(DEFAULT_ROUTINE);
   }
   try {
-    const snap = await getDoc(doc(db,'salas',groupPath(),'routines','shared'));
+    const snap = await getDoc(doc(db,'salas',groupId,'routines','shared'));
     if (snap.exists() && snap.data().routine) return normalizeRoutine(snap.data().routine);
-    await setDoc(doc(db,'salas',groupPath(),'routines','shared'), { routine: normalizeRoutine(DEFAULT_ROUTINE) });
+    await setDoc(doc(db,'salas',groupId,'routines','shared'), { routine: normalizeRoutine(DEFAULT_ROUTINE) });
     return normalizeRoutine(DEFAULT_ROUTINE);
   } catch(e){ console.error(e); return normalizeRoutine(DEFAULT_ROUTINE); }
 }
@@ -567,15 +636,15 @@ async function saveSharedRoutine(routine){
   catch(e){ console.error(e); toast('Error al guardar rutina'); }
   state.syncing = false;
 }
-async function loadAllPersonalRoutines(){
+async function loadAllPersonalRoutines(groupId = groupPath()){
   if (!firebaseReady){
-    const out = {}; const users = JSON.parse(localStorage.getItem(groupLocalKey('users'))||'[]');
-    for (const u of users){ const r = localStorage.getItem(groupLocalKey('routine:'+u.id)); if (r) out[u.id] = JSON.parse(r); }
+    const out = {}; const users = JSON.parse(localStorage.getItem(groupLocalKey('users', groupId))||'[]');
+    for (const u of users){ const r = localStorage.getItem(groupLocalKey('routine:'+u.id, groupId)); if (r) out[u.id] = JSON.parse(r); }
     return out;
   }
   try {
     const out = {};
-    const snap = await getDocs(collection(db,'salas',groupPath(),'personalRoutines'));
+    const snap = await getDocs(collection(db,'salas',groupId,'personalRoutines'));
     snap.forEach(d => { out[d.id] = d.data().routine || {}; });
     return out;
   } catch(e){ console.error(e); return {}; }
@@ -587,15 +656,15 @@ async function savePersonalRoutine(userId, routine){
   catch(e){ console.error(e); toast('Error al guardar rutina personal'); }
   state.syncing = false;
 }
-async function loadAllLogs(){
+async function loadAllLogs(groupId = groupPath()){
   if (!firebaseReady){
-    const out = {}; const users = JSON.parse(localStorage.getItem(groupLocalKey('users'))||'[]');
-    for (const u of users){ out[u.id] = JSON.parse(localStorage.getItem(groupLocalKey('logs:'+u.id))||'{}'); }
+    const out = {}; const users = JSON.parse(localStorage.getItem(groupLocalKey('users', groupId))||'[]');
+    for (const u of users){ out[u.id] = JSON.parse(localStorage.getItem(groupLocalKey('logs:'+u.id, groupId))||'{}'); }
     return out;
   }
   try {
     const out = {};
-    const snap = await getDocs(collection(db,'salas',groupPath(),'logs'));
+    const snap = await getDocs(collection(db,'salas',groupId,'logs'));
     snap.forEach(d => { out[d.id] = d.data(); });
     return out;
   } catch(e){ console.error(e); return {}; }
@@ -617,7 +686,7 @@ async function deletePersonalRoutineDoc(userId){
   try { await deleteDoc(doc(db,'salas',groupPath(),'personalRoutines',userId)); }
   catch(e){ console.error(e); }
 }
-function loadMe(){ return localStorage.getItem(groupLocalKey(LS_ME)) || (groupPath() === DEFAULT_GROUP ? localStorage.getItem(LS_ME) : null); }
+function loadMe(groupId = groupPath()){ return localStorage.getItem(groupLocalKey(LS_ME, groupId)) || (groupId === DEFAULT_GROUP ? localStorage.getItem(LS_ME) : null); }
 function saveMe(id){ localStorage.setItem(groupLocalKey(LS_ME), id); if (groupPath() === DEFAULT_GROUP) localStorage.setItem(LS_ME, id); }
 function clearMe(){ localStorage.removeItem(groupLocalKey(LS_ME)); if (groupPath() === DEFAULT_GROUP) localStorage.removeItem(LS_ME); }
 function authValid(){
@@ -647,8 +716,32 @@ async function afterLogin(userId){
   saveJoinedGroups(state.joinedGroups);
   return true;
 }
-function loadRoutineSource(){
-  try { return JSON.parse(localStorage.getItem(groupLocalKey(LS_SOURCE))||'{}'); } catch { return {}; }
+async function handleAuthState(user){
+  state.authReady = true;
+  state.authUser = user || null;
+  state.account = user ? await loadAccount(user) : null;
+  if (state.account?.homeTourSeen) localStorage.setItem(LS_TOUR, '1');
+  else if (state.account && localStorage.getItem(LS_TOUR)) await saveAccount({ homeTourSeen: true });
+  if (state.account) await recoverAccountGroupsFromProfiles();
+  if (state.account && state.account.groups && state.account.groups.length){
+    state.joinedGroups = Array.from(new Set(state.account.groups));
+    saveJoinedGroups(state.joinedGroups);
+    if (!state.joinedGroups.includes(state.currentGroup)){
+      state.currentGroup = state.joinedGroups[0] || DEFAULT_GROUP;
+      saveCurrentGroup(state.currentGroup);
+    }
+  }
+  if (!user){
+    state.currentUser = null;
+    state.setupStep = null;
+    state.view = 'setup';
+    render();
+    return;
+  }
+  await reloadGroup();
+}
+function loadRoutineSource(groupId = groupPath()){
+  try { return JSON.parse(localStorage.getItem(groupLocalKey(LS_SOURCE, groupId))||'{}'); } catch { return {}; }
 }
 function saveRoutineSource(src){
   localStorage.setItem(groupLocalKey(LS_SOURCE), JSON.stringify(src));
@@ -662,18 +755,38 @@ function blankRoutine(){
   }
   return out;
 }
-async function loadGroupState(){
-  const cfg = await loadConfig();
-  state.groupConfig = cfg;
-  state.invitationPassword = cfg.invitationPassword || INVITATION_PASSWORD_DEFAULT;
-  if (firebaseReady && !cfg.createdAt){
-    await saveConfig(defaultGroupConfig());
+async function readGroupState(groupId = groupPath()){
+  const gid = groupId || DEFAULT_GROUP;
+  const [cfg, rawUsers, sharedRoutine, personalRoutines, logs] = await Promise.all([
+    loadConfig(gid),
+    loadUsers(gid),
+    loadSharedRoutine(gid),
+    loadAllPersonalRoutines(gid),
+    loadAllLogs(gid)
+  ]);
+  const users = await filterUsersForGroup(gid, rawUsers, cfg, [loadMe(gid)]);
+  if (gid !== DEFAULT_GROUP && JSON.stringify(rawUsers) !== JSON.stringify(users)){
+    await saveUsersForGroup(gid, users);
   }
-  state.users = await loadUsers();
-  state.sharedRoutine = normalizeRoutine(await loadSharedRoutine());
-  state.personalRoutines = await loadAllPersonalRoutines();
-  state.logs = await loadAllLogs();
-  state.routineSource = loadRoutineSource();
+  return {
+    groupConfig: cfg,
+    invitationPassword: cfg.invitationPassword || INVITATION_PASSWORD_DEFAULT,
+    users,
+    sharedRoutine: normalizeRoutine(sharedRoutine),
+    personalRoutines,
+    logs,
+    routineSource: loadRoutineSource(gid)
+  };
+}
+async function loadGroupState(groupId = groupPath()){
+  const data = await readGroupState(groupId);
+  state.groupConfig = data.groupConfig;
+  state.invitationPassword = data.invitationPassword;
+  state.users = data.users;
+  state.sharedRoutine = data.sharedRoutine;
+  state.personalRoutines = data.personalRoutines;
+  state.logs = data.logs;
+  state.routineSource = data.routineSource;
 }
 function chooseInitialViewForGroup(){
   const meId = loadMe();
@@ -686,14 +799,12 @@ function chooseInitialViewForGroup(){
     saveAccount({ linkedProfiles });
     clearMe(); clearAuth();
   }
-  if (state.authUser && !state.enteringGroup){
-    state.currentUser = null; state.setupStep = 'groupHub'; state.view = 'setup';
-  } else if (linkedAllowed){
+  if (linkedAllowed){
     if (linkedUser && !linkedUser.authOwnerUid && state.authUser) linkAuthToProfile(linkedId, groupPath()).catch(console.error);
     state.currentUser = linkedId; state.view = 'home'; state.setupStep = null; state.enteringGroup = false;
   } else if (state.authUser && state.enteringGroup){
     state.currentUser = null;
-    state.setupStep = state.users.length ? 'pickUser' : 'newUser';
+    state.setupStep = 'newUser';
     state.view = 'setup';
     state.enteringGroup = false;
   } else if (state.authUser){
@@ -708,7 +819,8 @@ function chooseInitialViewForGroup(){
     state.currentUser = null; state.setupStep = 'pickUser'; state.view = 'setup';
   }
 }
-async function reloadGroup(){
+async function reloadGroup(options = {}){
+  const { skipRender = false } = options;
   unsubs.forEach(u => u && u());
   unsubs = [];
   await loadGroupState();
@@ -720,20 +832,62 @@ async function reloadGroup(){
   }
   chooseInitialViewForGroup();
   subscribeRealtime();
-  render();
+  if (!skipRender) render();
 }
 async function switchGroup(groupId){
   if (!groupId) return;
-  state.currentGroup = groupId;
-  saveCurrentGroup(groupId);
-  rememberGroup(groupId);
-  state.currentDay = null;
-  state.currentExerciseIdx = null;
-  state.editingSession = null;
-  state.showAlts = false;
-  state.showMuscles = false;
-  state.showRoutineMuscles = false;
-  await reloadGroup();
+  if (groupId === state.currentGroup){
+    state.enteringGroup = false;
+    return;
+  }
+  const token = ++state.groupSwitchToken;
+  state.suppressRealtimeRender = true;
+  try {
+    const data = await readGroupState(groupId);
+    if (token !== state.groupSwitchToken) return;
+    unsubs.forEach(u => u && u());
+    unsubs = [];
+    state.currentGroup = groupId;
+    saveCurrentGroup(groupId);
+    rememberGroup(groupId);
+    state.currentDay = null;
+    state.currentExerciseIdx = null;
+    state.editingSession = null;
+    state.showAlts = false;
+    state.showMuscles = false;
+    state.showRoutineMuscles = false;
+    state.showGlobalRoutineMuscles = false;
+    state.groupConfig = data.groupConfig;
+    state.invitationPassword = data.invitationPassword;
+    state.users = data.users;
+    state.sharedRoutine = data.sharedRoutine;
+    state.personalRoutines = data.personalRoutines;
+    state.logs = data.logs;
+    state.routineSource = data.routineSource;
+    if (state.account){
+      const recoveredGroups = await recoverAccountGroupsFromProfiles();
+      const groups = Array.from(new Set([...(state.account.groups || []), ...(recoveredGroups || [])]));
+      state.joinedGroups = groups.length ? groups : state.joinedGroups;
+      saveJoinedGroups(state.joinedGroups);
+    }
+    chooseInitialViewForGroup();
+    subscribeRealtime();
+  } catch(e){
+    console.error(e);
+    toast('No pude cambiar de grupo. Intenta de nuevo.');
+  } finally {
+    if (token === state.groupSwitchToken){
+      // Keep suppressing realtime renders briefly so the initial snapshot callbacks
+      // (which fire immediately after onSnapshot) don't trigger extra re-renders.
+      state.realtimeQuietUntil = Date.now() + 1200;
+      state.switchingGroup = false;
+      render();
+      // Release the hard suppression after the initial snapshots settle
+      setTimeout(() => {
+        if (token === state.groupSwitchToken) state.suppressRealtimeRender = false;
+      }, 800);
+    }
+  }
 }
 async function createGroup(groupId, groupName, invitationPassword, routineMode){
   let me = state.users.find(u => u.id === state.currentUser);
@@ -752,19 +906,33 @@ async function createGroup(groupId, groupName, invitationPassword, routineMode){
   let routine = normalizeRoutine(DEFAULT_ROUTINE);
   if (routineMode === 'blank') routine = blankRoutine();
   if (routineMode === 'copy-current') routine = JSON.parse(JSON.stringify(state.sharedRoutine || DEFAULT_ROUTINE));
+  const newGroupUsers = [{ ...me }];
   if (!firebaseReady){
     localStorage.setItem(groupLocalKey('config', safeId), JSON.stringify(config));
-    localStorage.setItem(groupLocalKey('users', safeId), JSON.stringify([{ ...me }]));
+    localStorage.setItem(groupLocalKey('users', safeId), JSON.stringify(newGroupUsers));
     localStorage.setItem(groupLocalKey('sharedRoutine', safeId), JSON.stringify(routine));
   } else {
     await setDoc(doc(db,'salas',safeId,'meta','config'), config);
-    await setDoc(doc(db,'salas',safeId,'meta','users'), { users: [{ ...me }] });
+    await setDoc(doc(db,'salas',safeId,'meta','users'), { users: newGroupUsers });
     await setDoc(doc(db,'salas',safeId,'routines','shared'), { routine });
   }
   window._pendingGroupCreator = null;
+  // CRITICAL: reset local state BEFORE switching to the new group so any
+  // subsequent saveUsers() calls don't write old users into the new group's Firestore.
+  state.users = newGroupUsers;
+  state.logs = {};
+  state.personalRoutines = {};
+  state.sharedRoutine = normalizeRoutine(routine);
+  state.groupConfig = config;
+  state.invitationPassword = invitationPassword;
+  state.routineSource = 'shared';
+  state.currentDay = null;
+  state.currentExerciseIdx = null;
+  state.editingSession = null;
   rememberGroup(safeId);
   state.currentGroup = safeId;
   saveCurrentGroup(safeId);
+  state.currentUser = me.id;
   try { await afterLogin(me.id); }
   catch(err){ toast(err.message || 'No pude enlazar este usuario'); return; }
   await reloadGroup();
@@ -784,11 +952,11 @@ async function joinGroup(groupId, password){
   if (!cfg){ toast('No encontré ese grupo'); return; }
   if ((cfg.invitationPassword || INVITATION_PASSWORD_DEFAULT) !== password){ toast('Contraseña incorrecta'); return; }
   if (currentMe && currentMe.pinHash){
-    const targetUsers = await loadUsersForGroup(safeId);
+    let targetUsers = await filterUsersForGroup(safeId, await loadUsersForGroup(safeId), cfg, [currentMe.id]);
     if (!targetUsers.some(u => u.id === currentMe.id)){
       targetUsers.push({ ...currentMe, joinedAt: Date.now() });
-      await saveUsersForGroup(safeId, targetUsers);
     }
+    await saveUsersForGroup(safeId, targetUsers);
   }
   rememberGroup(safeId);
   if (state.authUser){
@@ -806,6 +974,7 @@ async function joinGroup(groupId, password){
   state.showAlts = false;
   state.showMuscles = false;
   state.showRoutineMuscles = false;
+  state.showGlobalRoutineMuscles = false;
   await reloadGroup();
   if (currentMe) {
     try { await afterLogin(currentMe.id); }
@@ -1101,6 +1270,17 @@ function routineMuscleStats(routine){
   return { rows, map, total };
 }
 
+function fullRoutineMuscleStats(){
+  const merged = { exercises: [] };
+  getAllDayKeys().forEach(dayKey => {
+    const dayRoutine = getRoutineForDay(dayKey);
+    if (dayRoutine && Array.isArray(dayRoutine.exercises)){
+      merged.exercises.push(...dayRoutine.exercises);
+    }
+  });
+  return routineMuscleStats(merged);
+}
+
 function muscleHeatColor(intensity){
   const t = Math.max(0, Math.min(1, Number(intensity) || 0));
   if (!t) return 'var(--bg-elev-2)';
@@ -1110,8 +1290,19 @@ function muscleHeatColor(intensity){
   return '#b8e4ff';
 }
 
-function routineMuscleOverview(routine){
-  const stats = routineMuscleStats(routine);
+function muscleMapInfoButton(scope){
+  return `<button data-action="showMuscleMapInfo" data-scope="${esc(scope)}" aria-label="Cómo funciona este mapa muscular" title="Cómo funciona este mapa" style="padding:6px 8px;border-color:var(--border);background:var(--bg-elev-2);color:var(--accent);">
+    <i class="ti ti-info-circle" style="font-size:15px;"></i>
+  </button>`;
+}
+
+function routineMuscleOverview(routineOrStats, options = {}){
+  const stats = routineOrStats && routineOrStats.rows && routineOrStats.map
+    ? routineOrStats
+    : routineMuscleStats(routineOrStats);
+  const title = options.title || 'Mapa Muscular De La Rutina';
+  const subtitle = options.subtitle || 'Primarios cuentan 1 punto; secundarios 0.5. El color muestra qué músculos aparecen más en este día.';
+  const scope = options.scope || 'day';
   if (!stats.rows.length){
     return `<div class="card" style="margin-bottom:16px;text-align:center;color:var(--text-muted);font-size:13px;">
       <i class="ti ti-body-scan" style="font-size:24px;color:var(--text-dim);display:block;margin-bottom:6px;"></i>
@@ -1132,10 +1323,11 @@ function routineMuscleOverview(routine){
     </div>`).join('');
   return `<div class="card fade-in" style="margin-bottom:16px;padding:16px;">
     <div class="row" style="align-items:flex-start;margin-bottom:12px;">
-      <div>
-        <h2 style="margin-bottom:3px;">Mapa Muscular De La Rutina</h2>
-        <div class="muted" style="font-size:12px;">Primarios cuentan 1 punto; secundarios 0.5. El color muestra qué músculos aparecen más en este día.</div>
+      <div style="flex:1;">
+        <h2 style="margin-bottom:3px;">${esc(title)}</h2>
+        <div class="muted" style="font-size:12px;">${esc(subtitle)}</div>
       </div>
+      ${muscleMapInfoButton(scope)}
     </div>
     ${bodyDiagram([], [], stats.map)}
     <div style="display:grid;grid-template-columns:1fr;gap:4px;margin-top:14px;">
@@ -1319,10 +1511,173 @@ function openModal(html, onAttach){
 }
 function closeModal(){ modalRoot.innerHTML = ''; state.modalOpen = null; }
 
+// ====== ONBOARDING (slides + tour del home) ======
+const LS_ONBOARD = 'gym_onboarding_seen_v1';
+const LS_TOUR = 'gym_home_tour_seen_v1';
+
+function shouldShowOnboarding(){ return !localStorage.getItem(LS_ONBOARD); }
+function shouldShowTour(){
+  return !localStorage.getItem(LS_TOUR) && !state.account?.homeTourSeen;
+}
+function markOnboardingSeen(){ localStorage.setItem(LS_ONBOARD, '1'); }
+function markTourSeen(){
+  localStorage.setItem(LS_TOUR, '1');
+  if (state.authUser) saveAccount({ homeTourSeen: true }).catch(console.error);
+}
+
+const ONBOARDING_SLIDES = [
+  { icon:'💪', title:'Star Jazz Gym Buddy', subtitle:'Tu compañero digital de gym. Registra entrenos, sigue tu progreso y motívate con tu grupo.' },
+  { icon:'📊', title:'Registra cada sesión', subtitle:'Sets, reps y peso de cada ejercicio. Mira cómo creces semana a semana.',
+    features:[ {icon:'ti-barbell', text:'Tu rutina completa lista para usar'}, {icon:'ti-chart-line', text:'Gráficos de progreso por ejercicio'}, {icon:'ti-notes', text:'Notas por set y por sesión'} ] },
+  { icon:'👥', title:'Entrena en grupo', subtitle:'Comparte rutinas con tu buddy. Ve quién entrenó esta semana y mantente accountable.',
+    features:[ {icon:'ti-users', text:'Rutina compartida + rutina personal'}, {icon:'ti-eye', text:'Ve el progreso de tu compañero'}, {icon:'ti-trophy', text:'Motivación mutua'} ] },
+  { icon:'🎯', title:'Tus metas, tu progreso', subtitle:'Sigue tu peso corporal, define tus metas y celebra los avances.',
+    features:[ {icon:'ti-target', text:'Meta de peso corporal'}, {icon:'ti-trending-up', text:'Comparativas: semana, mes, año'}, {icon:'ti-body-scan', text:'Mapa de músculos trabajados'} ] },
+  { icon:'🔒', title:'Tus datos, tu grupo', subtitle:'Solo los miembros de tu grupo ven tu progreso. Tu información está protegida con autenticación segura.' },
+];
+
+function renderOnboarding(){
+  // Bail if already mounted (render() may be called multiple times by realtime listeners)
+  if (document.querySelector('.onboarding-wrap')) return;
+  let currentSlide = 0;
+  const totalSlides = ONBOARDING_SLIDES.length;
+  const wrap = document.createElement('div');
+  wrap.className = 'onboarding-wrap';
+  wrap.innerHTML = `
+    <button class="onboarding-skip" id="obSkip">Saltar</button>
+    <div class="onboarding-slides" id="obSlides">
+      ${ONBOARDING_SLIDES.map((s, i) => `
+        <div class="onboarding-slide" data-i="${i}">
+          <div class="onboarding-icon">${s.icon}</div>
+          <h2>${esc(s.title)}</h2>
+          <p>${esc(s.subtitle)}</p>
+          ${s.features ? `<div class="onboarding-features">
+            ${s.features.map(f => `<div class="onboarding-feature"><i class="ti ${f.icon}"></i><span>${esc(f.text)}</span></div>`).join('')}
+          </div>` : ''}
+        </div>`).join('')}
+    </div>
+    <div class="onboarding-footer">
+      <div class="onboarding-dots" id="obDots">
+        ${ONBOARDING_SLIDES.map((_, i) => `<div class="onboarding-dot ${i===0?'active':''}" data-i="${i}"></div>`).join('')}
+      </div>
+      <button class="primary onboarding-cta" id="obCta">Siguiente</button>
+    </div>`;
+  document.body.appendChild(wrap);
+  const slidesEl = wrap.querySelector('#obSlides');
+  const dotsEl = wrap.querySelector('#obDots');
+  const ctaBtn = wrap.querySelector('#obCta');
+  const skipBtn = wrap.querySelector('#obSkip');
+  function close(){
+    markOnboardingSeen();
+    // Render the underlying app FIRST (login or home), THEN fade out the slides on top
+    try { render(); } catch(e){ console.error(e); }
+    wrap.style.transition = 'opacity 0.3s ease';
+    wrap.style.opacity = '0';
+    wrap.style.pointerEvents = 'none';
+    setTimeout(() => wrap.remove(), 320);
+  }
+  function goTo(i){
+    currentSlide = Math.max(0, Math.min(totalSlides - 1, i));
+    const slide = slidesEl.children[currentSlide];
+    slidesEl.scrollTo({ left: slide.offsetLeft, behavior: 'smooth' });
+    updateUI();
+  }
+  function updateUI(){
+    dotsEl.querySelectorAll('.onboarding-dot').forEach((d, i) => d.classList.toggle('active', i === currentSlide));
+    ctaBtn.textContent = currentSlide === totalSlides - 1 ? '¡Comenzar!' : 'Siguiente';
+  }
+  ctaBtn.addEventListener('click', () => { if (currentSlide === totalSlides - 1) close(); else goTo(currentSlide + 1); });
+  skipBtn.addEventListener('click', close);
+  dotsEl.querySelectorAll('.onboarding-dot').forEach(d => d.addEventListener('click', () => goTo(Number(d.dataset.i))));
+  let scrollTimer;
+  slidesEl.addEventListener('scroll', () => {
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(() => {
+      const i = Math.round(slidesEl.scrollLeft / slidesEl.offsetWidth);
+      if (i !== currentSlide){ currentSlide = i; updateUI(); }
+    }, 80);
+  });
+}
+
+const TOUR_STEPS = [
+  { selector:'[data-action="openDay"]', title:'💪 Tus días de entreno', body:'Cada tarjeta es un día. Toca uno para ver los ejercicios y registrar tu sesión.' },
+  { selector:'[data-action="goCompare"]', title:'📈 Ver progreso', body:'Aquí ves cómo evolucionas: peso máximo, volumen, comparado con tu buddy.' },
+  { selector:'[data-action="goSettings"]', title:'⚙️ Configuración', body:'Edita tu perfil, peso corporal, grupos y opciones de la app.' },
+  { selector:'[data-action="userMenu"]', title:'👤 Tu cuenta', body:'Cambia de usuario, edita tu PIN o cierra sesión.' },
+];
+
+function startHomeTour(){
+  if (!shouldShowTour()) return;
+  if (document.querySelector('.tour-overlay')) return; // already showing
+  let step = 0;
+  const overlay = document.createElement('div');
+  overlay.className = 'tour-overlay';
+  overlay.innerHTML = `
+    <div class="tour-bg"></div>
+    <div class="tour-spotlight" id="tourSpot"></div>
+    <div class="tour-tooltip" id="tourTip">
+      <h3 id="tourTitle"></h3>
+      <p id="tourBody"></p>
+      <div class="tour-progress">
+        <span class="tour-step" id="tourStep"></span>
+        <div class="tour-actions">
+          <button id="tourSkip" style="background:transparent;border:none;color:var(--text-muted);">Saltar</button>
+          <button class="primary" id="tourNext" style="padding:6px 14px;">Siguiente</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const spot = overlay.querySelector('#tourSpot');
+  const tip = overlay.querySelector('#tourTip');
+  const titleEl = overlay.querySelector('#tourTitle');
+  const bodyEl = overlay.querySelector('#tourBody');
+  const stepEl = overlay.querySelector('#tourStep');
+  const nextBtn = overlay.querySelector('#tourNext');
+  const skipBtn = overlay.querySelector('#tourSkip');
+  function close(){
+    markTourSeen();
+    overlay.style.animation = 'fadeIn 0.2s ease reverse';
+    setTimeout(() => overlay.remove(), 200);
+  }
+  function showStep(){
+    const s = TOUR_STEPS[step];
+    if (!s){ close(); return; }
+    const target = document.querySelector(s.selector);
+    if (!target){ step++; showStep(); return; }
+    target.scrollIntoView({ behavior:'smooth', block:'center' });
+    setTimeout(() => {
+      const rect = target.getBoundingClientRect();
+      const pad = 8;
+      spot.style.left = (rect.left - pad) + 'px';
+      spot.style.top = (rect.top - pad) + 'px';
+      spot.style.width = (rect.width + pad * 2) + 'px';
+      spot.style.height = (rect.height + pad * 2) + 'px';
+      titleEl.textContent = s.title;
+      bodyEl.textContent = s.body;
+      stepEl.textContent = `${step + 1} / ${TOUR_STEPS.length}`;
+      nextBtn.textContent = step === TOUR_STEPS.length - 1 ? '¡Listo!' : 'Siguiente';
+      const tipW = 300; const tipH = 150;
+      const vpW = window.innerWidth; const vpH = window.innerHeight;
+      let left = rect.left + rect.width / 2 - tipW / 2;
+      left = Math.max(12, Math.min(vpW - tipW - 12, left));
+      let top = rect.bottom + 16;
+      if (top + tipH > vpH - 20) top = rect.top - tipH - 16;
+      tip.style.left = left + 'px';
+      tip.style.top = Math.max(12, top) + 'px';
+      tip.style.maxWidth = tipW + 'px';
+    }, 300);
+  }
+  nextBtn.addEventListener('click', () => { step++; showStep(); });
+  skipBtn.addEventListener('click', close);
+  showStep();
+}
+
 // ====== RENDER ======
 function render(){
+  if (shouldShowOnboarding()){ renderOnboarding(); return; }
   if (firebaseReady && !state.authReady) return renderAuthLoading();
   if (firebaseReady && !state.authUser) return renderAuthGate();
+  if (state.switchingGroup) return renderGroupSwitchLoading();
   if (state.view === 'setup') return renderSetup();
   if (state.view === 'day') return renderDay();
   if (state.view === 'exercise') return renderExercise();
@@ -1331,6 +1686,37 @@ function render(){
   if (state.view === 'editRoutine') return renderEditRoutine();
   if (state.view === 'editExercise') return renderEditExercise();
   return renderHome();
+}
+
+let realtimeRenderTimer = null;
+function requestRealtimeRender(){
+  if (state.suppressRealtimeRender) return;
+  const wait = Math.max(0, (state.realtimeQuietUntil || 0) - Date.now());
+  if (wait > 0){
+    if (!realtimeRenderTimer){
+      realtimeRenderTimer = setTimeout(() => {
+        realtimeRenderTimer = null;
+        render();
+      }, wait + 30);
+    }
+    return;
+  }
+  if (realtimeRenderTimer){
+    clearTimeout(realtimeRenderTimer);
+    realtimeRenderTimer = null;
+  }
+  render();
+}
+
+function renderGroupSwitchLoading(){
+  root.innerHTML = `
+    <div style="min-height:70vh;display:flex;align-items:center;justify-content:center;padding:24px;">
+      <div class="card fade-in" style="width:min(420px,100%);text-align:center;padding:28px 22px;">
+        <div class="loader" style="margin:0 auto 16px;"></div>
+        <h2 style="margin-bottom:6px;">Cambiando Grupo</h2>
+        <p class="muted" style="margin:0;font-size:14px;">Cargando rutina, usuarios y progreso...</p>
+      </div>
+    </div>`;
 }
 
 function renderAuthLoading(){
@@ -1547,7 +1933,7 @@ function renderSetup(){
         </div>
         <button class="primary" data-action="checkInvite" style="width:100%;padding:14px;font-weight:600;font-size:15px;">Continuar</button>
         <div id="invError" style="color:var(--danger);font-size:12px;text-align:center;margin-top:10px;min-height:14px;"></div>
-        ${state.users.length > 0 ? `<button data-action="backToPick" style="margin-top:14px;width:100%;padding:10px;background:transparent;border:none;font-size:13px;color:var(--text-muted);">← Volver a la lista</button>` : ''}
+        ${state.users.length > 0 ? `<button data-action="backToPick" style="margin-top:14px;width:100%;padding:10px;background:transparent;border:none;font-size:13px;color:var(--text-muted);">Ya Tengo Usuario En Este Grupo</button>` : ''}
       </div>`;
     attach();
     return;
@@ -1586,6 +1972,18 @@ function renderHome(){
   });
 
   const allDays = getAllDayKeys();
+  const globalMuscleStats = fullRoutineMuscleStats();
+  const globalMuscleMapBtn = `
+    <button data-action="toggleGlobalRoutineMuscles" style="margin-bottom:12px;padding:11px;width:100%;background:${state.showGlobalRoutineMuscles?'var(--accent-bg-strong)':'var(--bg-elev)'};color:${state.showGlobalRoutineMuscles?'var(--accent)':'var(--text)'};border:1px solid ${state.showGlobalRoutineMuscles?'var(--accent-border)':'var(--border)'};display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:500;">
+      <i class="ti ti-body-scan" style="font-size:15px;"></i> ${state.showGlobalRoutineMuscles ? 'Ocultar Mapa Muscular General' : 'Mapa Muscular General'}
+    </button>`;
+  const globalMuscleOverview = state.showGlobalRoutineMuscles
+    ? routineMuscleOverview(globalMuscleStats, {
+      title: 'Mapa Muscular General',
+      subtitle: 'Resumen de todos los días de tu rutina actual. Usa la rutina compartida o personal seleccionada en cada día.',
+      scope: 'general'
+    })
+    : '';
   const dayCards = allDays.map((dk, i) => {
     const r = getRoutineForDay(dk);
     if (!r) return '';
@@ -1651,6 +2049,14 @@ function renderHome(){
       <div>Modo solo lectura. <button data-action="switchUser" style="background:transparent;border:none;color:var(--info);text-decoration:underline;cursor:pointer;padding:0;font-size:13px;font-family:inherit;">Inicia sesión</button> para registrar entrenos.</div>
     </div>` : '';
 
+  const currentGroupName = state.currentGroup ? groupDisplayName(state.currentGroup) : '';
+  const groupPill = state.currentGroup ? `
+    <button data-action="goGroupHub" class="group-pill" style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px 4px 8px;margin-top:6px;border-radius:var(--radius-pill);background:var(--bg-elev);border:1px solid var(--border);font-size:12px;color:var(--text-muted);font-family:inherit;cursor:pointer;transition:all 0.15s;">
+      <i class="ti ti-users-group" style="font-size:13px;color:var(--accent);"></i>
+      <span style="color:var(--text);font-weight:500;">${esc(currentGroupName)}</span>
+      <i class="ti ti-chevron-right" style="font-size:12px;opacity:0.5;"></i>
+    </button>` : '';
+
   root.innerHTML = `
     ${configBanner()}
     ${viewOnlyBanner}
@@ -1658,6 +2064,7 @@ function renderHome(){
       <div>
         <h1>Mi Rutina</h1>
         <div class="muted" style="font-size:13px;margin-top:2px;">${new Date().toLocaleDateString('es-ES', {weekday:'long', day:'numeric', month:'long'})}</div>
+        ${groupPill}
       </div>
       <div class="spacer"></div>
       ${syncIndicator()}
@@ -1675,9 +2082,14 @@ function renderHome(){
         <i class="ti ti-settings" style="font-size:17px;color:var(--text-muted);"></i>
       </button>
     </div>
+    ${globalMuscleMapBtn}
+    ${globalMuscleOverview}
     ${dayCards}
     ${partnersBlock}`;
   attach();
+  if (state.currentUser && shouldShowTour()){
+    setTimeout(() => startHomeTour(), 500);
+  }
 }
 
 // ====== DAY ======
@@ -1737,7 +2149,11 @@ function renderDay(){
     <button data-action="toggleRoutineMuscles" style="margin-bottom:12px;padding:11px;width:100%;background:${state.showRoutineMuscles?'var(--accent-bg-strong)':'var(--bg-elev)'};color:${state.showRoutineMuscles?'var(--accent)':'var(--text)'};border:1px solid ${state.showRoutineMuscles?'var(--accent-border)':'var(--border)'};display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:500;">
       <i class="ti ti-body-scan" style="font-size:15px;"></i> ${state.showRoutineMuscles ? 'Ocultar Mapa Muscular' : 'Mapa Muscular De La Rutina'}
     </button>`;
-  const routineOverview = state.showRoutineMuscles ? routineMuscleOverview(r) : '';
+  const routineOverview = state.showRoutineMuscles ? routineMuscleOverview(r, {
+    title: 'Mapa Muscular Del Día',
+    subtitle: 'Resumen de los ejercicios de este día. Sirve para ver qué zonas domina esta sesión.',
+    scope: 'day'
+  }) : '';
 
   root.innerHTML = `
     ${headerBar(r.label, 'goHome')}
@@ -2421,20 +2837,25 @@ async function handle(e){
     if (!email){ errEl.textContent = 'Escribe tu email'; return; }
     if (password.length < 6){ errEl.textContent = 'La contraseña debe tener mínimo 6 caracteres'; return; }
     try {
+      errEl.textContent = '';
+      btn.disabled = true;
+      btn.textContent = a === 'authEmailSignup' ? 'Creando...' : 'Entrando...';
       if (a === 'authEmailSignup'){
         const cred = await createUserWithEmailAndPassword(auth, email, password);
         if (cred.user && !cred.user.displayName){
           await updateProfile(cred.user, { displayName: email.split('@')[0] });
         }
+        await handleAuthState(cred.user);
         toast('Cuenta creada');
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        const cred = await signInWithEmailAndPassword(auth, email, password);
+        await handleAuthState(cred.user);
         toast('Sesión iniciada');
       }
     } catch(err){
       console.error(err);
       const code = err.code || '';
-      errEl.textContent = code.includes('email-already-in-use') ? 'Ese email ya tiene cuenta. Toca "Ya tengo cuenta".' :
+      errEl.textContent = code.includes('email-already-in-use') ? 'Ese email ya tiene cuenta. Toca "Iniciar Sesión".' :
         code.includes('invalid-email') ? 'Escribe un email válido, no tu nombre del gym.' :
         code.includes('weak-password') ? 'La contraseña debe tener mínimo 6 caracteres.' :
         code.includes('invalid-credential') || code.includes('wrong-password') ? 'Email o contraseña incorrectos. Si es primera vez, toca "Crear Cuenta".' :
@@ -2444,13 +2865,17 @@ async function handle(e){
         code.includes('unauthorized-domain') ? 'Agrega este dominio en Firebase Auth > Authorized domains.' :
         code.includes('network-request-failed') ? 'No hay conexión con Firebase. Revisa internet o bloqueadores.' :
         `No pude iniciar sesión (${code || 'error desconocido'}).`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = a === 'authEmailSignup' ? 'Crear Cuenta' : 'Iniciar Sesión';
     }
     return;
   }
   if (a === 'authGoogle'){
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      const cred = await signInWithPopup(auth, provider);
+      await handleAuthState(cred.user);
       toast('Sesión iniciada');
     } catch(err){
       console.error(err);
@@ -2551,7 +2976,9 @@ async function handle(e){
     const id = 'u_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
     const color = userColor(state.users.length);
     const pinHash = await sha(p1);
-    state.users.push({ id, name: state.pendingNewName, color, pinHash, createdAt: Date.now() });
+    const user = { id, name: state.pendingNewName, color, pinHash, createdAt: Date.now() };
+    if (groupPath() !== DEFAULT_GROUP) user.joinedAt = Date.now();
+    state.users.push(user);
     await saveUsers(state.users);
     state.currentUser = id;
     try { await afterLogin(id); }
@@ -3048,6 +3475,7 @@ async function handle(e){
   if (a === 'goCompare'){ state.view = 'compare'; state.currentDay = null; state.currentExerciseIdx = null; render(); return; }
   if (a === 'goCompareEx'){ state.view = 'compare'; render(); return; }
   if (a === 'goSettings'){ closeModal(); state.view = 'settings'; render(); return; }
+  if (a === 'goGroupHub'){ closeModal(); state.setupStep = 'groupHub'; state.view = 'setup'; render(); return; }
   if (a === 'goEditRoutine'){ state.view = 'editRoutine'; render(); return; }
   if (a === 'editRoutine'){ state.view = 'editRoutine'; render(); return; }
   if (a === 'editRoutineNew'){ state.currentDay = btn.dataset.day || state.currentDay; state.view = 'editRoutine'; render(); return; }
@@ -3094,6 +3522,25 @@ async function handle(e){
   if (a === 'toggleAlts'){ state.showAlts = !state.showAlts; render(); return; }
   if (a === 'toggleMuscles'){ state.showMuscles = !state.showMuscles; render(); return; }
   if (a === 'toggleRoutineMuscles'){ state.showRoutineMuscles = !state.showRoutineMuscles; render(); return; }
+  if (a === 'toggleGlobalRoutineMuscles'){ state.showGlobalRoutineMuscles = !state.showGlobalRoutineMuscles; render(); return; }
+  if (a === 'showMuscleMapInfo'){
+    const scope = btn.dataset.scope === 'general' ? 'general' : 'day';
+    openModal(`
+      <h2 style="margin-bottom:8px;">Cómo Se Calcula El Mapa Muscular</h2>
+      <div class="banner banner-info" style="margin-bottom:12px;">
+        <i class="ti ti-info-circle"></i>
+        <div>Este mapa no mide esfuerzo real ni calorías. Resume la rutina según los músculos asignados a cada ejercicio.</div>
+      </div>
+      <div style="font-size:14px;line-height:1.55;color:var(--text-muted);">
+        <p style="margin:0 0 10px;"><strong style="color:var(--text);">Músculo principal:</strong> suma 1 punto cada vez que aparece en un ejercicio.</p>
+        <p style="margin:0 0 10px;"><strong style="color:var(--text);">Músculo secundario:</strong> suma 0.5 puntos porque trabaja como apoyo.</p>
+        <p style="margin:0 0 10px;"><strong style="color:var(--text);">Porcentaje:</strong> muestra qué parte del total de puntos corresponde a ese músculo.</p>
+        <p style="margin:0;"><strong style="color:var(--text);">Color:</strong> compara músculos dentro de ${scope === 'general' ? 'toda tu rutina actual' : 'este día'}: azul claro = bajo, azul = medio, naranja = alto.</p>
+      </div>
+      <button class="primary" data-action="closeModal" style="width:100%;margin-top:16px;padding:12px;">Entendido</button>
+    `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+    return;
+  }
   if (a === 'editExerciseFromView'){ state.view = 'editExercise'; render(); return; }
 
   // ====== Session save ======
@@ -3432,36 +3879,52 @@ function subscribeRealtime(){
   if (!firebaseReady) return;
   unsubs.forEach(u => u && u());
   unsubs = [];
-  unsubs.push(onSnapshot(doc(db,'salas',groupPath(),'meta','users'), (snap)=>{
-    if (snap.exists()){
-      const newUsers = snap.data().users || [];
-      const changed = JSON.stringify(newUsers) !== JSON.stringify(state.users);
-      state.users = newUsers;
-      // if current user got deleted, log out
-      if (state.currentUser && !state.users.find(u => u.id === state.currentUser)){
-        state.currentUser = null; clearMe(); clearAuth();
-        toast('Tu usuario fue eliminado');
-        state.view = 'setup'; state.setupStep = state.users.length ? 'pickUser' : 'newUser';
-        render(); return;
-      }
-      if (changed) render();
+  const gid = groupPath();
+  unsubs.push(onSnapshot(doc(db,'salas',gid,'meta','users'), async (snap)=>{
+    if (gid !== state.currentGroup) return;
+    if (state.suppressRealtimeRender) return; // skip during group switch
+    if (!snap.exists()) return;
+    const rawUsers = snap.data().users || [];
+    // Quick path: if raw matches current state, no work needed
+    if (JSON.stringify(rawUsers) === JSON.stringify(state.users)) return;
+    const newUsers = await filterUsersForGroup(gid, rawUsers, state.groupConfig, [state.currentUser, loadMe(gid)]);
+    if (gid !== state.currentGroup) return;
+    if (state.suppressRealtimeRender) return;
+    if (gid !== DEFAULT_GROUP && JSON.stringify(rawUsers) !== JSON.stringify(newUsers)){
+      await saveUsersForGroup(gid, newUsers);
     }
+    const changed = JSON.stringify(newUsers) !== JSON.stringify(state.users);
+    state.users = newUsers;
+    // if current user got deleted, log out
+    if (state.currentUser && !state.users.find(u => u.id === state.currentUser)){
+      state.currentUser = null; clearMe(); clearAuth();
+      toast('Tu usuario fue eliminado');
+      state.view = 'setup'; state.setupStep = state.users.length ? 'pickUser' : 'newUser';
+      render(); return;
+    }
+    if (changed) requestRealtimeRender();
   }, console.error));
-  unsubs.push(onSnapshot(doc(db,'salas',groupPath(),'meta','config'), (snap)=>{
+  unsubs.push(onSnapshot(doc(db,'salas',gid,'meta','config'), (snap)=>{
+    if (gid !== state.currentGroup) return;
     if (snap.exists()){
-      state.groupConfig = normalizeGroupConfig(snap.data());
+      state.groupConfig = normalizeGroupConfig(snap.data(), gid);
       state.invitationPassword = state.groupConfig.invitationPassword || INVITATION_PASSWORD_DEFAULT;
     }
   }, console.error));
-  unsubs.push(onSnapshot(doc(db,'salas',groupPath(),'routines','shared'), (snap)=>{
+  unsubs.push(onSnapshot(doc(db,'salas',gid,'routines','shared'), (snap)=>{
+    if (gid !== state.currentGroup) return;
+    if (state.suppressRealtimeRender) return;
     if (snap.exists() && snap.data().routine){
       const r = snap.data().routine;
       if (JSON.stringify(r) !== JSON.stringify(state.sharedRoutine)){
-        state.sharedRoutine = r; render();
+        state.sharedRoutine = r;
+        requestRealtimeRender();
       }
     }
   }, console.error));
-  unsubs.push(onSnapshot(collection(db,'salas',groupPath(),'logs'), (snap)=>{
+  unsubs.push(onSnapshot(collection(db,'salas',gid,'logs'), (snap)=>{
+    if (gid !== state.currentGroup) return;
+    if (state.suppressRealtimeRender) return;
     let changed = false;
     snap.docChanges().forEach(ch => {
       const id = ch.doc.id;
@@ -3474,9 +3937,11 @@ function subscribeRealtime(){
         }
       }
     });
-    if (changed) render();
+    if (changed) requestRealtimeRender();
   }, console.error));
-  unsubs.push(onSnapshot(collection(db,'salas',groupPath(),'personalRoutines'), (snap)=>{
+  unsubs.push(onSnapshot(collection(db,'salas',gid,'personalRoutines'), (snap)=>{
+    if (gid !== state.currentGroup) return;
+    if (state.suppressRealtimeRender) return;
     let changed = false;
     snap.docChanges().forEach(ch => {
       const id = ch.doc.id;
@@ -3489,36 +3954,16 @@ function subscribeRealtime(){
         }
       }
     });
-    if (changed) render();
+    if (changed) requestRealtimeRender();
   }, console.error));
 }
 
 // ====== INIT ======
 async function init(){
+  removeStrayBodyTextNodes();
   rememberGroup(state.currentGroup);
   if (firebaseReady && auth){
-    onAuthStateChanged(auth, async (user)=>{
-      state.authReady = true;
-      state.authUser = user || null;
-      state.account = user ? await loadAccount(user) : null;
-      if (state.account) await recoverAccountGroupsFromProfiles();
-      if (state.account && state.account.groups && state.account.groups.length){
-        state.joinedGroups = Array.from(new Set(state.account.groups));
-        saveJoinedGroups(state.joinedGroups);
-        if (!state.joinedGroups.includes(state.currentGroup)){
-          state.currentGroup = state.joinedGroups[0] || DEFAULT_GROUP;
-          saveCurrentGroup(state.currentGroup);
-        }
-      }
-      if (!user){
-        state.currentUser = null;
-        state.setupStep = null;
-        state.view = 'setup';
-        render();
-        return;
-      }
-      await reloadGroup();
-    });
+    onAuthStateChanged(auth, handleAuthState);
     render();
     return;
   }
@@ -3528,7 +3973,3 @@ init();
 </script>
 </body>
 </html>
-
-
-
-
