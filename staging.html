@@ -574,12 +574,12 @@ function normalizeGroupConfig(cfg, groupId = groupPath()){
   return { ...defaultGroupConfig(groupId), ...(cfg || {}), invitationPassword: (cfg && cfg.invitationPassword) || INVITATION_PASSWORD_DEFAULT };
 }
 // ====== STORAGE ======
-async function loadConfig(){
-  if (!firebaseReady) return normalizeGroupConfig(JSON.parse(localStorage.getItem(groupLocalKey('config'))||'null'));
+async function loadConfig(groupId = groupPath()){
+  if (!firebaseReady) return normalizeGroupConfig(JSON.parse(localStorage.getItem(groupLocalKey('config', groupId))||'null'), groupId);
   try {
-    const snap = await getDoc(doc(db,'salas',groupPath(),'meta','config'));
-    return normalizeGroupConfig(snap.exists() ? snap.data() : null);
-  } catch(e){ console.error(e); return defaultGroupConfig(); }
+    const snap = await getDoc(doc(db,'salas',groupId,'meta','config'));
+    return normalizeGroupConfig(snap.exists() ? snap.data() : null, groupId);
+  } catch(e){ console.error(e); return defaultGroupConfig(groupId); }
 }
 async function saveConfig(cfg){
   const merged = normalizeGroupConfig({ ...state.groupConfig, ...cfg });
@@ -589,10 +589,10 @@ async function saveConfig(cfg){
   try { await setDoc(doc(db,'salas',groupPath(),'meta','config'), merged); }
   catch(e){ console.error(e); toast('Error al guardar config'); }
 }
-async function loadUsers(){
-  if (!firebaseReady) return JSON.parse(localStorage.getItem(groupLocalKey('users'))||'[]');
+async function loadUsers(groupId = groupPath()){
+  if (!firebaseReady) return JSON.parse(localStorage.getItem(groupLocalKey('users', groupId))||'[]');
   try {
-    const snap = await getDoc(doc(db,'salas',groupPath(),'meta','users'));
+    const snap = await getDoc(doc(db,'salas',groupId,'meta','users'));
     return snap.exists() ? (snap.data().users || []) : [];
   } catch(e){ console.error(e); return []; }
 }
@@ -614,17 +614,17 @@ async function saveUsersForGroup(groupId, users){
   if (!firebaseReady){ localStorage.setItem(groupLocalKey('users', groupId), JSON.stringify(users)); return; }
   await setDoc(doc(db,'salas',groupId,'meta','users'), { users });
 }
-async function loadSharedRoutine(){
+async function loadSharedRoutine(groupId = groupPath()){
   if (!firebaseReady){
-    const r = JSON.parse(localStorage.getItem(groupLocalKey('sharedRoutine'))||'null');
+    const r = JSON.parse(localStorage.getItem(groupLocalKey('sharedRoutine', groupId))||'null');
     if (r) return normalizeRoutine(r);
-    localStorage.setItem(groupLocalKey('sharedRoutine'), JSON.stringify(normalizeRoutine(DEFAULT_ROUTINE)));
+    localStorage.setItem(groupLocalKey('sharedRoutine', groupId), JSON.stringify(normalizeRoutine(DEFAULT_ROUTINE)));
     return normalizeRoutine(DEFAULT_ROUTINE);
   }
   try {
-    const snap = await getDoc(doc(db,'salas',groupPath(),'routines','shared'));
+    const snap = await getDoc(doc(db,'salas',groupId,'routines','shared'));
     if (snap.exists() && snap.data().routine) return normalizeRoutine(snap.data().routine);
-    await setDoc(doc(db,'salas',groupPath(),'routines','shared'), { routine: normalizeRoutine(DEFAULT_ROUTINE) });
+    await setDoc(doc(db,'salas',groupId,'routines','shared'), { routine: normalizeRoutine(DEFAULT_ROUTINE) });
     return normalizeRoutine(DEFAULT_ROUTINE);
   } catch(e){ console.error(e); return normalizeRoutine(DEFAULT_ROUTINE); }
 }
@@ -635,15 +635,15 @@ async function saveSharedRoutine(routine){
   catch(e){ console.error(e); toast('Error al guardar rutina'); }
   state.syncing = false;
 }
-async function loadAllPersonalRoutines(){
+async function loadAllPersonalRoutines(groupId = groupPath()){
   if (!firebaseReady){
-    const out = {}; const users = JSON.parse(localStorage.getItem(groupLocalKey('users'))||'[]');
-    for (const u of users){ const r = localStorage.getItem(groupLocalKey('routine:'+u.id)); if (r) out[u.id] = JSON.parse(r); }
+    const out = {}; const users = JSON.parse(localStorage.getItem(groupLocalKey('users', groupId))||'[]');
+    for (const u of users){ const r = localStorage.getItem(groupLocalKey('routine:'+u.id, groupId)); if (r) out[u.id] = JSON.parse(r); }
     return out;
   }
   try {
     const out = {};
-    const snap = await getDocs(collection(db,'salas',groupPath(),'personalRoutines'));
+    const snap = await getDocs(collection(db,'salas',groupId,'personalRoutines'));
     snap.forEach(d => { out[d.id] = d.data().routine || {}; });
     return out;
   } catch(e){ console.error(e); return {}; }
@@ -655,15 +655,15 @@ async function savePersonalRoutine(userId, routine){
   catch(e){ console.error(e); toast('Error al guardar rutina personal'); }
   state.syncing = false;
 }
-async function loadAllLogs(){
+async function loadAllLogs(groupId = groupPath()){
   if (!firebaseReady){
-    const out = {}; const users = JSON.parse(localStorage.getItem(groupLocalKey('users'))||'[]');
-    for (const u of users){ out[u.id] = JSON.parse(localStorage.getItem(groupLocalKey('logs:'+u.id))||'{}'); }
+    const out = {}; const users = JSON.parse(localStorage.getItem(groupLocalKey('users', groupId))||'[]');
+    for (const u of users){ out[u.id] = JSON.parse(localStorage.getItem(groupLocalKey('logs:'+u.id, groupId))||'{}'); }
     return out;
   }
   try {
     const out = {};
-    const snap = await getDocs(collection(db,'salas',groupPath(),'logs'));
+    const snap = await getDocs(collection(db,'salas',groupId,'logs'));
     snap.forEach(d => { out[d.id] = d.data(); });
     return out;
   } catch(e){ console.error(e); return {}; }
@@ -685,7 +685,7 @@ async function deletePersonalRoutineDoc(userId){
   try { await deleteDoc(doc(db,'salas',groupPath(),'personalRoutines',userId)); }
   catch(e){ console.error(e); }
 }
-function loadMe(){ return localStorage.getItem(groupLocalKey(LS_ME)) || (groupPath() === DEFAULT_GROUP ? localStorage.getItem(LS_ME) : null); }
+function loadMe(groupId = groupPath()){ return localStorage.getItem(groupLocalKey(LS_ME, groupId)) || (groupId === DEFAULT_GROUP ? localStorage.getItem(LS_ME) : null); }
 function saveMe(id){ localStorage.setItem(groupLocalKey(LS_ME), id); if (groupPath() === DEFAULT_GROUP) localStorage.setItem(LS_ME, id); }
 function clearMe(){ localStorage.removeItem(groupLocalKey(LS_ME)); if (groupPath() === DEFAULT_GROUP) localStorage.removeItem(LS_ME); }
 function authValid(){
@@ -719,6 +719,8 @@ async function handleAuthState(user){
   state.authReady = true;
   state.authUser = user || null;
   state.account = user ? await loadAccount(user) : null;
+  if (state.account?.homeTourSeen) localStorage.setItem(LS_TOUR, '1');
+  else if (state.account && localStorage.getItem(LS_TOUR)) await saveAccount({ homeTourSeen: true });
   if (state.account) await recoverAccountGroupsFromProfiles();
   if (state.account && state.account.groups && state.account.groups.length){
     state.joinedGroups = Array.from(new Set(state.account.groups));
@@ -737,8 +739,8 @@ async function handleAuthState(user){
   }
   await reloadGroup();
 }
-function loadRoutineSource(){
-  try { return JSON.parse(localStorage.getItem(groupLocalKey(LS_SOURCE))||'{}'); } catch { return {}; }
+function loadRoutineSource(groupId = groupPath()){
+  try { return JSON.parse(localStorage.getItem(groupLocalKey(LS_SOURCE, groupId))||'{}'); } catch { return {}; }
 }
 function saveRoutineSource(src){
   localStorage.setItem(groupLocalKey(LS_SOURCE), JSON.stringify(src));
@@ -752,28 +754,38 @@ function blankRoutine(){
   }
   return out;
 }
-async function loadGroupState(){
-  const gid = groupPath();
+async function readGroupState(groupId = groupPath()){
+  const gid = groupId || DEFAULT_GROUP;
   const [cfg, rawUsers, sharedRoutine, personalRoutines, logs] = await Promise.all([
-    loadConfig(),
-    loadUsers(),
-    loadSharedRoutine(),
-    loadAllPersonalRoutines(),
-    loadAllLogs()
+    loadConfig(gid),
+    loadUsers(gid),
+    loadSharedRoutine(gid),
+    loadAllPersonalRoutines(gid),
+    loadAllLogs(gid)
   ]);
-  state.groupConfig = cfg;
-  state.invitationPassword = cfg.invitationPassword || INVITATION_PASSWORD_DEFAULT;
-  if (firebaseReady && !cfg.createdAt){
-    await saveConfig(defaultGroupConfig());
+  const users = await filterUsersForGroup(gid, rawUsers, cfg, [loadMe(gid)]);
+  if (gid !== DEFAULT_GROUP && JSON.stringify(rawUsers) !== JSON.stringify(users)){
+    await saveUsersForGroup(gid, users);
   }
-  state.users = await filterUsersForGroup(gid, rawUsers, cfg, [loadMe()]);
-  if (gid !== DEFAULT_GROUP && JSON.stringify(rawUsers) !== JSON.stringify(state.users)){
-    await saveUsersForGroup(gid, state.users);
-  }
-  state.sharedRoutine = normalizeRoutine(sharedRoutine);
-  state.personalRoutines = personalRoutines;
-  state.logs = logs;
-  state.routineSource = loadRoutineSource();
+  return {
+    groupConfig: cfg,
+    invitationPassword: cfg.invitationPassword || INVITATION_PASSWORD_DEFAULT,
+    users,
+    sharedRoutine: normalizeRoutine(sharedRoutine),
+    personalRoutines,
+    logs,
+    routineSource: loadRoutineSource(gid)
+  };
+}
+async function loadGroupState(groupId = groupPath()){
+  const data = await readGroupState(groupId);
+  state.groupConfig = data.groupConfig;
+  state.invitationPassword = data.invitationPassword;
+  state.users = data.users;
+  state.sharedRoutine = data.sharedRoutine;
+  state.personalRoutines = data.personalRoutines;
+  state.logs = data.logs;
+  state.routineSource = data.routineSource;
 }
 function chooseInitialViewForGroup(){
   const meId = loadMe();
@@ -829,23 +841,43 @@ async function switchGroup(groupId){
   }
   const token = ++state.groupSwitchToken;
   state.suppressRealtimeRender = true;
-  state.currentGroup = groupId;
-  saveCurrentGroup(groupId);
-  rememberGroup(groupId);
-  state.currentDay = null;
-  state.currentExerciseIdx = null;
-  state.editingSession = null;
-  state.showAlts = false;
-  state.showMuscles = false;
-  state.showRoutineMuscles = false;
-  state.showGlobalRoutineMuscles = false;
   try {
-    await reloadGroup({ skipRender: true });
+    const data = await readGroupState(groupId);
     if (token !== state.groupSwitchToken) return;
+    unsubs.forEach(u => u && u());
+    unsubs = [];
+    state.currentGroup = groupId;
+    saveCurrentGroup(groupId);
+    rememberGroup(groupId);
+    state.currentDay = null;
+    state.currentExerciseIdx = null;
+    state.editingSession = null;
+    state.showAlts = false;
+    state.showMuscles = false;
+    state.showRoutineMuscles = false;
+    state.showGlobalRoutineMuscles = false;
+    state.groupConfig = data.groupConfig;
+    state.invitationPassword = data.invitationPassword;
+    state.users = data.users;
+    state.sharedRoutine = data.sharedRoutine;
+    state.personalRoutines = data.personalRoutines;
+    state.logs = data.logs;
+    state.routineSource = data.routineSource;
+    if (state.account){
+      const recoveredGroups = await recoverAccountGroupsFromProfiles();
+      const groups = Array.from(new Set([...(state.account.groups || []), ...(recoveredGroups || [])]));
+      state.joinedGroups = groups.length ? groups : state.joinedGroups;
+      saveJoinedGroups(state.joinedGroups);
+    }
+    chooseInitialViewForGroup();
+    subscribeRealtime();
+  } catch(e){
+    console.error(e);
+    toast('No pude cambiar de grupo. Intenta de nuevo.');
   } finally {
     if (token === state.groupSwitchToken){
       state.suppressRealtimeRender = false;
-      state.realtimeQuietUntil = Date.now() + 700;
+      state.realtimeQuietUntil = Date.now() + 400;
       state.switchingGroup = false;
       render();
     }
@@ -1478,9 +1510,14 @@ const LS_ONBOARD = 'gym_onboarding_seen_v1';
 const LS_TOUR = 'gym_home_tour_seen_v1';
 
 function shouldShowOnboarding(){ return !localStorage.getItem(LS_ONBOARD); }
-function shouldShowTour(){ return !localStorage.getItem(LS_TOUR); }
+function shouldShowTour(){
+  return !localStorage.getItem(LS_TOUR) && !state.account?.homeTourSeen;
+}
 function markOnboardingSeen(){ localStorage.setItem(LS_ONBOARD, '1'); }
-function markTourSeen(){ localStorage.setItem(LS_TOUR, '1'); }
+function markTourSeen(){
+  localStorage.setItem(LS_TOUR, '1');
+  if (state.authUser) saveAccount({ homeTourSeen: true }).catch(console.error);
+}
 
 const ONBOARDING_SLIDES = [
   { icon:'💪', title:'Star Jazz Gym Buddy', subtitle:'Tu compañero digital de gym. Registra entrenos, sigue tu progreso y motívate con tu grupo.' },
@@ -3826,11 +3863,13 @@ function subscribeRealtime(){
   if (!firebaseReady) return;
   unsubs.forEach(u => u && u());
   unsubs = [];
-  unsubs.push(onSnapshot(doc(db,'salas',groupPath(),'meta','users'), async (snap)=>{
+  const gid = groupPath();
+  unsubs.push(onSnapshot(doc(db,'salas',gid,'meta','users'), async (snap)=>{
+    if (gid !== state.currentGroup) return;
     if (snap.exists()){
-      const gid = groupPath();
       const rawUsers = snap.data().users || [];
-      const newUsers = await filterUsersForGroup(gid, rawUsers, state.groupConfig, [state.currentUser, loadMe()]);
+      const newUsers = await filterUsersForGroup(gid, rawUsers, state.groupConfig, [state.currentUser, loadMe(gid)]);
+      if (gid !== state.currentGroup) return;
       if (gid !== DEFAULT_GROUP && JSON.stringify(rawUsers) !== JSON.stringify(newUsers)){
         await saveUsersForGroup(gid, newUsers);
       }
@@ -3846,13 +3885,15 @@ function subscribeRealtime(){
       if (changed) requestRealtimeRender();
     }
   }, console.error));
-  unsubs.push(onSnapshot(doc(db,'salas',groupPath(),'meta','config'), (snap)=>{
+  unsubs.push(onSnapshot(doc(db,'salas',gid,'meta','config'), (snap)=>{
+    if (gid !== state.currentGroup) return;
     if (snap.exists()){
-      state.groupConfig = normalizeGroupConfig(snap.data());
+      state.groupConfig = normalizeGroupConfig(snap.data(), gid);
       state.invitationPassword = state.groupConfig.invitationPassword || INVITATION_PASSWORD_DEFAULT;
     }
   }, console.error));
-  unsubs.push(onSnapshot(doc(db,'salas',groupPath(),'routines','shared'), (snap)=>{
+  unsubs.push(onSnapshot(doc(db,'salas',gid,'routines','shared'), (snap)=>{
+    if (gid !== state.currentGroup) return;
     if (snap.exists() && snap.data().routine){
       const r = snap.data().routine;
       if (JSON.stringify(r) !== JSON.stringify(state.sharedRoutine)){
@@ -3861,7 +3902,8 @@ function subscribeRealtime(){
       }
     }
   }, console.error));
-  unsubs.push(onSnapshot(collection(db,'salas',groupPath(),'logs'), (snap)=>{
+  unsubs.push(onSnapshot(collection(db,'salas',gid,'logs'), (snap)=>{
+    if (gid !== state.currentGroup) return;
     let changed = false;
     snap.docChanges().forEach(ch => {
       const id = ch.doc.id;
@@ -3876,7 +3918,8 @@ function subscribeRealtime(){
     });
     if (changed) requestRealtimeRender();
   }, console.error));
-  unsubs.push(onSnapshot(collection(db,'salas',groupPath(),'personalRoutines'), (snap)=>{
+  unsubs.push(onSnapshot(collection(db,'salas',gid,'personalRoutines'), (snap)=>{
+    if (gid !== state.currentGroup) return;
     let changed = false;
     snap.docChanges().forEach(ch => {
       const id = ch.doc.id;
