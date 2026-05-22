@@ -4,31 +4,41 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="theme-color" content="#0a0e1a">
-<title>Admin - Star Jazz Gym Buddy</title>
+<title>Admin · Star Jazz Gym Buddy</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.11.0/dist/tabler-icons.min.css">
 <style>
 :root {
-  --bg:#0a0e1a; --bg-elev:#10172a; --bg-elev-2:#1a2440; --border:rgba(255,255,255,0.08);
-  --border-strong:rgba(255,255,255,0.14); --text:#f0f4ff; --text-muted:#8b96b3; --text-dim:#5a6585;
+  --bg:#0a0e1a; --bg-elev:#10172a; --bg-elev-2:#1a2440; --bg-elev-3:#243156;
+  --border:rgba(255,255,255,0.08); --border-strong:rgba(255,255,255,0.14);
+  --text:#f0f4ff; --text-muted:#8b96b3; --text-dim:#5a6585;
   --accent:#3b9eff; --accent-bg:rgba(59,158,255,0.12); --accent-border:rgba(59,158,255,0.35);
-  --accent-grad:linear-gradient(135deg,#3b9eff 0%,#6ec2ff 100%); --success:#34d399; --danger:#f87171;
-  --danger-bg:rgba(248,113,113,0.12); --warning:#fbbf24; --warning-bg:rgba(251,191,36,0.12);
-  --radius:14px; --font-sans:'Geist',-apple-system,BlinkMacSystemFont,sans-serif; --font-mono:'Geist Mono',ui-monospace,monospace;
+  --accent-grad:linear-gradient(135deg,#3b9eff 0%,#6ec2ff 100%);
+  --success:#34d399; --success-bg:rgba(52,211,153,0.12);
+  --danger:#f87171; --danger-bg:rgba(248,113,113,0.12); --danger-border:rgba(248,113,113,0.35);
+  --warning:#fbbf24; --warning-bg:rgba(251,191,36,0.12); --warning-border:rgba(251,191,36,0.35);
+  --radius:14px;
+  --font-sans:'Geist',-apple-system,BlinkMacSystemFont,sans-serif;
+  --font-mono:'Geist Mono',ui-monospace,monospace;
 }
 *{box-sizing:border-box}
-html,body{margin:0;background:radial-gradient(ellipse 70% 45% at 50% -20%,rgba(59,158,255,0.16),transparent 70%),var(--bg);color:var(--text);font-family:var(--font-sans);font-size:15px;line-height:1.45}
+html,body{margin:0;background:radial-gradient(ellipse 70% 45% at 50% -20%,rgba(59,158,255,0.16),transparent 70%),var(--bg);color:var(--text);font-family:var(--font-sans);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
 #app{max-width:1180px;margin:0 auto;padding:24px 18px 80px;min-height:100vh}
 h1,h2,h3{margin:0;font-weight:700;letter-spacing:-0.02em} h1{font-size:28px} h2{font-size:18px} h3{font-size:15px}
 button,input,select,textarea{font:inherit}
-button{cursor:pointer;color:var(--text);background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:10px;padding:10px 14px;font-weight:600;transition:.15s}
+button{cursor:pointer;color:var(--text);background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:10px;padding:9px 13px;font-weight:500;transition:.15s;font-size:13px}
 button:hover{background:var(--bg-elev-2);border-color:var(--accent-border)}
-button.primary{background:var(--accent-grad);border-color:transparent;color:white;box-shadow:0 4px 16px rgba(59,158,255,.25)}
-button.danger{background:transparent;border-color:rgba(248,113,113,.45);color:var(--danger)}
+button:active{transform:scale(0.97)}
+button.primary{background:var(--accent-grad);border-color:transparent;color:white;box-shadow:0 4px 16px rgba(59,158,255,.25);font-weight:600}
+button.primary:hover{filter:brightness(1.08)}
+button.danger{background:transparent;border-color:var(--danger-border);color:var(--danger);font-weight:600}
 button.danger:hover{background:var(--danger-bg)}
-input,select,textarea{width:100%;background:var(--bg-elev);color:var(--text);border:1px solid var(--border-strong);border-radius:10px;padding:11px 13px}
+button.warning{background:transparent;border-color:var(--warning-border);color:var(--warning);font-weight:600}
+button.warning:hover{background:var(--warning-bg)}
+button.small{padding:5px 10px;font-size:12px}
+input,select,textarea{width:100%;background:var(--bg-elev);color:var(--text);border:1px solid var(--border-strong);border-radius:10px;padding:11px 13px;font-size:14px}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-bg)}
 .card{background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:0 4px 18px rgba(0,0,0,.22)}
 .muted{color:var(--text-muted)} .dim{color:var(--text-dim)} .mono{font-family:var(--font-mono)}
@@ -36,16 +46,42 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
 .two-col{display:grid;grid-template-columns:340px minmax(0,1fr);gap:14px}
 .stat{padding:15px}.stat .value{font-family:var(--font-mono);font-size:28px;font-weight:700}.stat .label{font-family:var(--font-mono);font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.1em}
-.section-label{font-family:var(--font-mono);font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px}
-.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:999px;font-size:12px;background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-border);font-weight:700}
-.danger-pill{background:var(--danger-bg);color:var(--danger);border-color:rgba(248,113,113,.35)}
-.list-btn{display:block;width:100%;text-align:left;margin-bottom:8px;padding:12px;background:var(--bg-elev);border:1px solid var(--border);border-radius:12px}
+.section-label{font-family:var(--font-mono);font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;font-weight:500}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:11px;background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-border);font-weight:600;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.05em}
+.danger-pill{background:var(--danger-bg);color:var(--danger);border-color:var(--danger-border)}
+.warning-pill{background:var(--warning-bg);color:var(--warning);border-color:var(--warning-border)}
+.success-pill{background:var(--success-bg);color:var(--success);border-color:rgba(52,211,153,0.35)}
+.dim-pill{background:var(--bg-elev-2);color:var(--text-dim);border-color:var(--border-strong)}
+.list-btn{display:block;width:100%;text-align:left;margin-bottom:8px;padding:12px;background:var(--bg-elev);border:1px solid var(--border);border-radius:12px;cursor:pointer;font:inherit;color:inherit;transition:.15s}
+.list-btn:hover{background:var(--bg-elev-2);border-color:var(--border-strong)}
 .list-btn.active{background:var(--accent-bg);border-color:var(--accent-border)}
-.table{width:100%;border-collapse:collapse}.table th,.table td{border-bottom:1px solid var(--border);padding:10px 8px;text-align:left;vertical-align:top}.table th{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em;font-family:var(--font-mono)}
-.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(10px);opacity:0;pointer-events:none;background:var(--bg-elev-2);border:1px solid var(--accent-border);border-radius:999px;padding:12px 20px;transition:.25s;z-index:20}
+.table{width:100%;border-collapse:collapse}
+.table th,.table td{border-bottom:1px solid var(--border);padding:10px 8px;text-align:left;vertical-align:middle}
+.table th{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em;font-family:var(--font-mono);font-weight:500}
+.tab-bar{display:inline-flex;background:var(--bg-elev);border:1px solid var(--border);border-radius:12px;padding:4px;gap:4px;margin-bottom:14px}
+.tab-bar button{padding:7px 14px;border:none;background:transparent;font-size:13px;color:var(--text-muted);border-radius:8px;font-weight:500}
+.tab-bar button:hover{color:var(--text);background:var(--bg-elev-2)}
+.tab-bar button.active{background:var(--accent-grad);color:#fff;font-weight:600;box-shadow:0 2px 8px rgba(59,158,255,.25)}
+.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(10px);opacity:0;pointer-events:none;background:var(--bg-elev-3);border:1px solid var(--accent-border);border-radius:999px;padding:12px 20px;transition:.25s;z-index:200;font-size:13px;font-weight:500;box-shadow:0 10px 30px rgba(0,0,0,.4)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .loader{display:inline-block;width:16px;height:16px;border:2px solid var(--border-strong);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
-.banner{display:flex;gap:10px;padding:12px 14px;border-radius:12px;font-size:13px;background:var(--warning-bg);border:1px solid rgba(251,191,36,.25);color:var(--warning)}
+.banner{display:flex;gap:10px;padding:12px 14px;border-radius:12px;font-size:13px;background:var(--warning-bg);border:1px solid rgba(251,191,36,.25);color:var(--warning);align-items:flex-start}
+.banner.info{background:var(--accent-bg);color:var(--accent);border-color:var(--accent-border)}
+.banner.danger{background:var(--danger-bg);color:var(--danger);border-color:var(--danger-border)}
+.modal-bg{position:fixed;inset:0;background:rgba(5,10,25,0.7);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:300;display:flex;align-items:center;justify-content:center;padding:16px;animation:fade .2s ease}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.modal{background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:18px;padding:24px;max-width:460px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.5);animation:pop .3s cubic-bezier(.34,1.56,.64,1)}
+@keyframes pop{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
+.action-btn{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:500}
+.action-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.group-card{transition:.15s}
+.group-card.archived{opacity:0.65}
+.group-card.trashed{opacity:0.55;border-style:dashed}
+.empty{padding:40px 20px;text-align:center;color:var(--text-dim);font-size:13px}
+.empty i{font-size:36px;color:var(--text-dim);display:block;margin-bottom:8px}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
 @media (max-width:860px){.grid{grid-template-columns:repeat(2,1fr)}.two-col{grid-template-columns:1fr}#app{padding:18px 14px 70px}}
 </style>
 </head>
@@ -57,16 +93,20 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
   </div>
 </div>
 <div id="toast" class="toast"></div>
+<div id="modalRoot"></div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
-  getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs
+  getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import {
-  getAuth, onAuthStateChanged, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signOut
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, GoogleAuthProvider, signInWithPopup
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 
+// ============================================================
+// CONFIG
+// ============================================================
 const firebaseConfig = {
   apiKey: "AIzaSyCtBoM682hSEh2Og7PHbsO7wDGHwqiCiKU",
   authDomain: "progreso-de-rutinas.firebaseapp.com",
@@ -75,69 +115,97 @@ const firebaseConfig = {
   messagingSenderId: "1080289668591",
   appId: "1:1080289668591:web:f902974b98717bc71b1a1a"
 };
-
-// Keep this private. Add extra admin emails here during beta if needed.
-const ADMIN_EMAILS = ["gusfraba96@gmail.com"];
 const DEFAULT_GROUP = "jazmin-y-buddy-2026";
+const ADMIN_EMAILS = ["gusfraba96@gmail.com"];
+const ADMIN_UIDS = ["VpvoVw2Nb2fI5A7ChSiY0WaiOv83"];
+const TRASH_RETENTION_DAYS = 30;
 
 const fbApp = initializeApp(firebaseConfig);
 const db = getFirestore(fbApp);
 const auth = getAuth(fbApp);
-const root = document.getElementById('app');
-const state = {
-  authReady:false, user:null, accounts:[], memberships:[], groupIds:[DEFAULT_GROUP], groups:{}, selectedGroup:DEFAULT_GROUP, loading:false
-};
 
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const toast = msg => {
-  const el = document.getElementById('toast');
-  el.textContent = msg; el.classList.add('show');
-  setTimeout(()=>el.classList.remove('show'), 2200);
+// ============================================================
+// STATE
+// ============================================================
+const state = {
+  authUser: null,
+  accounts: [],
+  memberships: [],
+  groupIds: [],
+  groups: {},          // { groupId: { config, users, logs, personalRoutines, stats, ... } }
+  selectedGroup: null,
+  loading: false,
+  loadCode: '',
+  tab: 'active',       // 'active' | 'archived' | 'trashed'
+  modalOpen: null,
 };
-const isAdminEmail = user => !!user && ADMIN_EMAILS.map(e=>e.toLowerCase()).includes((user.email || '').toLowerCase());
-const sum = arr => arr.reduce((a,b)=>a+b,0);
-function entryVolume(entry){
-  return (entry.sets || []).reduce((total,set)=>{
-    if (set.unilateral) {
-      return total + (Number(set.leftReps)||0)*(Number(set.leftWeight)||0) + (Number(set.rightReps)||0)*(Number(set.rightWeight)||0);
-    }
-    return total + (Number(set.reps)||0)*(Number(set.weight)||0);
-  }, 0);
+const root = document.getElementById('app');
+const modalRoot = document.getElementById('modalRoot');
+
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const isAdminUser = (user) => !!user && (ADMIN_EMAILS.map(e=>e.toLowerCase()).includes((user.email || '').toLowerCase()) || ADMIN_UIDS.includes(user.uid));
+function toast(msg, type='info'){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.borderColor = type === 'error' ? 'var(--danger-border)' : type === 'success' ? 'rgba(52,211,153,0.4)' : 'var(--accent-border)';
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
 }
+function formatDate(ts){
+  if (!ts) return '—';
+  try { return new Date(ts).toLocaleString('es-ES', {dateStyle:'short', timeStyle:'short'}); } catch { return '—'; }
+}
+function daysAgo(ts){
+  if (!ts) return null;
+  return Math.floor((Date.now() - ts) / (1000*60*60*24));
+}
+function daysUntil(ts){
+  if (!ts) return null;
+  return Math.ceil((ts - Date.now()) / (1000*60*60*24));
+}
+
+// ============================================================
+// DATA LOADING
+// ============================================================
 function logStats(logs){
-  let sessions = 0, sets = 0, volume = 0, last = '';
+  let sessions = 0, sets = 0, totalVol = 0, maxW = 0;
   Object.values(logs || {}).forEach(userLogs => {
-    Object.values(userLogs || {}).forEach(entries => {
-      (entries || []).forEach(entry => {
+    Object.values(userLogs || {}).forEach(arr => {
+      if (!Array.isArray(arr)) return;
+      arr.forEach(e => {
         sessions++;
-        sets += (entry.sets || []).length;
-        volume += entryVolume(entry);
-        if (!last || entry.date > last) last = entry.date;
+        (e.sets || []).forEach(s => {
+          sets++;
+          const w = Number(s.weight) || 0;
+          const r = Number(s.reps) || 0;
+          totalVol += w * r;
+          if (w > maxW) maxW = w;
+        });
       });
     });
   });
-  return { sessions, sets, volume, last };
+  return { sessions, sets, totalVol, maxW };
 }
 
 async function readGroup(groupId){
-  const [cfgSnap, usersSnap, routineSnap, logsSnap, personalSnap] = await Promise.all([
+  const [cfgSnap, usersSnap, sharedSnap, logsSnap, personalSnap] = await Promise.all([
     getDoc(doc(db,'salas',groupId,'meta','config')),
     getDoc(doc(db,'salas',groupId,'meta','users')),
     getDoc(doc(db,'salas',groupId,'routines','shared')),
     getDocs(collection(db,'salas',groupId,'logs')),
     getDocs(collection(db,'salas',groupId,'personalRoutines'))
   ]);
-  const logs = {};
-  logsSnap.forEach(d => logs[d.id] = d.data());
-  const personalRoutines = {};
-  personalSnap.forEach(d => personalRoutines[d.id] = d.data().routine || {});
+  const config = cfgSnap.exists() ? cfgSnap.data() : { groupName: groupId };
   const users = usersSnap.exists() ? (usersSnap.data().users || []) : [];
-  const config = cfgSnap.exists() ? cfgSnap.data() : { groupName: groupId, adminIds: [] };
-  const routine = routineSnap.exists() ? (routineSnap.data().routine || {}) : {};
-  return { id: groupId, config, users, routine, logs, personalRoutines, stats: logStats(logs) };
+  const shared = sharedSnap.exists() ? sharedSnap.data().routine : null;
+  const logs = {}; logsSnap.forEach(d => { logs[d.id] = d.data(); });
+  const personalRoutines = {}; personalSnap.forEach(d => { personalRoutines[d.id] = d.data().routine || {}; });
+  return { id: groupId, config, users, shared, logs, personalRoutines, stats: logStats(logs) };
 }
 
 async function discoverGroupIds(){
+  // Strategy: derive from accounts + memberships (super-admin reads everything),
+  // plus include DEFAULT_GROUP and any explicit load-by-id input.
   const ids = new Set([DEFAULT_GROUP]);
   state.accounts.forEach(a => (a.groups || []).forEach(g => ids.add(g)));
   state.memberships.forEach(m => (m.groups || []).forEach(g => ids.add(g)));
@@ -151,21 +219,257 @@ async function loadDashboard(){
       getDocs(collection(db,'accounts')),
       getDocs(collection(db,'memberships'))
     ]);
-    state.accounts = accountSnap.docs.map(d => ({ id:d.id, ...d.data() }));
-    state.memberships = membershipSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+    state.accounts = accountSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    state.memberships = membershipSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     state.groupIds = await discoverGroupIds();
     const groups = {};
     for (const groupId of state.groupIds){
       try { groups[groupId] = await readGroup(groupId); }
-      catch(e){ console.error(e); groups[groupId] = { id:groupId, error:e.message, users:[], logs:{}, personalRoutines:{}, config:{ groupName: groupId }, stats:logStats({}) }; }
+      catch(e){
+        console.error('Group load failed', groupId, e);
+        groups[groupId] = { id: groupId, error: e.message, users: [], logs: {}, personalRoutines: {}, config: { groupName: groupId }, stats: logStats({}) };
+      }
     }
     state.groups = groups;
-    if (!state.groups[state.selectedGroup]) state.selectedGroup = state.groupIds[0] || DEFAULT_GROUP;
+    if (!state.groups[state.selectedGroup]) state.selectedGroup = null;
+    // Auto-process old trashed groups
+    await processOldTrash();
   } catch(e){
     console.error(e);
-    toast('No pude cargar el dashboard. Revisa reglas de Firestore.');
+    toast('No pude cargar el dashboard. Revisa reglas de Firestore.', 'error');
   }
   state.loading = false; render();
+}
+
+async function loadGroupById(groupId){
+  if (!groupId) return;
+  try {
+    const data = await readGroup(groupId);
+    state.groups[groupId] = data;
+    if (!state.groupIds.includes(groupId)) state.groupIds.push(groupId);
+    state.selectedGroup = groupId;
+    state.loadCode = '';
+    toast('Grupo cargado', 'success');
+    render();
+  } catch(e){
+    console.error(e);
+    toast('No pude cargar ese grupo.', 'error');
+  }
+}
+
+async function processOldTrash(){
+  // Auto-delete groups in trash for more than TRASH_RETENTION_DAYS
+  const cutoff = Date.now() - TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  for (const [gid, g] of Object.entries(state.groups)){
+    const cfg = g.config || {};
+    if (cfg.status === 'trashed' && cfg.trashedAt && cfg.trashedAt < cutoff){
+      console.log('Auto-purging old trashed group:', gid);
+      try { await hardDeleteGroup(gid, { silent: true }); }
+      catch(e){ console.error(e); }
+    }
+  }
+}
+
+// ============================================================
+// GROUP STATUS HELPERS
+// ============================================================
+function groupStatus(g){
+  return (g && g.config && g.config.status) || 'active';
+}
+function groupName(g){
+  return (g && g.config && g.config.groupName) || (g && g.id) || '?';
+}
+
+// ============================================================
+// ADMIN ACTIONS — GROUPS
+// ============================================================
+async function archiveGroup(groupId){
+  const g = state.groups[groupId]; if (!g) return;
+  const cfg = { ...g.config, status: 'archived', archivedAt: Date.now() };
+  await setDoc(doc(db,'salas',groupId,'meta','config'), cfg);
+  g.config = cfg;
+  toast('Grupo archivado', 'success'); render();
+}
+async function unarchiveGroup(groupId){
+  const g = state.groups[groupId]; if (!g) return;
+  const cfg = { ...g.config, status: 'active' };
+  delete cfg.archivedAt;
+  await setDoc(doc(db,'salas',groupId,'meta','config'), cfg);
+  g.config = cfg;
+  toast('Grupo desarchivado', 'success'); render();
+}
+async function trashGroup(groupId){
+  const g = state.groups[groupId]; if (!g) return;
+  const cfg = { ...g.config, status: 'trashed', trashedAt: Date.now() };
+  await setDoc(doc(db,'salas',groupId,'meta','config'), cfg);
+  g.config = cfg;
+  toast(`Grupo en papelera. Se borrará en ${TRASH_RETENTION_DAYS} días.`, 'success');
+  render();
+}
+async function restoreGroup(groupId){
+  const g = state.groups[groupId]; if (!g) return;
+  const cfg = { ...g.config, status: 'active' };
+  delete cfg.trashedAt;
+  delete cfg.archivedAt;
+  await setDoc(doc(db,'salas',groupId,'meta','config'), cfg);
+  g.config = cfg;
+  toast('Grupo restaurado', 'success'); render();
+}
+
+async function hardDeleteGroup(groupId, opts = {}){
+  // Delete: meta docs + all subcollection docs + the group root.
+  // Order: subcollections first, then meta, then root.
+  const collectionsToWipe = ['logs', 'personalRoutines'];
+  const metaDocs = ['config', 'users'];
+  const routinesDocs = ['shared'];
+
+  for (const sub of collectionsToWipe){
+    const snap = await getDocs(collection(db,'salas',groupId,sub));
+    for (const d of snap.docs){
+      await deleteDoc(doc(db,'salas',groupId,sub,d.id));
+    }
+  }
+  for (const m of metaDocs){
+    await deleteDoc(doc(db,'salas',groupId,'meta',m)).catch(()=>{});
+  }
+  for (const r of routinesDocs){
+    await deleteDoc(doc(db,'salas',groupId,'routines',r)).catch(()=>{});
+  }
+  // The group "root" document might not exist (Firestore subcollections without parent).
+  // Still attempt:
+  await deleteDoc(doc(db,'salas',groupId)).catch(()=>{});
+
+  // Clean up: remove the group from any account/membership reference
+  for (const acc of state.accounts){
+    if ((acc.groups || []).includes(groupId)){
+      const newGroups = acc.groups.filter(g => g !== groupId);
+      const linkedProfiles = { ...(acc.linkedProfiles || {}) };
+      delete linkedProfiles[groupId];
+      try { await updateDoc(doc(db,'accounts',acc.id), { groups: newGroups, linkedProfiles }); }
+      catch(e){ console.error('cleanup account', acc.id, e); }
+    }
+  }
+  for (const m of state.memberships){
+    if ((m.groups || []).includes(groupId)){
+      const newGroups = m.groups.filter(g => g !== groupId);
+      try { await updateDoc(doc(db,'memberships',m.id), { groups: newGroups }); }
+      catch(e){ console.error('cleanup membership', m.id, e); }
+    }
+  }
+
+  delete state.groups[groupId];
+  state.groupIds = state.groupIds.filter(g => g !== groupId);
+  if (state.selectedGroup === groupId) state.selectedGroup = null;
+  if (!opts.silent) toast('Grupo eliminado para siempre', 'success');
+  if (!opts.silent) render();
+}
+
+// ============================================================
+// ADMIN ACTIONS — USERS
+// ============================================================
+async function removeUserFromGroup(groupId, userId, opts = {}){
+  // Removes the user from the group's users list. Logs stay (unless purgeLogs=true)
+  const g = state.groups[groupId]; if (!g) return;
+  const newUsers = (g.users || []).filter(u => u.id !== userId);
+  await setDoc(doc(db,'salas',groupId,'meta','users'), { users: newUsers });
+  if (opts.purgeLogs){
+    await deleteDoc(doc(db,'salas',groupId,'logs',userId)).catch(()=>{});
+    await deleteDoc(doc(db,'salas',groupId,'personalRoutines',userId)).catch(()=>{});
+    delete g.logs[userId];
+    delete g.personalRoutines[userId];
+  }
+  g.users = newUsers;
+  g.stats = logStats(g.logs);
+  toast('Usuario eliminado del grupo', 'success');
+  render();
+}
+
+async function hardDeleteUser(userId){
+  // 1. Find all groups the user belongs to (via memberships, accounts, group user lists)
+  const affectedGroups = new Set();
+  for (const [gid, g] of Object.entries(state.groups)){
+    if ((g.users || []).some(u => u.id === userId)) affectedGroups.add(gid);
+    if (g.logs && g.logs[userId]) affectedGroups.add(gid);
+    if (g.personalRoutines && g.personalRoutines[userId]) affectedGroups.add(gid);
+  }
+
+  // 2. Find associated auth account (if linked)
+  let linkedAuthUid = null;
+  let linkedAuthEmail = null;
+  for (const [gid, g] of Object.entries(state.groups)){
+    const u = (g.users || []).find(x => x.id === userId);
+    if (u && u.authOwnerUid){
+      linkedAuthUid = u.authOwnerUid;
+      linkedAuthEmail = u.authOwnerEmail;
+      break;
+    }
+  }
+
+  // 3. Wipe user from all groups
+  for (const gid of affectedGroups){
+    await removeUserFromGroup(gid, userId, { purgeLogs: true });
+  }
+
+  // 4. Wipe linked account & membership docs
+  if (linkedAuthUid){
+    try { await deleteDoc(doc(db,'accounts',linkedAuthUid)); state.accounts = state.accounts.filter(a => a.id !== linkedAuthUid); } catch(e){ console.error(e); }
+    try { await deleteDoc(doc(db,'memberships',linkedAuthUid)); state.memberships = state.memberships.filter(m => m.id !== linkedAuthUid); } catch(e){ console.error(e); }
+  }
+
+  const note = linkedAuthEmail
+    ? `Usuario borrado. Recuerda eliminar la cuenta Auth de ${linkedAuthEmail} manualmente en Firebase Console → Authentication.`
+    : 'Usuario borrado de Firestore.';
+  toast(note, 'success');
+  render();
+}
+
+// ============================================================
+// AUTH
+// ============================================================
+async function doLogin(method){
+  try {
+    if (method === 'google'){
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } else {
+      const email = document.getElementById('emInput').value.trim();
+      const pw = document.getElementById('pwInput').value;
+      if (!email || !pw){ toast('Email y contraseña.', 'error'); return; }
+      await signInWithEmailAndPassword(auth, email, pw);
+    }
+  } catch(e){
+    console.error(e);
+    toast(e.message || 'No pude iniciar sesión.', 'error');
+  }
+}
+async function doLogout(){
+  await signOut(auth);
+  state.accounts = []; state.memberships = []; state.groupIds = []; state.groups = {}; state.selectedGroup = null;
+  render();
+}
+
+// ============================================================
+// MODAL
+// ============================================================
+function openModal(html, onAttach){
+  modalRoot.innerHTML = `<div class="modal-bg" id="mb"><div class="modal" onclick="event.stopPropagation()">${html}</div></div>`;
+  document.getElementById('mb').addEventListener('click', e => { if (e.target.id === 'mb') closeModal(); });
+  if (onAttach) onAttach();
+}
+function closeModal(){ modalRoot.innerHTML = ''; state.modalOpen = null; }
+
+// ============================================================
+// RENDER
+// ============================================================
+function render(){
+  if (state.loading && !Object.keys(state.groups).length) {
+    root.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--text-muted);">
+      <span class="loader"></span><div style="margin-top:12px;">Cargando…</div></div>`;
+    return;
+  }
+  if (!state.authUser) return renderLogin();
+  if (!isAdminUser(state.authUser)) return renderDenied();
+  return renderDashboard();
 }
 
 function renderLogin(){
@@ -173,262 +477,362 @@ function renderLogin(){
     <div style="max-width:420px;margin:0 auto;padding-top:42px;">
       <div style="font-size:42px;margin-bottom:8px;">🛠️</div>
       <h1 style="margin-bottom:6px;">Admin Dashboard</h1>
-      <p class="muted" style="margin:0 0 20px;">Entra con una cuenta admin para ver grupos, usuarios y herramientas de soporte.</p>
+      <p class="muted" style="margin:0 0 22px;font-size:14px;">Inicia sesión con tu cuenta de admin.</p>
       <div class="card" style="margin-bottom:14px;">
-        <label class="section-label">Email admin</label>
-        <input id="email" type="email" placeholder="admin@email.com" style="margin-bottom:10px;">
-        <label class="section-label">Contraseña</label>
-        <input id="password" type="password" placeholder="Contraseña" style="margin-bottom:12px;">
-        <button class="primary" data-action="emailLogin" style="width:100%;padding:13px;">Entrar</button>
-        <div id="loginErr" style="color:var(--danger);font-size:12px;text-align:center;margin-top:10px;min-height:16px;"></div>
+        <div class="section-label">Email + contraseña</div>
+        <input id="emInput" type="email" placeholder="admin@email.com" style="margin-bottom:10px;" />
+        <input id="pwInput" type="password" placeholder="••••••••" style="margin-bottom:12px;" />
+        <button class="primary" id="loginBtn" style="width:100%;padding:12px;">Entrar</button>
       </div>
-      <button data-action="googleLogin" style="width:100%;padding:13px;"><i class="ti ti-brand-google" style="color:var(--accent);"></i> Continuar con Google</button>
-      <div class="banner" style="margin-top:16px;">
-        <i class="ti ti-alert-triangle"></i>
-        <div>Este dashboard es para beta privada. No lo publiques como herramienta consumer hasta tener reglas seguras por rol.</div>
-      </div>
+      <div style="text-align:center;margin:14px 0;color:var(--text-dim);font-size:12px;font-family:var(--font-mono);">— O —</div>
+      <button id="googleBtn" style="width:100%;padding:12px;display:flex;align-items:center;justify-content:center;gap:8px;">
+        <i class="ti ti-brand-google" style="font-size:18px;color:var(--accent);"></i> Continuar con Google
+      </button>
+      <p class="dim" style="font-size:11px;text-align:center;margin-top:24px;font-family:var(--font-mono);">Solo cuentas autorizadas pueden ver este panel.</p>
     </div>`;
-  attach();
+  document.getElementById('loginBtn').addEventListener('click', () => doLogin('email'));
+  document.getElementById('googleBtn').addEventListener('click', () => doLogin('google'));
 }
 
-function renderForbidden(){
+function renderDenied(){
   root.innerHTML = `
-    <div style="max-width:520px;margin:0 auto;padding-top:42px;">
-      <h1 style="margin-bottom:8px;">Acceso restringido</h1>
-      <p class="muted">Entraste como <strong>${esc(state.user?.email)}</strong>, pero ese email no está en la lista admin.</p>
-      <div class="card" style="margin:18px 0;">
-        <div class="section-label">Admins permitidos</div>
-        ${ADMIN_EMAILS.map(e => `<div class="mono">${esc(e)}</div>`).join('')}
-      </div>
-      <button data-action="logout">Cerrar sesión</button>
+    <div style="max-width:420px;margin:0 auto;padding-top:60px;text-align:center;">
+      <div style="font-size:48px;">🚫</div>
+      <h1 style="margin:10px 0 6px;">Acceso denegado</h1>
+      <p class="muted">Tu cuenta no tiene permisos de admin.</p>
+      <p class="dim" style="font-size:12px;font-family:var(--font-mono);margin-top:18px;">${esc(state.authUser?.email || '')}</p>
+      <button class="danger" style="margin-top:20px;" id="outBtn">Salir</button>
     </div>`;
-  attach();
-}
-
-function render(){
-  if (!state.authReady){
-    root.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--text-muted);"><span class="loader"></span><div style="margin-top:12px;">Revisando sesión...</div></div>`;
-    return;
-  }
-  if (!state.user) return renderLogin();
-  if (!isAdminEmail(state.user)) return renderForbidden();
-  renderDashboard();
+  document.getElementById('outBtn').addEventListener('click', doLogout);
 }
 
 function renderDashboard(){
-  const selected = state.groups[state.selectedGroup] || {};
-  const stats = selected.stats || logStats({});
-  const totalUsers = sum(Object.values(state.groups).map(g => (g.users || []).length));
-  const totalSessions = sum(Object.values(state.groups).map(g => (g.stats || {}).sessions || 0));
+  // Compute stats
+  const allGroups = Object.values(state.groups);
+  const active = allGroups.filter(g => groupStatus(g) === 'active');
+  const archived = allGroups.filter(g => groupStatus(g) === 'archived');
+  const trashed = allGroups.filter(g => groupStatus(g) === 'trashed');
+
+  const tabGroups = state.tab === 'active' ? active : state.tab === 'archived' ? archived : trashed;
+  const totalUsers = active.reduce((s, g) => s + (g.users?.length || 0), 0);
+  const totalSessions = active.reduce((s, g) => s + (g.stats?.sessions || 0), 0);
+
   root.innerHTML = `
-    <div class="row" style="margin-bottom:22px;">
+    <div class="row" style="margin-bottom:18px;">
       <div>
         <h1>Admin Dashboard</h1>
-        <div class="muted" style="font-size:13px;">${esc(state.user.email)} · private beta</div>
+        <div class="muted" style="font-size:13px;margin-top:3px;">${esc(state.authUser?.email || '')} · <span class="pill" style="font-size:9px;">SUPER ADMIN</span></div>
       </div>
       <div class="spacer"></div>
-      <button data-action="refresh"><i class="ti ti-refresh"></i> Refrescar</button>
-      <button data-action="logout"><i class="ti ti-logout"></i> Salir</button>
+      <button id="refreshBtn"><i class="ti ti-refresh"></i> Refrescar</button>
+      <button id="outBtn"><i class="ti ti-logout"></i> Salir</button>
     </div>
 
-    <div class="grid" style="margin-bottom:14px;">
-      <div class="card stat"><div class="label">Grupos</div><div class="value">${state.groupIds.length}</div></div>
-      <div class="card stat"><div class="label">Usuarios</div><div class="value">${totalUsers}</div></div>
+    <div class="grid" style="margin-bottom:18px;">
+      <div class="card stat"><div class="label">Grupos activos</div><div class="value">${active.length}</div></div>
+      <div class="card stat"><div class="label">Usuarios totales</div><div class="value">${totalUsers}</div></div>
       <div class="card stat"><div class="label">Sesiones</div><div class="value">${totalSessions}</div></div>
-      <div class="card stat"><div class="label">Cuentas Auth</div><div class="value">${state.accounts.length}</div></div>
+      <div class="card stat"><div class="label">Cuentas auth</div><div class="value">${state.accounts.length}</div></div>
+    </div>
+
+    <div class="tab-bar">
+      <button class="${state.tab==='active'?'active':''}" data-tab="active">
+        <i class="ti ti-folder" style="font-size:13px;vertical-align:-1px;"></i> Activos (${active.length})
+      </button>
+      <button class="${state.tab==='archived'?'active':''}" data-tab="archived">
+        <i class="ti ti-archive" style="font-size:13px;vertical-align:-1px;"></i> Archivados (${archived.length})
+      </button>
+      <button class="${state.tab==='trashed'?'active':''}" data-tab="trashed">
+        <i class="ti ti-trash" style="font-size:13px;vertical-align:-1px;"></i> Papelera (${trashed.length})
+      </button>
     </div>
 
     <div class="two-col">
       <div>
-        <div class="card" style="margin-bottom:12px;">
-          <div class="section-label">Cargar grupo por código</div>
-          <div class="row">
-            <input id="manualGroupId" placeholder="codigo-del-grupo">
-            <button data-action="loadManualGroup">Cargar</button>
-          </div>
+        ${renderGroupList(tabGroups)}
+        ${state.tab === 'active' ? renderLoadByCode() : ''}
+      </div>
+      <div>
+        ${state.selectedGroup && state.groups[state.selectedGroup] ? renderGroupDetail(state.groups[state.selectedGroup]) : renderEmptyDetail()}
+      </div>
+    </div>`;
+  attachDashboardHandlers();
+}
+
+function renderGroupList(groups){
+  if (!groups.length){
+    return `<div class="card empty">
+      <i class="ti ${state.tab==='trashed'?'ti-trash':state.tab==='archived'?'ti-archive':'ti-folder-off'}"></i>
+      <div>No hay grupos ${state.tab==='active'?'activos':state.tab==='archived'?'archivados':'en papelera'}.</div>
+    </div>`;
+  }
+  return `<div class="section-label" style="margin-top:4px;">${state.tab==='active'?'Grupos':state.tab==='archived'?'Archivados':'Papelera'}</div>
+    ${groups.map(g => {
+      const st = groupStatus(g);
+      const stPill = st === 'archived' ? '<span class="pill warning-pill">archivado</span>'
+        : st === 'trashed' ? `<span class="pill danger-pill">papelera · ${TRASH_RETENTION_DAYS - (daysAgo(g.config.trashedAt) || 0)}d</span>`
+        : '';
+      const isOriginal = g.id === DEFAULT_GROUP ? '<span class="pill" style="font-size:9px;">original</span>' : '';
+      return `<button class="list-btn ${state.selectedGroup===g.id?'active':''} group-card ${st}" data-group="${esc(g.id)}">
+        <div style="font-weight:600;font-size:14px;margin-bottom:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          ${esc(groupName(g))} ${isOriginal} ${stPill}
         </div>
-        <div class="section-label">Grupos descubiertos</div>
-        ${state.groupIds.map(g => {
-          const item = state.groups[g] || {};
-          const s = item.stats || {};
-          return `<button data-action="selectGroup" data-group="${esc(g)}" class="list-btn ${g === state.selectedGroup ? 'active' : ''}">
-            <div class="row">
-              <strong style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc((item.config && item.config.groupName) || g)}</strong>
-              ${g === DEFAULT_GROUP ? '<span class="pill">original</span>' : ''}
-            </div>
-            <div class="muted mono" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g)}</div>
-            <div class="muted" style="font-size:12px;margin-top:4px;">${(item.users || []).length} usuarios · ${s.sessions || 0} sesiones</div>
-          </button>`;
+        <div class="mono dim" style="font-size:11px;margin-bottom:4px;">${esc(g.id)}</div>
+        <div class="muted" style="font-size:12px;">${(g.users||[]).length} usuarios · ${g.stats?.sessions||0} sesiones</div>
+      </button>`;
+    }).join('')}`;
+}
+
+function renderLoadByCode(){
+  return `<div class="card" style="margin-top:16px;">
+    <div class="section-label">Cargar grupo por código</div>
+    <div class="row" style="margin-top:8px;">
+      <input id="codeInput" placeholder="codigo-del-grupo" value="${esc(state.loadCode)}" />
+      <button class="primary" id="loadCodeBtn" style="flex-shrink:0;">Cargar</button>
+    </div>
+  </div>`;
+}
+
+function renderEmptyDetail(){
+  return `<div class="card empty" style="padding:60px 20px;">
+    <i class="ti ti-arrow-left"></i>
+    <div>Selecciona un grupo a la izquierda para ver detalles.</div>
+  </div>`;
+}
+
+function renderGroupDetail(g){
+  const st = groupStatus(g);
+  const stPill = st === 'archived' ? '<span class="pill warning-pill">ARCHIVADO</span>'
+    : st === 'trashed' ? `<span class="pill danger-pill">PAPELERA · expira en ${TRASH_RETENTION_DAYS - (daysAgo(g.config.trashedAt) || 0)}d</span>`
+    : '<span class="pill success-pill">ACTIVO</span>';
+
+  // Actions for this group based on status
+  let actions = '';
+  if (st === 'active'){
+    actions = `
+      <button class="warning small action-btn" data-act="archive" data-g="${esc(g.id)}"><i class="ti ti-archive"></i> Archivar</button>
+      <button class="danger small action-btn" data-act="trash" data-g="${esc(g.id)}"><i class="ti ti-trash"></i> Mover a papelera</button>`;
+  } else if (st === 'archived'){
+    actions = `
+      <button class="small action-btn" data-act="unarchive" data-g="${esc(g.id)}"><i class="ti ti-folder-open"></i> Desarchivar</button>
+      <button class="danger small action-btn" data-act="trash" data-g="${esc(g.id)}"><i class="ti ti-trash"></i> Mover a papelera</button>`;
+  } else if (st === 'trashed'){
+    actions = `
+      <button class="small action-btn" data-act="restore" data-g="${esc(g.id)}"><i class="ti ti-arrow-back-up"></i> Restaurar</button>
+      <button class="danger small action-btn" data-act="hardDelete" data-g="${esc(g.id)}"><i class="ti ti-flame"></i> Borrar para siempre</button>`;
+  }
+
+  const cfg = g.config || {};
+  const meta = [
+    cfg.createdAt ? `Creado: ${formatDate(cfg.createdAt)}` : null,
+    cfg.archivedAt ? `Archivado: ${formatDate(cfg.archivedAt)}` : null,
+    cfg.trashedAt ? `Papelera: ${formatDate(cfg.trashedAt)} (expira en ${TRASH_RETENTION_DAYS - (daysAgo(cfg.trashedAt) || 0)}d)` : null,
+    cfg.invitationPassword ? `Invitación: ${esc(cfg.invitationPassword)}` : null,
+  ].filter(Boolean);
+
+  return `<div class="card" style="margin-bottom:14px;">
+    <div class="row" style="margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+      <h2>${esc(groupName(g))}</h2>
+      ${stPill}
+      <div class="spacer"></div>
+    </div>
+    <div class="mono dim" style="font-size:11px;margin-bottom:6px;">${esc(g.id)}</div>
+    ${meta.length ? `<div class="muted" style="font-size:12px;line-height:1.7;">${meta.map(m=>esc(m)).join('<br>')}</div>` : ''}
+    ${g.error ? `<div class="banner danger" style="margin-top:10px;"><i class="ti ti-alert-triangle"></i><div>Error: ${esc(g.error)}</div></div>` : ''}
+    <div class="action-row">${actions}</div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px;">
+    <div class="row" style="margin-bottom:12px;">
+      <h3>Usuarios (${(g.users||[]).length})</h3>
+    </div>
+    ${(g.users||[]).length ? `<table class="table">
+      <thead><tr><th>Nombre</th><th>Email auth</th><th>Sesiones</th><th></th></tr></thead>
+      <tbody>
+        ${g.users.map(u => {
+          const userSessions = ((g.logs || {})[u.id] && Object.values((g.logs || {})[u.id]).flat().length) || 0;
+          return `<tr>
+            <td><div style="font-weight:500;">${esc(u.name || '?')}</div><div class="mono dim" style="font-size:10px;">${esc(u.id)}</div></td>
+            <td class="mono" style="font-size:12px;color:var(--text-muted);">${esc(u.authOwnerEmail || '—')}</td>
+            <td class="mono">${userSessions}</td>
+            <td style="text-align:right;">
+              <button class="warning small" data-act="removeUser" data-g="${esc(g.id)}" data-u="${esc(u.id)}" title="Quitar de este grupo"><i class="ti ti-user-minus"></i></button>
+              <button class="danger small" data-act="hardDeleteUser" data-u="${esc(u.id)}" title="Borrar para siempre (de todos los grupos)"><i class="ti ti-user-x"></i></button>
+            </td>
+          </tr>`;
         }).join('')}
-      </div>
-      <div>${renderGroupDetail(selected, stats)}</div>
-    </div>`;
-  attach();
+      </tbody>
+    </table>` : '<div class="empty"><i class="ti ti-users-off"></i><div>Sin usuarios.</div></div>'}
+  </div>
+
+  <div class="card">
+    <h3 style="margin-bottom:8px;">Stats rápidas</h3>
+    <div class="grid">
+      <div><div class="stat-label section-label">Sesiones</div><div class="mono" style="font-size:20px;font-weight:600;">${g.stats?.sessions||0}</div></div>
+      <div><div class="stat-label section-label">Sets</div><div class="mono" style="font-size:20px;font-weight:600;">${g.stats?.sets||0}</div></div>
+      <div><div class="stat-label section-label">Volumen total</div><div class="mono" style="font-size:20px;font-weight:600;">${Math.round(g.stats?.totalVol||0)}</div></div>
+      <div><div class="stat-label section-label">Peso máx</div><div class="mono" style="font-size:20px;font-weight:600;">${g.stats?.maxW||0}</div></div>
+    </div>
+  </div>`;
 }
 
-function renderGroupDetail(group, stats){
-  if (!group || !group.id) return `<div class="card">Selecciona un grupo.</div>`;
-  const users = group.users || [];
-  const admins = (group.config && group.config.adminIds) || [];
-  return `
-    <div class="card" style="margin-bottom:12px;">
-      <div class="row" style="align-items:flex-start;">
-        <div style="min-width:0;">
-          <h2>${esc((group.config && group.config.groupName) || group.id)}</h2>
-          <div class="muted mono" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;">${esc(group.id)}</div>
-        </div>
-        <div class="spacer"></div>
-        <button data-action="copyGroupCode" data-group="${esc(group.id)}">Copiar código</button>
-        <button data-action="exportGroup" data-group="${esc(group.id)}">Exportar JSON</button>
-      </div>
-      ${group.error ? `<div class="banner" style="margin-top:12px;"><i class="ti ti-alert-triangle"></i><div>${esc(group.error)}</div></div>` : ''}
-    </div>
-    <div class="grid" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:12px;">
-      <div class="card stat"><div class="label">Usuarios</div><div class="value">${users.length}</div></div>
-      <div class="card stat"><div class="label">Sesiones</div><div class="value">${stats.sessions || 0}</div></div>
-      <div class="card stat"><div class="label">Sets</div><div class="value">${stats.sets || 0}</div></div>
-      <div class="card stat"><div class="label">Volumen</div><div class="value">${Math.round(stats.volume || 0)}</div></div>
-    </div>
-    <div class="card" style="margin-bottom:12px;">
-      <div class="row" style="margin-bottom:10px;">
-        <h2>Usuarios</h2><div class="spacer"></div><span class="muted">Ultima sesión: ${esc(stats.last || 'n/a')}</span>
-      </div>
-      ${users.length ? `<table class="table">
-        <thead><tr><th>Nombre</th><th>ID</th><th>Rol</th><th>Sesiones</th><th>Acciones</th></tr></thead>
-        <tbody>
-          ${users.map(u => {
-            const userLog = group.logs && group.logs[u.id] ? group.logs[u.id] : {};
-            const userStats = logStats({ [u.id]: userLog });
-            const admin = admins.includes(u.id) || String(u.name || '').toLowerCase() === 'jazmin';
-            return `<tr>
-              <td><strong>${esc(u.name)}</strong></td>
-              <td class="mono" style="font-size:11px;">${esc(u.id)}</td>
-              <td>${admin ? '<span class="pill">admin</span>' : '<span class="muted">member</span>'}</td>
-              <td>${userStats.sessions}</td>
-              <td>
-                <button data-action="inspectUser" data-group="${esc(group.id)}" data-uid="${esc(u.id)}">Ver</button>
-                ${admin ? '' : `<button class="danger" data-action="removeUserSoft" data-group="${esc(group.id)}" data-uid="${esc(u.id)}">Quitar</button>`}
-              </td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>` : `<div class="muted">No hay usuarios guardados en este grupo.</div>`}
-    </div>
-    <div class="card">
-      <h2 style="margin-bottom:10px;">Troubleshooting</h2>
-      <div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr));">
-        <button data-action="showRawConfig" data-group="${esc(group.id)}">Ver config raw</button>
-        <button data-action="showRawLogs" data-group="${esc(group.id)}">Ver logs raw</button>
-        <button data-action="showRoutineSummary" data-group="${esc(group.id)}">Resumen rutina</button>
-      </div>
-    </div>`;
+// ============================================================
+// HANDLERS
+// ============================================================
+function attachDashboardHandlers(){
+  document.getElementById('refreshBtn')?.addEventListener('click', loadDashboard);
+  document.getElementById('outBtn')?.addEventListener('click', doLogout);
+
+  document.querySelectorAll('.tab-bar button[data-tab]').forEach(b => {
+    b.addEventListener('click', () => { state.tab = b.dataset.tab; state.selectedGroup = null; render(); });
+  });
+  document.querySelectorAll('[data-group]').forEach(b => {
+    b.addEventListener('click', () => { state.selectedGroup = b.dataset.group; render(); });
+  });
+  document.getElementById('loadCodeBtn')?.addEventListener('click', () => {
+    const v = document.getElementById('codeInput').value.trim();
+    if (v) loadGroupById(v);
+  });
+  document.getElementById('codeInput')?.addEventListener('input', e => { state.loadCode = e.target.value; });
+
+  document.querySelectorAll('[data-act]').forEach(b => {
+    b.addEventListener('click', () => handleAction(b.dataset.act, b.dataset));
+  });
 }
 
-function openModal(title, body){
-  const existing = document.getElementById('modal');
-  if (existing) existing.remove();
-  document.body.insertAdjacentHTML('beforeend', `
-    <div id="modal" style="position:fixed;inset:0;background:rgba(5,10,25,.72);backdrop-filter:blur(8px);z-index:10;display:flex;align-items:center;justify-content:center;padding:16px;">
-      <div class="card" style="width:min(760px,100%);max-height:86vh;overflow:auto;">
-        <div class="row" style="margin-bottom:12px;"><h2>${esc(title)}</h2><div class="spacer"></div><button data-action="closeModal">Cerrar</button></div>
-        ${body}
-      </div>
-    </div>`);
-  document.querySelectorAll('#modal [data-action]').forEach(el => el.addEventListener('click', handle));
-}
-function closeModal(){ document.getElementById('modal')?.remove(); }
-function downloadJson(name, data){
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
+function handleAction(act, data){
+  const gid = data.g;
+  const uid = data.u;
+  const g = gid ? state.groups[gid] : null;
 
-async function handle(e){
-  const btn = e.currentTarget;
-  const action = btn.dataset.action;
-  if (action === 'emailLogin'){
-    const email = document.getElementById('email').value.trim();
-    const password = document.getElementById('password').value;
-    const err = document.getElementById('loginErr');
-    try { await signInWithEmailAndPassword(auth, email, password); }
-    catch(ex){ console.error(ex); err.textContent = ex.code || 'No pude entrar'; }
+  if (act === 'archive'){
+    openModal(`<h2 style="margin-bottom:10px;">📂 Archivar grupo</h2>
+      <p style="font-size:14px;margin:0 0 12px;">El grupo <strong>${esc(groupName(g))}</strong> no aparecerá en las listas de usuarios, pero los datos siguen intactos. Puedes desarchivarlo en cualquier momento.</p>
+      <div class="row" style="justify-content:flex-end;gap:8px;margin-top:14px;">
+        <button id="cancel">Cancelar</button>
+        <button class="warning" id="confirm">Archivar</button>
+      </div>`, () => {
+      document.getElementById('cancel').onclick = closeModal;
+      document.getElementById('confirm').onclick = async () => { closeModal(); await archiveGroup(gid); };
+    });
     return;
   }
-  if (action === 'googleLogin'){
-    try { await signInWithPopup(auth, new GoogleAuthProvider()); }
-    catch(ex){ console.error(ex); toast(ex.code || 'No pude entrar con Google'); }
+  if (act === 'unarchive'){
+    archiveAction(gid, 'unarchive');
     return;
   }
-  if (action === 'logout'){ await signOut(auth); return; }
-  if (action === 'refresh'){ await loadDashboard(); return; }
-  if (action === 'selectGroup'){ state.selectedGroup = btn.dataset.group; render(); return; }
-  if (action === 'loadManualGroup'){
-    const id = document.getElementById('manualGroupId').value.trim();
-    if (!id) return toast('Escribe un código');
-    state.groups[id] = await readGroup(id);
-    state.groupIds = Array.from(new Set([...state.groupIds, id])).sort();
-    state.selectedGroup = id;
-    render(); return;
-  }
-  if (action === 'copyGroupCode'){
-    await navigator.clipboard.writeText(btn.dataset.group);
-    toast('Código copiado'); return;
-  }
-  if (action === 'exportGroup'){
-    const g = state.groups[btn.dataset.group];
-    downloadJson(`gym-group-${btn.dataset.group}.json`, g);
+  if (act === 'trash'){
+    openModal(`<h2 style="margin-bottom:10px;color:var(--danger);">🗑️ Mover a papelera</h2>
+      <p style="font-size:14px;margin:0 0 12px;">El grupo <strong>${esc(groupName(g))}</strong> se va a papelera.</p>
+      <div class="banner" style="margin-bottom:12px;"><i class="ti ti-clock"></i><div>Se borrará automáticamente en <strong>${TRASH_RETENTION_DAYS} días</strong>. Mientras tanto, puedes restaurarlo desde la pestaña Papelera.</div></div>
+      <div class="row" style="justify-content:flex-end;gap:8px;">
+        <button id="cancel">Cancelar</button>
+        <button class="danger" id="confirm">Mover a papelera</button>
+      </div>`, () => {
+      document.getElementById('cancel').onclick = closeModal;
+      document.getElementById('confirm').onclick = async () => { closeModal(); await trashGroup(gid); };
+    });
     return;
   }
-  if (action === 'inspectUser'){
-    const g = state.groups[btn.dataset.group];
-    const u = (g.users || []).find(x => x.id === btn.dataset.uid);
-    const logs = (g.logs || {})[btn.dataset.uid] || {};
-    const personalRoutine = (g.personalRoutines || {})[btn.dataset.uid] || {};
-    openModal(`Usuario: ${u ? u.name : btn.dataset.uid}`, `<pre class="mono" style="white-space:pre-wrap;font-size:12px;">${esc(JSON.stringify({ user:u, stats:logStats({ [btn.dataset.uid]: logs }), logs, personalRoutine }, null, 2))}</pre>`);
+  if (act === 'restore'){
+    archiveAction(gid, 'restore');
     return;
   }
-  if (action === 'removeUserSoft'){
-    const groupId = btn.dataset.group;
-    const uid = btn.dataset.uid;
-    const g = state.groups[groupId];
+  if (act === 'hardDelete'){
+    openModal(`<h2 style="margin-bottom:10px;color:var(--danger);">💥 Borrar para SIEMPRE</h2>
+      <div class="banner danger" style="margin-bottom:12px;"><i class="ti ti-alert-triangle"></i><div>Esta acción <strong>NO se puede deshacer</strong>. Borrarás permanentemente:
+      <br>• Grupo <strong>${esc(groupName(g))}</strong>
+      <br>• ${(g.users||[]).length} usuarios del grupo
+      <br>• Todos los entrenos (${g.stats?.sessions||0} sesiones)
+      <br>• Rutinas compartidas y personales</div></div>
+      <p class="muted" style="font-size:13px;margin:0 0 10px;">Para confirmar, escribe el código del grupo:</p>
+      <p class="mono" style="font-size:12px;margin-bottom:8px;color:var(--accent);">${esc(g.id)}</p>
+      <input id="confirmInput" placeholder="Pega aquí el código exacto" style="margin-bottom:14px;" />
+      <div class="row" style="justify-content:flex-end;gap:8px;">
+        <button id="cancel">Cancelar</button>
+        <button class="danger" id="confirm" disabled>Borrar para siempre</button>
+      </div>`, () => {
+      const confirmBtn = document.getElementById('confirm');
+      const input = document.getElementById('confirmInput');
+      input.addEventListener('input', () => { confirmBtn.disabled = input.value.trim() !== g.id; });
+      document.getElementById('cancel').onclick = closeModal;
+      confirmBtn.onclick = async () => { closeModal(); await hardDeleteGroup(gid); };
+    });
+    return;
+  }
+  if (act === 'removeUser'){
     const u = (g.users || []).find(x => x.id === uid);
-    if (!u) return;
-    const ok = confirm(`Quitar a ${u.name} del grupo ${groupId}? Sus logs se mantienen.`);
-    if (!ok) return;
-    const users = (g.users || []).filter(x => x.id !== uid);
-    await setDoc(doc(db,'salas',groupId,'meta','users'), { users });
-    state.groups[groupId] = await readGroup(groupId);
-    toast('Usuario quitado');
-    render(); return;
-  }
-  if (action === 'showRawConfig'){
-    const g = state.groups[btn.dataset.group];
-    openModal('Config raw', `<pre class="mono" style="white-space:pre-wrap;font-size:12px;">${esc(JSON.stringify(g.config || {}, null, 2))}</pre>`);
+    const userSessions = ((g.logs || {})[uid] && Object.values((g.logs || {})[uid]).flat().length) || 0;
+    openModal(`<h2 style="margin-bottom:10px;color:var(--warning);">🚪 Quitar del grupo</h2>
+      <p style="font-size:14px;margin:0 0 12px;">Quitar a <strong>${esc(u?.name||'?')}</strong> del grupo <strong>${esc(groupName(g))}</strong>.</p>
+      ${userSessions > 0 ? `<p class="muted" style="font-size:13px;margin:0 0 10px;">Tiene <strong>${userSessions}</strong> entrenos. Elige qué hacer:</p>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+        <label style="display:flex;align-items:flex-start;gap:8px;padding:10px;background:var(--bg-elev-2);border-radius:8px;cursor:pointer;">
+          <input type="radio" name="purgeMode" value="keep" checked style="margin-top:3px;" />
+          <div><div style="font-weight:500;">Mantener entrenos</div><div class="muted" style="font-size:12px;">Los datos siguen ahí (queda como "histórico").</div></div>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:8px;padding:10px;background:var(--bg-elev-2);border-radius:8px;cursor:pointer;">
+          <input type="radio" name="purgeMode" value="purge" style="margin-top:3px;" />
+          <div><div style="font-weight:500;color:var(--danger);">Borrar también los entrenos</div><div class="muted" style="font-size:12px;">Irreversible para este grupo.</div></div>
+        </label>
+      </div>` : '<p class="muted" style="font-size:13px;margin:0 0 14px;">Sin entrenos registrados.</p>'}
+      <div class="row" style="justify-content:flex-end;gap:8px;">
+        <button id="cancel">Cancelar</button>
+        <button class="warning" id="confirm">Quitar</button>
+      </div>`, () => {
+      document.getElementById('cancel').onclick = closeModal;
+      document.getElementById('confirm').onclick = async () => {
+        const purge = (document.querySelector('input[name="purgeMode"]:checked') || {}).value === 'purge';
+        closeModal();
+        await removeUserFromGroup(gid, uid, { purgeLogs: purge });
+      };
+    });
     return;
   }
-  if (action === 'showRawLogs'){
-    const g = state.groups[btn.dataset.group];
-    openModal('Logs raw', `<pre class="mono" style="white-space:pre-wrap;font-size:12px;">${esc(JSON.stringify(g.logs || {}, null, 2))}</pre>`);
+  if (act === 'hardDeleteUser'){
+    // Find user in any group
+    let user = null;
+    for (const g of Object.values(state.groups)){
+      user = (g.users || []).find(u => u.id === uid);
+      if (user) break;
+    }
+    const groupsAffected = Object.values(state.groups).filter(gg => (gg.users || []).some(u => u.id === uid)).length;
+    openModal(`<h2 style="margin-bottom:10px;color:var(--danger);">💥 Borrar usuario PARA SIEMPRE</h2>
+      <div class="banner danger" style="margin-bottom:12px;"><i class="ti ti-alert-triangle"></i><div>Borrarás permanentemente a <strong>${esc(user?.name || uid)}</strong> de <strong>${groupsAffected}</strong> grupo(s), incluyendo todos sus entrenos.</div></div>
+      ${user?.authOwnerEmail ? `<div class="banner" style="margin-bottom:12px;"><i class="ti ti-info-circle"></i><div>Email auth asociado: <strong>${esc(user.authOwnerEmail)}</strong>. Después de esta acción, recuerda borrar la cuenta de Firebase Authentication manualmente.</div></div>` : ''}
+      <p class="muted" style="font-size:13px;margin:0 0 10px;">Para confirmar, escribe el nombre del usuario:</p>
+      <p class="mono" style="font-size:12px;margin-bottom:8px;color:var(--accent);">${esc(user?.name || uid)}</p>
+      <input id="confirmInput" placeholder="Escribe aquí" style="margin-bottom:14px;" />
+      <div class="row" style="justify-content:flex-end;gap:8px;">
+        <button id="cancel">Cancelar</button>
+        <button class="danger" id="confirm" disabled>Borrar para siempre</button>
+      </div>`, () => {
+      const confirmBtn = document.getElementById('confirm');
+      const input = document.getElementById('confirmInput');
+      input.addEventListener('input', () => { confirmBtn.disabled = input.value.trim() !== (user?.name || uid); });
+      document.getElementById('cancel').onclick = closeModal;
+      confirmBtn.onclick = async () => { closeModal(); await hardDeleteUser(uid); };
+    });
     return;
   }
-  if (action === 'showRoutineSummary'){
-    const g = state.groups[btn.dataset.group];
-    const days = Object.entries(g.routine || {}).map(([key, day]) => ({ day:key, label:day.label, focus:day.focus, exercises:(day.exercises || []).length }));
-    openModal('Resumen de rutina', `<pre class="mono" style="white-space:pre-wrap;font-size:12px;">${esc(JSON.stringify(days, null, 2))}</pre>`);
-    return;
-  }
-  if (action === 'closeModal'){ closeModal(); return; }
 }
-function attach(){ document.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); }
 
-onAuthStateChanged(auth, async user => {
-  state.authReady = true;
-  state.user = user;
-  if (user && isAdminEmail(user)) await loadDashboard();
-  else render();
+async function archiveAction(gid, kind){
+  if (kind === 'unarchive') await unarchiveGroup(gid);
+  if (kind === 'restore') await restoreGroup(gid);
+}
+
+// ============================================================
+// INIT
+// ============================================================
+onAuthStateChanged(auth, (user) => {
+  state.authUser = user;
+  if (user && isAdminUser(user)){
+    loadDashboard();
+  } else {
+    state.loading = false;
+    render();
+  }
 });
 </script>
 </body>
