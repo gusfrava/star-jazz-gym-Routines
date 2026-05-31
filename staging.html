@@ -1254,6 +1254,7 @@ async function joinGroup(groupId, password){
 }
 async function deleteCurrentGroup(){
   if (groupPath() === DEFAULT_GROUP){ toast('El grupo original está protegido'); return; }
+  if (isPersonalGroup()){ toast('Tu espacio personal no se elimina'); return; }
   if (!isAdmin()){ toast('Solo admin'); return; }
   const gid = groupPath();
   if (!firebaseReady){
@@ -1271,7 +1272,20 @@ async function deleteCurrentGroup(){
   }
   for (const u of state.users){ await forgetMembership(u.id, gid); }
   forgetGroup(gid);
-  await switchGroup(DEFAULT_GROUP);
+  const remainingGroups = (state.account?.groups || []).filter(g => g && g !== gid && g !== state.account?.personalGroupId);
+  if (state.account){
+    const linkedProfiles = { ...(state.account.linkedProfiles || {}) };
+    delete linkedProfiles[gid];
+    await saveAccount({ groups: remainingGroups, linkedProfiles });
+  }
+  state.joinedGroups = remainingGroups;
+  saveJoinedGroups(remainingGroups);
+  if (remainingGroups.length){
+    await switchGroup(remainingGroups[0]);
+  } else {
+    await ensurePersonalSpace();
+    await reloadGroup();
+  }
   toast('Grupo eliminado');
 }
 function buildGroupBackup(){
@@ -3095,7 +3109,7 @@ function renderSettings(){
       <button data-action="joinGroupModal" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:transparent;border:none;text-align:left;border-radius:8px;">
         <i class="ti ti-login" style="font-size:18px;color:var(--accent);"></i><span>Unirse A Un Grupo</span>
       </button>
-      ${adm && groupPath() !== DEFAULT_GROUP ? `<button data-action="deleteGroupModal" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:transparent;border:none;text-align:left;color:var(--danger);border-radius:8px;">
+      ${adm && groupPath() !== DEFAULT_GROUP && !isPersonalGroup() ? `<button data-action="deleteGroupModal" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:transparent;border:none;text-align:left;color:var(--danger);border-radius:8px;">
         <i class="ti ti-trash" style="font-size:18px;"></i><span>Eliminar Este Grupo</span>
       </button>` : ''}
     </div>
@@ -3787,6 +3801,7 @@ async function handle(e){
     return;
   }
   if (a === 'deleteGroupModal'){
+    if (isPersonalGroup()){ toast('Tu espacio personal no se elimina'); return; }
     if (!isAdmin()){ toast('Solo admin'); return; }
     if (groupPath() === DEFAULT_GROUP){ toast('El grupo original está protegido'); return; }
     openModal(`
@@ -4879,6 +4894,10 @@ init();
 </script>
 </body>
 </html>
+
+
+
+
 
 
 
