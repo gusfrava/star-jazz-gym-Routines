@@ -83,6 +83,13 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
 @media (max-width:860px){.grid{grid-template-columns:repeat(2,1fr)}.two-col{grid-template-columns:1fr}#app{padding:18px 14px 70px}}
+.pw-wrap{position:relative;width:100%}
+.pw-wrap input{width:100%;padding-right:42px}
+.pw-toggle{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:transparent;border:none;color:var(--text-muted);padding:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:6px;transition:.15s}
+.pw-toggle:hover{color:var(--accent);background:var(--bg-elev-2)}
+.pw-toggle i{font-size:16px}
+.forgot-link{display:inline-block;font-size:12px;color:var(--accent);text-decoration:none;cursor:pointer;background:transparent;border:none;padding:4px 0;font-family:inherit}
+.forgot-link:hover{text-decoration:underline}
 </style>
 </head>
 <body>
@@ -101,7 +108,7 @@ import {
   getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import {
-  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, GoogleAuthProvider, signInWithPopup
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 
 // ============================================================
@@ -150,24 +157,6 @@ function toast(msg, type='info'){
   el.style.borderColor = type === 'error' ? 'var(--danger-border)' : type === 'success' ? 'rgba(52,211,153,0.4)' : 'var(--accent-border)';
   el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), 3000);
-}
-async function copyText(value, label = 'Texto'){
-  const text = String(value || '');
-  if (!text) return toast(`No hay ${label.toLowerCase()} para copiar`, 'error');
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.left = '-9999px';
-    document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
-    document.execCommand('copy');
-    ta.remove();
-  }
-  toast(`${label} copiado`, 'success');
 }
 function formatDate(ts){
   if (!ts) return '—';
@@ -223,17 +212,10 @@ async function readGroup(groupId){
 
 async function discoverGroupIds(){
   // Strategy: derive from accounts + memberships (super-admin reads everything),
-  // visible salas root docs, plus include DEFAULT_GROUP and manually loaded groups.
+  // plus include DEFAULT_GROUP and any explicit load-by-id input.
   const ids = new Set([DEFAULT_GROUP]);
   state.accounts.forEach(a => (a.groups || []).forEach(g => ids.add(g)));
   state.memberships.forEach(m => (m.groups || []).forEach(g => ids.add(g)));
-  Object.keys(state.groups || {}).forEach(g => ids.add(g));
-  try {
-    const salasSnap = await getDocs(collection(db,'salas'));
-    salasSnap.forEach(d => ids.add(d.id));
-  } catch(e){
-    console.error('Could not list salas root docs', e);
-  }
   return [...ids].filter(Boolean).sort();
 }
 
@@ -270,14 +252,6 @@ async function loadGroupById(groupId){
   if (!groupId) return;
   try {
     const data = await readGroup(groupId);
-    if (!data.error && data.config){
-      await setDoc(doc(db,'salas',groupId), {
-        groupName: groupName(data),
-        createdAt: data.config.createdAt || Date.now(),
-        createdBy: data.config.createdBy || null,
-        status: data.config.status || 'active'
-      }, { merge: true });
-    }
     state.groups[groupId] = data;
     if (!state.groupIds.includes(groupId)) state.groupIds.push(groupId);
     state.selectedGroup = groupId;
@@ -457,6 +431,278 @@ async function hardDeleteUser(userId){
 }
 
 // ============================================================
+// DEMO SEED — populate a demo group with 3 users + 8 weeks of data
+// ============================================================
+const DEMO_GROUP_ID = 'demo-tour';
+
+const DEMO_USERS = [
+  {
+    id: 'demo_ana',
+    name: 'Ana',
+    color: '#ec4899',
+    profile: { avatarEmoji: '💪', currentWeight: 142, goalWeight: 135 },
+    startWeight: 148,
+    // Day → exercise idx → starting weight in lb (female intermediate)
+    weights: {
+      martes:    [85, 110, 95, 50, 60, 70],         // pierna cuádriceps
+      miercoles: [80, 90, 60, 55, 30, 40, 35],      // espalda/bíceps
+      jueves:    [115, 70, 95, 65, 50, 55, 45],     // pierna femoral
+      viernes:   [60, 70, 50, 45, 12, 30, 40, 35, 40], // pecho/hombro/tríceps
+      sabado:    [95, 75, 115, 90, 55, 35],         // full body
+    }
+  },
+  {
+    id: 'demo_carlos',
+    name: 'Carlos',
+    color: '#3b82f6',
+    profile: { avatarEmoji: '🦁', currentWeight: 182, goalWeight: 175 },
+    startWeight: 192,
+    // intermediate male
+    weights: {
+      martes:    [180, 230, 160, 90, 110, 130],
+      miercoles: [150, 165, 130, 110, 65, 75, 70],
+      jueves:    [205, 130, 185, 115, 85, 95, 80],
+      viernes:   [135, 130, 95, 90, 25, 55, 75, 70, 65],
+      sabado:    [195, 165, 215, 145, 115, 60],
+    }
+  },
+  {
+    id: 'demo_sofia',
+    name: 'Sofía',
+    color: '#a855f7',
+    profile: { avatarEmoji: '🌸', currentWeight: 128, goalWeight: 125 },
+    startWeight: 134,
+    // beginner-intermediate female
+    weights: {
+      martes:    [65, 90, 75, 35, 45, 55],
+      miercoles: [60, 70, 45, 40, 25, 30, 25],
+      jueves:    [95, 55, 75, 50, 40, 40, 35],
+      viernes:   [45, 55, 35, 30, 8, 20, 30, 25, 30],
+      sabado:    [75, 55, 95, 70, 40, 25],
+    }
+  }
+];
+
+const DEMO_NOTES_POOL = [
+  'Subí 5lb!', 'Costó hoy', 'Bien la técnica', 'Pude más reps', 'Calentamiento corto',
+  'Sentí el oblicuo', 'Buen pump', 'Mañana descanso', 'Dolor de espalda leve, cuidado',
+  'Hoy con energía 🔥', 'Set 3 hasta fallo', 'Forma > peso', 'Probando agarre cerrado',
+  '', '', '', '', '' // some empty for variety
+];
+const DEMO_SESSION_NOTES = [
+  'Sesión completa, me sentí fuerte hoy. Subí en sentadilla.',
+  'Cansada de la semana, hice menos reps en los últimos.',
+  'Probé una variación nueva del press. Me gustó.',
+  'Hoy solo cardio liviano antes del entreno, mejor energía.',
+  '', '', '', '',
+  'Buddy entrenó conmigo, motivación alta',
+  'Falta dormir, mañana mejor',
+];
+
+function pick(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
+function randBetween(min, max){ return Math.round((Math.random() * (max - min) + min) * 10) / 10; }
+
+function generateUserLogs(user, routineDays){
+  const today = new Date();
+  const logs = {};
+
+  // 8 weeks back, ~3-5 sessions per week per user (variable to look real)
+  const WEEKS = 8;
+  for (let w = WEEKS - 1; w >= 0; w--){
+    // Each user has different attendance pattern
+    const sessionsThisWeek = Math.floor(Math.random() * 3) + 3; // 3-5 days
+    const daysOrder = [...Object.keys(routineDays)].sort(() => Math.random() - 0.5).slice(0, sessionsThisWeek);
+
+    for (const dayKey of daysOrder){
+      // Date: some day in this week (Mon-Sat)
+      const sessionDate = new Date(today);
+      sessionDate.setDate(today.getDate() - (w * 7) - Math.floor(Math.random() * 6));
+      const dateStr = sessionDate.toISOString().slice(0, 10);
+
+      const exercises = (routineDays[dayKey]?.exercises) || [];
+      // Pick 4-7 of the exercises (not always all)
+      const exCount = Math.min(exercises.length, Math.floor(Math.random() * 3) + 4);
+      const exIndices = [...Array(exercises.length).keys()].sort(() => Math.random() - 0.5).slice(0, exCount).sort((a,b)=>a-b);
+
+      for (const idx of exIndices){
+        const ek = `${dayKey}:${idx}`;
+        const baseWeight = (user.weights[dayKey] && user.weights[dayKey][idx]) || 50;
+        // Progressive overload: gain ~2-4% per week of base
+        const weekProgress = (WEEKS - 1 - w);
+        const weight = Math.round(baseWeight * (1 + (weekProgress * 0.025) + (Math.random() - 0.5) * 0.04));
+
+        // 3-4 sets
+        const setCount = Math.random() > 0.3 ? 4 : 3;
+        const sets = [];
+        for (let s = 0; s < setCount; s++){
+          // First sets do more reps; last set sometimes fewer
+          let reps;
+          if (s === setCount - 1) reps = Math.floor(Math.random() * 4) + 6; // 6-9
+          else reps = Math.floor(Math.random() * 4) + 8; // 8-11
+          const setObj = {
+            reps,
+            weight: s === 0 ? weight - 5 : weight, // first set lighter for warmup
+          };
+          if (Math.random() < 0.15){
+            const note = pick(DEMO_NOTES_POOL);
+            if (note) setObj.note = note;
+          }
+          sets.push(setObj);
+        }
+
+        const entry = { date: dateStr, sets };
+        if (Math.random() < 0.2){
+          const note = pick(DEMO_SESSION_NOTES);
+          if (note) entry.note = note;
+        }
+
+        if (!logs[ek]) logs[ek] = [];
+        logs[ek].push(entry);
+      }
+    }
+  }
+
+  // Sort entries per exercise by date
+  for (const k in logs){
+    logs[k].sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  return logs;
+}
+
+function generateWeightLogs(user){
+  // 8 weeks of bi-weekly weight logs trending toward goal
+  const today = new Date();
+  const logs = [];
+  const totalChange = user.profile.goalWeight - user.startWeight;
+  const SAMPLES = 8;
+  for (let i = 0; i < SAMPLES; i++){
+    const date = new Date(today);
+    date.setDate(today.getDate() - ((SAMPLES - 1 - i) * 7));
+    const progress = i / (SAMPLES - 1); // 0 → 1
+    // Trend toward goal but not exactly: add some noise
+    const trend = user.startWeight + (totalChange * progress * 0.7); // never reach goal exactly
+    const noisy = Math.round((trend + (Math.random() - 0.5) * 1.5) * 10) / 10;
+    logs.push({
+      date: date.toISOString().slice(0, 10),
+      weight: noisy,
+      note: i === 0 ? 'Peso inicial' : (Math.random() < 0.2 ? pick(['Después de comer', 'Mañana en ayunas', 'Después del gym', '']) : ''),
+      createdAt: Date.now() - ((SAMPLES - 1 - i) * 7 * 24 * 60 * 60 * 1000)
+    });
+  }
+  return logs;
+}
+
+// We need the default routine to know exercise indices
+const DEMO_ROUTINE = {
+  martes:{label:'Martes',focus:'Pierna (Cuádriceps)',icon:'ti-run',exercises:[
+    {name:'Hack Squat',video:'how to do hack squat machine',primary:['quads','glutes'],secondary:['hamstrings'],alts:[]},
+    {name:'Prensa (Pies en medio)',video:'leg press feet middle',primary:['quads'],secondary:['glutes'],alts:[]},
+    {name:'Zancada en prensa (Unilateral)',video:'single leg press',primary:['quads','glutes'],secondary:[],alts:[]},
+    {name:'Abductores (Afuera)',video:'hip abductor machine',primary:['abductors','glutes'],secondary:[],alts:[]},
+    {name:'Extensión de cuádriceps',video:'leg extension machine',primary:['quads'],secondary:[],alts:[]},
+    {name:'Pantorrilla',video:'calf raise',primary:['calves'],secondary:[],alts:[]},
+  ]},
+  miercoles:{label:'Miércoles',focus:'Espalda / Bíceps',icon:'ti-stretching',exercises:[
+    {name:'Máquina remo (Amplitud)',video:'seated cable row',primary:['lats','midBack'],secondary:['bicepsF'],alts:[]},
+    {name:'Barra T (Densidad)',video:'T-bar row',primary:['midBack','lats'],secondary:['bicepsF'],alts:[]},
+    {name:'Jalón Barra Larga',video:'lat pulldown wide grip',primary:['lats'],secondary:['bicepsF'],alts:[]},
+    {name:'Jalón Cerrado',video:'close grip pulldown',primary:['lats','midBack'],secondary:['bicepsF'],alts:[]},
+    {name:'Unilateral (Codos a la costilla)',video:'single arm row',primary:['lats'],secondary:['bicepsF'],alts:[]},
+    {name:'Bíceps Predicador',video:'preacher curl',primary:['bicepsF'],secondary:[],alts:[]},
+    {name:'Bíceps Polea',video:'bicep cable curl',primary:['bicepsF'],secondary:[],alts:[]},
+  ]},
+  jueves:{label:'Jueves',focus:'Pierna (Femoral)',icon:'ti-run',exercises:[
+    {name:'Hip Thrust',video:'hip thrust barbell',primary:['glutes'],secondary:['hamstrings'],alts:[]},
+    {name:'Curl Femoral',video:'lying leg curl',primary:['hamstrings'],secondary:[],alts:[]},
+    {name:'Peso Muerto',video:'romanian deadlift',primary:['hamstrings','glutes'],secondary:['lowerBack'],alts:[]},
+    {name:'Sentadilla Sumo',video:'sumo squat',primary:['glutes','adductors'],secondary:[],alts:[]},
+    {name:'Patada de Glúteos',video:'glute kickback',primary:['glutes'],secondary:[],alts:[]},
+    {name:'Abductores (Adentro)',video:'adductor machine',primary:['adductors'],secondary:[],alts:[]},
+    {name:'Hiperextensión',video:'hyperextension',primary:['lowerBack','glutes'],secondary:[],alts:[]},
+  ]},
+  viernes:{label:'Viernes',focus:'Pecho / Hombro / Tríceps',icon:'ti-barbell',exercises:[
+    {name:'Banco inclinado (Barra)',video:'incline bench press',primary:['chest','shouldersF'],secondary:['triceps'],alts:[]},
+    {name:'Prensa de pecho en máquina',video:'chest press machine',primary:['chest'],secondary:['triceps'],alts:[]},
+    {name:'Apertura de pecho',video:'pec deck fly',primary:['chest'],secondary:[],alts:[]},
+    {name:'Press militar en máquina',video:'shoulder press machine',primary:['shouldersF'],secondary:['triceps'],alts:[]},
+    {name:'Elevación lateral en polea',video:'cable lateral raise',primary:['shouldersF'],secondary:[],alts:[]},
+    {name:'Elevación posterior',video:'reverse pec deck',primary:['shouldersB'],secondary:[],alts:[]},
+    {name:'Jalón tríceps polea V',video:'tricep pushdown',primary:['triceps'],secondary:[],alts:[]},
+    {name:'Extensión tríceps por encima',video:'overhead tricep extension',primary:['triceps'],secondary:[],alts:[]},
+    {name:'Fondo de banco',video:'bench dips',primary:['triceps','chest'],secondary:[],alts:[]},
+  ]},
+  sabado:{label:'Sábado',focus:'Full Body',icon:'ti-bolt',exercises:[
+    {name:'Sentadilla con barra',video:'back squat',primary:['quads','glutes'],secondary:[],alts:[]},
+    {name:'Press de banca',video:'bench press flat',primary:['chest'],secondary:['triceps'],alts:[]},
+    {name:'Peso muerto',video:'conventional deadlift',primary:['hamstrings','glutes'],secondary:['lowerBack'],alts:[]},
+    {name:'Dominadas / Jalón al pecho',video:'pull ups',primary:['lats'],secondary:['bicepsF'],alts:[]},
+    {name:'Press militar',video:'overhead press',primary:['shouldersF'],secondary:['triceps'],alts:[]},
+    {name:'Curl bíceps + Tríceps polea',video:'superset arms',primary:['bicepsF','triceps'],secondary:[],alts:[]},
+  ]}
+};
+
+async function seedDemoGroup(){
+  // Confirm if it already exists
+  const existsSnap = await getDoc(doc(db,'salas',DEMO_GROUP_ID,'meta','config')).catch(() => null);
+  if (existsSnap?.exists()){
+    const ok = confirm('El grupo "demo-tour" ya existe. ¿Sobrescribir? Esto borrará y regenerará todos los datos demo.');
+    if (!ok) return;
+  }
+
+  toast('Generando datos demo... esto toma ~10 segundos', 'info');
+
+  // 1. Config
+  const config = {
+    groupName: 'Tour de Demo',
+    invitationPassword: 'demo2026',
+    createdBy: 'demo_seed',
+    adminIds: ['demo_ana'],
+    createdAt: Date.now() - (60 * 24 * 60 * 60 * 1000),  // 60 days ago
+    status: 'active'
+  };
+  await setDoc(doc(db,'salas',DEMO_GROUP_ID,'meta','config'), config);
+
+  // 2. Users (with weight logs in profile)
+  const usersForGroup = DEMO_USERS.map(u => ({
+    id: u.id,
+    name: u.name,
+    color: u.color,
+    pinHash: '0000000000000000000000000000000000000000000000000000000000000000', // PIN: nadie va a loguearse
+    createdAt: Date.now() - (60 * 24 * 60 * 60 * 1000),
+    profile: {
+      ...u.profile,
+      weightLogs: generateWeightLogs(u)
+    }
+  }));
+  await setDoc(doc(db,'salas',DEMO_GROUP_ID,'meta','users'), { users: usersForGroup });
+
+  // 3. Shared routine
+  await setDoc(doc(db,'salas',DEMO_GROUP_ID,'routines','shared'), { routine: DEMO_ROUTINE });
+
+  // 4. Logs per user
+  for (const u of DEMO_USERS){
+    const logs = generateUserLogs(u, DEMO_ROUTINE);
+    await setDoc(doc(db,'salas',DEMO_GROUP_ID,'logs',u.id), logs);
+  }
+
+  // 5. One personal routine for Carlos (with one extra exercise)
+  const carlosPersonal = JSON.parse(JSON.stringify(DEMO_ROUTINE));
+  carlosPersonal.viernes.exercises.push({
+    name: 'Cardio HIIT (10 min)',
+    video: 'HIIT 10 min workout',
+    primary: ['quads'],
+    secondary: ['calves','chest'],
+    alts: ['Bicicleta estacionaria', 'Saltos burpee']
+  });
+  await setDoc(doc(db,'salas',DEMO_GROUP_ID,'personalRoutines','demo_carlos'), { routine: carlosPersonal });
+
+  toast('✅ Grupo demo-tour creado. Contraseña: demo2026', 'success');
+  await loadDashboard();
+}
+
+
+// ============================================================
 // AUTH
 // ============================================================
 async function doLogin(method){
@@ -514,8 +760,15 @@ function renderLogin(){
       <div class="card" style="margin-bottom:14px;">
         <div class="section-label">Email + contraseña</div>
         <input id="emInput" type="email" placeholder="admin@email.com" style="margin-bottom:10px;" />
-        <input id="pwInput" type="password" placeholder="••••••••" style="margin-bottom:12px;" />
+        <div class="pw-wrap" style="margin-bottom:6px;">
+          <input id="pwInput" type="password" placeholder="••••••••" />
+          <button type="button" class="pw-toggle" data-pw-target="pwInput" aria-label="Mostrar/ocultar contraseña"><i class="ti ti-eye"></i></button>
+        </div>
+        <div style="text-align:right;margin-bottom:10px;">
+          <button class="forgot-link" id="forgotBtn">¿Olvidaste tu contraseña?</button>
+        </div>
         <button class="primary" id="loginBtn" style="width:100%;padding:12px;">Entrar</button>
+        <div id="loginErr" style="color:var(--danger);font-size:12px;text-align:center;margin-top:10px;min-height:14px;"></div>
       </div>
       <div style="text-align:center;margin:14px 0;color:var(--text-dim);font-size:12px;font-family:var(--font-mono);">— O —</div>
       <button id="googleBtn" style="width:100%;padding:12px;display:flex;align-items:center;justify-content:center;gap:8px;">
@@ -525,6 +778,39 @@ function renderLogin(){
     </div>`;
   document.getElementById('loginBtn').addEventListener('click', () => doLogin('email'));
   document.getElementById('googleBtn').addEventListener('click', () => doLogin('google'));
+  document.getElementById('forgotBtn').addEventListener('click', forgotPassword);
+}
+
+async function forgotPassword(){
+  const emailEl = document.getElementById('emInput');
+  const errEl = document.getElementById('loginErr');
+  const btn = document.getElementById('forgotBtn');
+  const email = (emailEl?.value || '').trim();
+  if (!email){
+    if (errEl) errEl.textContent = 'Ingresa tu email arriba para enviarte el correo de recuperación.';
+    emailEl?.focus();
+    return;
+  }
+  try {
+    if (btn){ btn.disabled = true; btn.textContent = 'Enviando...'; }
+    await sendPasswordResetEmail(auth, email);
+    if (errEl){
+      errEl.style.color = 'var(--success)';
+      errEl.textContent = `📧 Te enviamos un correo a ${email} con instrucciones.`;
+      setTimeout(() => { if (errEl){ errEl.textContent = ''; errEl.style.color = 'var(--danger)'; } }, 8000);
+    }
+    toast('Correo de recuperación enviado', 'success');
+  } catch(err){
+    console.error(err);
+    const code = err.code || '';
+    const msg = code.includes('user-not-found') ? 'No encontré una cuenta con ese email.' :
+      code.includes('invalid-email') ? 'Email no válido.' :
+      code.includes('too-many-requests') ? 'Demasiados intentos. Espera unos minutos.' :
+      `No pude enviar el correo (${code || 'error'})`;
+    if (errEl) errEl.textContent = msg;
+  } finally {
+    if (btn){ btn.disabled = false; btn.textContent = '¿Olvidaste tu contraseña?'; }
+  }
 }
 
 function renderDenied(){
@@ -617,12 +903,21 @@ function renderGroupList(groups){
 }
 
 function renderLoadByCode(){
+  const demoExists = !!state.groups[DEMO_GROUP_ID];
   return `<div class="card" style="margin-top:16px;">
     <div class="section-label">Cargar grupo por código</div>
     <div class="row" style="margin-top:8px;">
       <input id="codeInput" placeholder="codigo-del-grupo" value="${esc(state.loadCode)}" />
       <button class="primary" id="loadCodeBtn" style="flex-shrink:0;">Cargar</button>
     </div>
+  </div>
+  <div class="card" style="margin-top:12px;">
+    <div class="section-label">Datos de prueba</div>
+    <p class="muted" style="font-size:12px;margin:6px 0 10px;">Crea un grupo "demo-tour" con 3 usuarios y 8 semanas de entrenos para que los testers puedan explorar la app.</p>
+    <button id="seedDemoBtn" style="width:100%;">
+      <i class="ti ti-sparkles" style="font-size:14px;color:var(--accent);"></i> ${demoExists ? 'Regenerar grupo demo' : 'Generar grupo demo'}
+    </button>
+    ${demoExists ? '<div class="mono dim" style="font-size:11px;margin-top:8px;text-align:center;">demo-tour · contraseña: demo2026</div>' : ''}
   </div>`;
 }
 
@@ -656,7 +951,6 @@ function renderGroupDetail(g){
   }
 
   const cfg = g.config || {};
-  const invitePassword = cfg.invitationPassword || '';
   const meta = [
     cfg.createdAt ? `Creado: ${formatDate(cfg.createdAt)}` : null,
     cfg.archivedAt ? `Archivado: ${formatDate(cfg.archivedAt)}` : null,
@@ -674,23 +968,6 @@ function renderGroupDetail(g){
     ${meta.length ? `<div class="muted" style="font-size:12px;line-height:1.7;">${meta.map(m=>esc(m)).join('<br>')}</div>` : ''}
     ${g.error ? `<div class="banner danger" style="margin-top:10px;"><i class="ti ti-alert-triangle"></i><div>Error: ${esc(g.error)}</div></div>` : ''}
     <div class="action-row">${actions}</div>
-  </div>
-
-  <div class="card" style="margin-bottom:14px;">
-    <div class="section-label">InvitaciÃ³n</div>
-    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
-      <div style="background:var(--bg-elev-2);border:1px solid var(--border);border-radius:12px;padding:12px;min-width:0;">
-        <div class="section-label" style="margin-bottom:5px;">CÃ³digo del grupo</div>
-        <div class="mono" style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:10px;">${esc(g.id)}</div>
-        <button data-copy="${esc(g.id)}" data-copy-label="CÃ³digo del grupo" style="width:100%;"><i class="ti ti-copy"></i> Copiar cÃ³digo</button>
-      </div>
-      <div style="background:var(--bg-elev-2);border:1px solid var(--border);border-radius:12px;padding:12px;min-width:0;">
-        <div class="section-label" style="margin-bottom:5px;">ContraseÃ±a de invitaciÃ³n</div>
-        <div class="mono" style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:10px;">${invitePassword ? esc(invitePassword) : '<span class="dim">No configurada</span>'}</div>
-        <button data-copy="${esc(invitePassword)}" data-copy-label="ContraseÃ±a" style="width:100%;" ${invitePassword ? '' : 'disabled'}><i class="ti ti-copy"></i> Copiar contraseÃ±a</button>
-      </div>
-    </div>
-    <div class="muted" style="font-size:12px;margin-top:10px;">Para invitar testers, comparte el cÃ³digo del grupo y la contraseÃ±a.</div>
   </div>
 
   <div class="card" style="margin-bottom:14px;">
@@ -745,9 +1022,7 @@ function attachDashboardHandlers(){
     if (v) loadGroupById(v);
   });
   document.getElementById('codeInput')?.addEventListener('input', e => { state.loadCode = e.target.value; });
-  document.querySelectorAll('[data-copy]').forEach(b => {
-    b.addEventListener('click', () => copyText(b.dataset.copy, b.dataset.copyLabel || 'Texto'));
-  });
+  document.getElementById('seedDemoBtn')?.addEventListener('click', seedDemoGroup);
 
   document.querySelectorAll('[data-act]').forEach(b => {
     b.addEventListener('click', () => handleAction(b.dataset.act, b.dataset));
@@ -879,6 +1154,20 @@ async function archiveAction(gid, kind){
 // ============================================================
 // INIT
 // ============================================================
+// Delegated handler for password visibility toggle
+document.body.addEventListener('click', (e) => {
+  const btn = e.target.closest('.pw-toggle');
+  if (!btn) return;
+  const targetId = btn.dataset.pwTarget;
+  const input = targetId ? document.getElementById(targetId) : btn.previousElementSibling;
+  if (!input) return;
+  const showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  const icon = btn.querySelector('i');
+  if (icon) icon.className = `ti ${showing ? 'ti-eye' : 'ti-eye-off'}`;
+  btn.setAttribute('aria-label', showing ? 'Mostrar contraseña' : 'Ocultar contraseña');
+});
+
 onAuthStateChanged(auth, (user) => {
   state.authUser = user;
   if (user && isAdminUser(user)){
