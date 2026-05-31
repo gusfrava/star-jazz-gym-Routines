@@ -2603,10 +2603,6 @@ function renderDay(){
   const src = getCurrentSource(dayKey);
   const personalAvail = !!(state.personalRoutines[state.currentUser] && state.personalRoutines[state.currentUser][dayKey]);
 
-  const personalToolsBlock = isPersonalHome && !isPersonalGroup() && allDays.length ? `
-    <button data-action="copyGroupToPersonal" style="margin-bottom:12px;padding:11px;width:100%;background:var(--bg-elev);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:500;">
-      <i class="ti ti-copy" style="font-size:15px;color:var(--accent);"></i> Copiar Rutina Del Grupo A Personal
-    </button>` : '';
 
   const me = state.users.find(u=>u.id===state.currentUser);
   const meColor = me ? me.color : 'var(--border)';
@@ -4894,6 +4890,7 @@ init();
 </script>
 </body>
 </html>
+
 
 
 
