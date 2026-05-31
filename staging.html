@@ -632,13 +632,13 @@ async function saveUsersForGroup(groupId, users){
 async function loadSharedRoutine(groupId = groupPath()){
   if (!firebaseReady){
     const r = JSON.parse(localStorage.getItem(groupLocalKey('sharedRoutine', groupId))||'null');
-    if (r) return normalizeRoutine(r);
+    if (r) return r;  // no normalize — preserve user's actual days
     localStorage.setItem(groupLocalKey('sharedRoutine', groupId), JSON.stringify(normalizeRoutine(DEFAULT_ROUTINE)));
     return normalizeRoutine(DEFAULT_ROUTINE);
   }
   try {
     const snap = await getDoc(doc(db,'salas',groupId,'routines','shared'));
-    if (snap.exists() && snap.data().routine) return normalizeRoutine(snap.data().routine);
+    if (snap.exists() && snap.data().routine) return snap.data().routine;  // no normalize — preserve user's actual days
     await setDoc(doc(db,'salas',groupId,'routines','shared'), { routine: normalizeRoutine(DEFAULT_ROUTINE) });
     return normalizeRoutine(DEFAULT_ROUTINE);
   } catch(e){ console.error(e); return normalizeRoutine(DEFAULT_ROUTINE); }
@@ -895,7 +895,7 @@ async function readGroupState(groupId = groupPath()){
     groupConfig: cfg,
     invitationPassword: cfg.invitationPassword || INVITATION_PASSWORD_DEFAULT,
     users,
-    sharedRoutine: normalizeRoutine(sharedRoutine),
+    sharedRoutine: sharedRoutine || {},
     personalRoutines,
     logs,
     library,
@@ -1512,7 +1512,9 @@ function routineMuscleOverview(routineOrStats, options = {}){
   </div>`;
 }
 function renderSetRow(i, set = null, lastSet = null, unilateralMode = false){
-  const isUnilateral = !!(unilateralMode || (set && set.unilateral));
+  // Cada set guardado mantiene su propio modo. El unilateralMode global SOLO aplica
+  // a sets nuevos (sin datos previos). Esto permite mezclar normales y unilaterales.
+  const isUnilateral = set ? !!set.unilateral : !!unilateralMode;
   const normalReps = set && !set.unilateral ? set.reps : '';
   const normalWeight = set && !set.unilateral ? set.weight : '';
   const left = set?.left || {};
@@ -2487,7 +2489,9 @@ function renderExercise(){
   let formHtml = '';
   if (state.currentUser){
     const initialCount = formEntry ? formEntry.sets.length : 4;
-    const unilateralMode = !!(formEntry && formEntry.sets && formEntry.sets.some(s => s.unilateral));
+    // Cada set guardado mantiene su propio modo. El checkbox global solo aplica a sets nuevos.
+    // Por eso lo dejamos sin marcar por default (no fuerza el estado de los sets guardados).
+    const unilateralMode = false;
     const setRows = [];
     for (let i=0;i<initialCount;i++){
       const set = formEntry && formEntry.sets[i] ? formEntry.sets[i] : null;
