@@ -275,6 +275,7 @@ const firebaseConfig = {
 const DEFAULT_GROUP = "jazmin-y-buddy-2026";
 const LS_GROUP = 'gym_current_group_v3';
 const LS_GROUPS = 'gym_joined_groups_v3';
+const LS_HOME_SCOPE = 'gym_home_routine_scope_v1';
 // ============================================================
 // ADMIN — solo este nombre (sin distinguir mayúsculas) puede eliminar usuarios
 // y cambiar la contraseña de invitación.
@@ -301,6 +302,12 @@ function dateKey(date = new Date()){
 function parseDateKey(key){
   const [y,m,d] = String(key || '').split('-').map(Number);
   return new Date(y || new Date().getFullYear(), (m || 1) - 1, d || 1);
+}
+function loadHomeRoutineScope(){
+  return localStorage.getItem(LS_HOME_SCOPE) === 'personal' ? 'personal' : 'group';
+}
+function saveHomeRoutineScope(scope){
+  localStorage.setItem(LS_HOME_SCOPE, scope === 'personal' ? 'personal' : 'group');
 }
 
 // ====== MUSCLES ======
@@ -384,7 +391,8 @@ const state = {
   account: null,
   sharedRoutine: null,
   personalRoutines: {},
-  routineSource: {},      // { dayKey: 'shared'|'personal' }
+  routineSource: {},      // legacy per-day choice (kept for existing installs)
+  homeRoutineScope: loadHomeRoutineScope(), // 'group' | 'personal'
   // ====== Library (Fase 1) ======
   library: {},            // { routineId: {id, name, focus, icon, exercises[], scope:'shared', updatedAt} }
   personalLibrary: {},    // { routineId: {... scope:'personal'} } — del usuario actual
@@ -1547,6 +1555,13 @@ function renderSetRow(i, set = null, lastSet = null, unilateralMode = false){
 }
 
 // Returns the routine the current user is viewing for a given day or library routine.
+function getHomeRoutineScope(){
+  return state.homeRoutineScope === 'personal' ? 'personal' : 'group';
+}
+function setHomeRoutineScope(scope){
+  state.homeRoutineScope = scope === 'personal' ? 'personal' : 'group';
+  saveHomeRoutineScope(state.homeRoutineScope);
+}
 function isLibraryRoutineKey(key){
   return !!((state.library && state.library[key]) || (state.personalLibrary && state.personalLibrary[key]));
 }
@@ -1562,39 +1577,54 @@ function libraryRoutineAsDay(routine){
   };
 }
 function getRoutineForDay(dayKey){
-  if (state.personalLibrary && state.personalLibrary[dayKey]) return libraryRoutineAsDay(state.personalLibrary[dayKey]);
-  if (state.library && state.library[dayKey]) return libraryRoutineAsDay(state.library[dayKey]);
-  const src = state.routineSource[dayKey] || 'shared';
-  if (src === 'personal'){
-    const pr = state.personalRoutines[state.currentUser];
-    if (pr && pr[dayKey]) return pr[dayKey];
+  const scope = getHomeRoutineScope();
+  if (scope === 'personal'){
+    if (state.personalLibrary && state.personalLibrary[dayKey]) return libraryRoutineAsDay(state.personalLibrary[dayKey]);
+    const pr = state.personalRoutines[state.currentUser] || {};
+    return pr[dayKey] || null;
   }
+  if (state.library && state.library[dayKey]) return libraryRoutineAsDay(state.library[dayKey]);
   return (state.sharedRoutine && state.sharedRoutine[dayKey]) || null;
 }
 function getCurrentSource(dayKey){
-  if (state.personalLibrary && state.personalLibrary[dayKey]) return 'personalLibrary';
+  const scope = getHomeRoutineScope();
+  if (scope === 'personal'){
+    if (state.personalLibrary && state.personalLibrary[dayKey]) return 'personalLibrary';
+    return 'personal';
+  }
   if (state.library && state.library[dayKey]) return 'library';
-  return state.routineSource[dayKey] || 'shared';
+  return 'shared';
 }
 function setCurrentSource(dayKey, src){
+  if (src === 'personal') setHomeRoutineScope('personal');
+  else if (src === 'shared') setHomeRoutineScope('group');
   state.routineSource[dayKey] = src;
   saveRoutineSource(state.routineSource);
 }
-function getAllDayKeys(){
-  const all = new Set(DAY_ORDER);
-  if (state.sharedRoutine) Object.keys(state.sharedRoutine).forEach(k => all.add(k));
-  const pr = state.personalRoutines[state.currentUser];
-  if (pr) Object.keys(pr).forEach(k => all.add(k));
-  const libraryKeys = [
-    ...Object.values(state.library || {}),
-    ...Object.values(state.personalLibrary || {})
-  ]
+function scopedLibraryKeys(lib){
+  return Object.values(lib || {})
     .filter(r => r && r.id && !r.originDay)
     .sort((a,b) => (a.createdAt || 0) - (b.createdAt || 0) || (a.name || '').localeCompare(b.name || ''))
     .map(r => r.id);
+}
+function getAllDayKeys(){
+  const scope = getHomeRoutineScope();
+  const all = new Set();
+  if (scope === 'personal'){
+    const pr = state.personalRoutines[state.currentUser] || {};
+    Object.keys(pr).forEach(k => all.add(k));
+    scopedLibraryKeys(state.personalLibrary).forEach(k => all.add(k));
+  } else {
+    if (state.sharedRoutine) Object.keys(state.sharedRoutine).forEach(k => all.add(k));
+    scopedLibraryKeys(state.library).forEach(k => all.add(k));
+  }
   const ordered = DAY_ORDER.filter(k => all.has(k));
   const extras = [...all].filter(k => !DAY_ORDER.includes(k));
-  return [...ordered, ...extras, ...libraryKeys.filter(k => !all.has(k))];
+  return [...ordered, ...extras];
+}
+function hasPersonalRoutineContent(){
+  const pr = state.personalRoutines[state.currentUser] || {};
+  return Object.keys(pr).length > 0 || Object.keys(state.personalLibrary || {}).length > 0;
 }
 
 // ====== BODY DIAGRAM SVG ======
@@ -2277,16 +2307,18 @@ function renderHome(){
     return { user:u, latest };
   });
 
+  const homeScope = getHomeRoutineScope();
+  const isPersonalHome = homeScope === 'personal';
   const allDays = getAllDayKeys();
   const globalMuscleStats = fullRoutineMuscleStats();
-  const globalMuscleMapBtn = `
+  const globalMuscleMapBtn = allDays.length ? `
     <button data-action="toggleGlobalRoutineMuscles" style="margin-bottom:12px;padding:11px;width:100%;background:${state.showGlobalRoutineMuscles?'var(--accent-bg-strong)':'var(--bg-elev)'};color:${state.showGlobalRoutineMuscles?'var(--accent)':'var(--text)'};border:1px solid ${state.showGlobalRoutineMuscles?'var(--accent-border)':'var(--border)'};display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:500;">
       <i class="ti ti-body-scan" style="font-size:15px;"></i> ${state.showGlobalRoutineMuscles ? 'Ocultar Mapa Muscular General' : 'Mapa Muscular General'}
-    </button>`;
-  const globalMuscleOverview = state.showGlobalRoutineMuscles
+    </button>` : '';
+  const globalMuscleOverview = allDays.length && state.showGlobalRoutineMuscles
     ? routineMuscleOverview(globalMuscleStats, {
       title: 'Mapa Muscular General',
-      subtitle: 'Resumen de todos los días de tu rutina actual. Usa la rutina compartida o personal seleccionada en cada día.',
+      subtitle: isPersonalHome ? 'Resumen de tus rutinas personales actuales.' : 'Resumen de las rutinas del grupo actual.',
       scope: 'general'
     })
     : '';
@@ -2303,7 +2335,7 @@ function renderHome(){
     }
     const pct = totalEx ? Math.round((logged/totalEx)*100) : 0;
     const src = getCurrentSource(dk);
-    const sourceLabel = src === 'personal' ? `<span class="badge" style="background:var(--info-bg);color:var(--info);font-size:10px;padding:2px 8px;font-family:var(--font-mono);">PERSONAL</span>` : '';
+    const sourceLabel = isPersonalHome ? `<span class="badge" style="background:var(--info-bg);color:var(--info);font-size:10px;padding:2px 8px;font-family:var(--font-mono);">PERSONAL</span>` : '';
     return `<button data-action="openDay" data-day="${dk}" class="day-card fade-in" style="animation-delay:${i*60}ms;">
       <div class="row" style="position:relative;z-index:1;">
         <div class="icon-tile">
@@ -2324,7 +2356,7 @@ function renderHome(){
     </button>`;
   }).join('');
 
-  const partnersBlock = others.length ? `
+  const partnersBlock = isPersonalHome ? '' : (others.length ? `
     <div style="margin-top:28px;">
       <div class="section-label">Compañeros</div>
       ${others.map((u,i)=>{
@@ -2347,7 +2379,18 @@ function renderHome(){
     <div class="card fade-in" style="margin-top:28px;padding:16px;font-size:13px;color:var(--text-muted);text-align:center;">
       <i class="ti ti-users" style="font-size:24px;color:var(--text-dim);display:block;margin-bottom:6px;"></i>
       Cuando tu compañero entre, aparecerá aquí.
-    </div>`;
+    </div>`);
+
+  const personalEmptyBlock = isPersonalHome && !allDays.length ? `
+    <div class="card fade-in" style="padding:22px 18px;text-align:center;margin-bottom:18px;">
+      <i class="ti ti-user-heart" style="font-size:30px;color:var(--accent);display:block;margin-bottom:8px;"></i>
+      <h2 style="margin-bottom:6px;">Tu Rutina Personal</h2>
+      <p class="muted" style="font-size:13px;margin:0 0 14px;">Crea una rutina solo para ti. Puedes copiar la rutina del grupo como base o empezar desde cero.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+        <button class="primary" data-action="createPersonalWeek" data-mode="copy" style="padding:11px 14px;">Copiar Del Grupo</button>
+        <button data-action="createPersonalWeek" data-mode="blank" style="padding:11px 14px;">Empezar Desde Cero</button>
+      </div>
+    </div>` : '';
 
   const me = state.users.find(u=>u.id===state.currentUser);
   const viewOnlyBanner = !state.currentUser ? `
@@ -2362,6 +2405,15 @@ function renderHome(){
       <span style="color:var(--text);font-weight:500;">${esc(currentGroupName)}</span>
       <i class="ti ti-chevron-right" style="font-size:12px;opacity:0.5;"></i>
     </button>` : '';
+  const scopeSwitcher = state.currentUser ? `
+    <div class="tab-bar fade-in" style="margin-bottom:16px;animation-delay:110ms;">
+      <button class="${!isPersonalHome?'active':''}" data-action="setHomeScope" data-scope="group">
+        <i class="ti ti-users" style="font-size:13px;vertical-align:-1px;"></i> Grupo
+      </button>
+      <button class="${isPersonalHome?'active':''}" data-action="setHomeScope" data-scope="personal">
+        <i class="ti ti-user" style="font-size:13px;vertical-align:-1px;"></i> Personal
+      </button>
+    </div>` : '';
 
   root.innerHTML = `
     ${configBanner()}
@@ -2380,7 +2432,7 @@ function renderHome(){
         <i class="ti ti-chevron-down" style="font-size:14px;color:var(--text-muted);"></i>
       </button>` : `<button data-action="switchUser" style="font-size:13px;">Iniciar Sesión</button>`}
     </div>
-    <div class="fade-in" style="display:flex;gap:8px;margin-bottom:20px;animation-delay:80ms;">
+    <div class="fade-in" style="display:flex;gap:8px;margin-bottom:16px;animation-delay:80ms;">
       <button data-action="goCompare" style="flex:1;padding:14px;background:var(--bg-elev);display:flex;align-items:center;justify-content:center;gap:8px;font-weight:500;border:1px solid var(--border);">
         <i class="ti ti-chart-line" style="font-size:17px;color:var(--accent);"></i> Ver Progreso
       </button>
@@ -2388,8 +2440,10 @@ function renderHome(){
         <i class="ti ti-settings" style="font-size:17px;color:var(--text-muted);"></i>
       </button>
     </div>
+    ${scopeSwitcher}
     ${globalMuscleMapBtn}
     ${globalMuscleOverview}
+    ${personalEmptyBlock}
     ${dayCards}
     ${partnersBlock}`;
   attach();
@@ -2438,15 +2492,7 @@ function renderDay(){
   }).join('');
 
   const isLibraryRoutine = src === 'library' || src === 'personalLibrary';
-  const switcher = state.currentUser && !isLibraryRoutine ? `
-    <div class="tab-bar">
-      <button class="${src==='shared'?'active':''}" data-action="setSource" data-src="shared">
-        <i class="ti ti-users" style="font-size:13px;vertical-align:-1px;"></i> Compartida
-      </button>
-      <button class="${src==='personal'?'active':''}" data-action="setSource" data-src="personal">
-        <i class="ti ti-user" style="font-size:13px;vertical-align:-1px;"></i> ${personalAvail ? 'Personal' : 'Crear Personal'}
-      </button>
-    </div>` : '';
+  const switcher = '';
 
   const editBtn = state.currentUser ? `
     <button data-action="editRoutine" style="margin-bottom:16px;padding:11px;width:100%;background:var(--bg-elev);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:500;">
@@ -4100,6 +4146,40 @@ async function handle(e){
       render();
     });
     return;
+  }
+
+  // ====== Home routine scope ======
+  if (a === 'setHomeScope'){
+    setHomeRoutineScope(btn.dataset.scope || 'group');
+    state.currentDay = null;
+    state.currentExerciseIdx = null;
+    state.showGlobalRoutineMuscles = false;
+    render(); return;
+  }
+  if (a === 'createPersonalWeek'){
+    if (!state.currentUser){ toast('Inicia sesión para crear tu rutina personal'); return; }
+    const mode = btn.dataset.mode || 'blank';
+    const base = state.sharedRoutine && Object.keys(state.sharedRoutine).length ? state.sharedRoutine : DEFAULT_ROUTINE;
+    const next = {};
+    Object.keys(base).forEach(dayKey => {
+      const day = base[dayKey];
+      if (!day) return;
+      if (mode === 'copy'){
+        next[dayKey] = JSON.parse(JSON.stringify(day));
+      } else {
+        next[dayKey] = {
+          label: day.label || (DEFAULT_ROUTINE[dayKey]?.label) || 'Día',
+          focus: day.focus || '',
+          icon: day.icon || 'ti-barbell',
+          exercises: []
+        };
+      }
+    });
+    state.personalRoutines[state.currentUser] = next;
+    await savePersonalRoutine(state.currentUser, next);
+    setHomeRoutineScope('personal');
+    toast(mode === 'copy' ? 'Rutina personal copiada' : 'Rutina personal creada');
+    render(); return;
   }
 
   // ====== Source switch ======
