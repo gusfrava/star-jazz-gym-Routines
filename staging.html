@@ -903,6 +903,8 @@ async function readGroupState(groupId = groupPath()){
   };
 }
 async function loadGroupState(groupId = groupPath()){
+  // Defensive reset to prevent any cross-group contamination
+  state.personalLibrary = {};
   const data = await readGroupState(groupId);
   state.groupConfig = data.groupConfig;
   state.invitationPassword = data.invitationPassword;
@@ -972,7 +974,12 @@ async function reloadGroup(options = {}){
 async function switchGroup(groupId){
   if (!groupId) return;
   if (groupId === state.currentGroup){
+    // Si ya estamos en este grupo, simplemente regresar al home limpiamente.
     state.enteringGroup = false;
+    state.switchingGroup = false;
+    state.setupStep = null;
+    state.view = 'home';
+    render();
     return;
   }
   const token = ++state.groupSwitchToken;
@@ -982,16 +989,32 @@ async function switchGroup(groupId){
     if (token !== state.groupSwitchToken) return;
     unsubs.forEach(u => u && u());
     unsubs = [];
+
+    // ====== FIX: limpiar completamente el estado del grupo anterior ======
+    // Esto evita que rutinas, logs o biblioteca del grupo viejo "contaminen" el nuevo.
+    state.currentUser = null;
+    state.personalLibrary = {};
+    state.library = {};
+    state.personalRoutines = {};
+    state.sharedRoutine = null;
+    state.logs = {};
+    state.users = [];
+    state.routineSource = {};
+    state.groupConfig = {};
+
     state.currentGroup = groupId;
     saveCurrentGroup(groupId);
     rememberGroup(groupId);
     state.currentDay = null;
     state.currentExerciseIdx = null;
     state.editingSession = null;
+    state.editingLibraryRoutineId = null;
     state.showAlts = false;
     state.showMuscles = false;
     state.showRoutineMuscles = false;
     state.showGlobalRoutineMuscles = false;
+
+    // Asignar los datos del nuevo grupo
     state.groupConfig = data.groupConfig;
     state.invitationPassword = data.invitationPassword;
     state.users = data.users;
@@ -1000,14 +1023,9 @@ async function switchGroup(groupId){
     state.logs = data.logs;
     state.library = data.library || {};
     state.routineSource = data.routineSource;
-    // Migración / personal library después de set
+    // Migración si la biblioteca está vacía
     if (Object.keys(state.library).length === 0 && state.sharedRoutine){
       try { await migrateSharedRoutineToLibrary(); } catch(e){ console.error(e); }
-    }
-    if (state.currentUser){
-      try { state.personalLibrary = await loadPersonalLibrary(state.currentUser, groupId); } catch(e){ console.error(e); state.personalLibrary = {}; }
-    } else {
-      state.personalLibrary = {};
     }
     if (state.account){
       const recoveredGroups = await recoverAccountGroupsFromProfiles();
@@ -1015,7 +1033,15 @@ async function switchGroup(groupId){
       state.joinedGroups = groups.length ? groups : state.joinedGroups;
       saveJoinedGroups(state.joinedGroups);
     }
+    // chooseInitialViewForGroup() asigna state.currentUser para el nuevo grupo
     chooseInitialViewForGroup();
+    // AHORA sí cargar la biblioteca personal del usuario correcto del nuevo grupo
+    if (state.currentUser){
+      try { state.personalLibrary = await loadPersonalLibrary(state.currentUser, groupId); }
+      catch(e){ console.error(e); state.personalLibrary = {}; }
+    } else {
+      state.personalLibrary = {};
+    }
     subscribeRealtime();
   } catch(e){
     console.error(e);
