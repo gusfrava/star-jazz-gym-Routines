@@ -232,6 +232,15 @@ input[type="date"]{color-scheme:dark}
 .tour-step{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);letter-spacing:0.05em}
 .tour-actions{display:flex;gap:8px}
 .tour-actions button{padding:6px 12px;font-size:12px;border-radius:8px}
+
+/* ====== Password input with toggle ====== */
+.pw-wrap{position:relative;width:100%}
+.pw-wrap input{width:100%;padding-right:42px}
+.pw-toggle{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:transparent;border:none;color:var(--text-muted);padding:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:6px;transition:.15s}
+.pw-toggle:hover{color:var(--accent);background:var(--bg-elev-2)}
+.pw-toggle i{font-size:16px}
+.forgot-link{display:inline-block;font-size:12px;color:var(--accent);text-decoration:none;cursor:pointer;background:transparent;border:none;padding:4px 0;font-family:inherit}
+.forgot-link:hover{text-decoration:underline}
 </style>
 </head>
 <body>
@@ -249,7 +258,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import {
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  GoogleAuthProvider, signInWithPopup, signOut, updateProfile
+  GoogleAuthProvider, signInWithPopup, signOut, updateProfile, sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 
 // ============================================================
@@ -2001,7 +2010,13 @@ function renderAuthGate(){
         <label class="section-label" style="margin-bottom:6px;">Email De Tu Cuenta</label>
         <input id="authEmail" type="email" autocomplete="email" placeholder="Tu Email" style="margin-bottom:10px;" />
         <label class="section-label" style="margin-bottom:6px;">Contraseña De Tu Cuenta</label>
-        <input id="authPassword" type="password" autocomplete="current-password" placeholder="Mínimo 6 Caracteres" style="margin-bottom:12px;" />
+        <div class="pw-wrap" style="margin-bottom:6px;">
+          <input id="authPassword" type="password" autocomplete="current-password" placeholder="Mínimo 6 Caracteres" />
+          <button type="button" class="pw-toggle" data-pw-target="authPassword" aria-label="Mostrar/ocultar contraseña"><i class="ti ti-eye"></i></button>
+        </div>
+        <div style="text-align:right;margin-bottom:10px;">
+          <button class="forgot-link" data-action="authForgotPassword">¿Olvidaste tu contraseña?</button>
+        </div>
         <div style="display:flex;gap:8px;">
           <button data-action="authEmailLogin" style="flex:1;padding:12px;">Iniciar Sesión</button>
           <button class="primary" data-action="authEmailSignup" style="flex:1;padding:12px;font-weight:600;">Crear Cuenta</button>
@@ -3293,6 +3308,45 @@ async function handle(e){
     }
     return;
   }
+  if (a === 'authForgotPassword'){
+    const emailInput = document.getElementById('authEmail');
+    const errEl = document.getElementById('authError');
+    const email = (emailInput?.value || '').trim();
+    if (!email){
+      if (errEl) errEl.textContent = 'Ingresa tu email arriba para enviarte el correo de recuperación.';
+      emailInput?.focus();
+      return;
+    }
+    if (!firebaseReady || !auth){
+      toast('Firebase no está disponible');
+      return;
+    }
+    try {
+      btn.disabled = true;
+      const original = btn.textContent;
+      btn.textContent = 'Enviando...';
+      await sendPasswordResetEmail(auth, email);
+      if (errEl){
+        errEl.style.color = 'var(--success)';
+        errEl.textContent = `📧 Te enviamos un correo a ${email} con instrucciones.`;
+        setTimeout(() => { if (errEl){ errEl.textContent = ''; errEl.style.color = 'var(--danger)'; } }, 8000);
+      }
+      toast('Correo de recuperación enviado', 'success');
+      btn.disabled = false;
+      btn.textContent = original;
+    } catch(err){
+      console.error(err);
+      btn.disabled = false;
+      btn.textContent = '¿Olvidaste tu contraseña?';
+      const code = err.code || '';
+      const msg = code.includes('user-not-found') ? 'No encontré una cuenta con ese email.' :
+        code.includes('invalid-email') ? 'Email no válido.' :
+        code.includes('too-many-requests') ? 'Demasiados intentos. Espera unos minutos.' :
+        `No pude enviar el correo (${code || 'error'})`;
+      if (errEl) errEl.textContent = msg;
+    }
+    return;
+  }
 
   // ====== Setup / Auth ======
   if (a === 'newUser'){ state.setupStep = 'newUser'; render(); return; }
@@ -4515,6 +4569,20 @@ function subscribeRealtime(){
 }
 
 // ====== INIT ======
+// Delegated handler for password visibility toggle buttons (works for any .pw-toggle anywhere)
+document.body.addEventListener('click', (e) => {
+  const btn = e.target.closest('.pw-toggle');
+  if (!btn) return;
+  const targetId = btn.dataset.pwTarget;
+  const input = targetId ? document.getElementById(targetId) : btn.previousElementSibling;
+  if (!input) return;
+  const showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  const icon = btn.querySelector('i');
+  if (icon) icon.className = `ti ${showing ? 'ti-eye' : 'ti-eye-off'}`;
+  btn.setAttribute('aria-label', showing ? 'Mostrar contraseña' : 'Ocultar contraseña');
+});
+
 async function init(){
   removeStrayBodyTextNodes();
   rememberGroup(state.currentGroup);
