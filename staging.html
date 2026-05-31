@@ -273,10 +273,8 @@ const firebaseConfig = {
   appId: "1:1080289668591:web:f902974b98717bc71b1a1a"
 };
 const DEFAULT_GROUP = "jazmin-y-buddy-2026";
-const PERSONAL_SPACE = "__personal_space__";
 const LS_GROUP = 'gym_current_group_v3';
 const LS_GROUPS = 'gym_joined_groups_v3';
-const LS_HOME_SCOPE = 'gym_home_routine_scope_v1';
 // ============================================================
 // ADMIN — solo este nombre (sin distinguir mayúsculas) puede eliminar usuarios
 // y cambiar la contraseña de invitación.
@@ -303,12 +301,6 @@ function dateKey(date = new Date()){
 function parseDateKey(key){
   const [y,m,d] = String(key || '').split('-').map(Number);
   return new Date(y || new Date().getFullYear(), (m || 1) - 1, d || 1);
-}
-function loadHomeRoutineScope(){
-  return localStorage.getItem(LS_HOME_SCOPE) === 'personal' ? 'personal' : 'group';
-}
-function saveHomeRoutineScope(scope){
-  localStorage.setItem(LS_HOME_SCOPE, scope === 'personal' ? 'personal' : 'group');
 }
 
 // ====== MUSCLES ======
@@ -392,9 +384,7 @@ const state = {
   account: null,
   sharedRoutine: null,
   personalRoutines: {},
-  routineSource: {},      // legacy per-day choice (kept for existing installs)
-  homeRoutineScope: loadHomeRoutineScope(), // 'group' | 'personal'
-  personalMode: false,
+  routineSource: {},      // { dayKey: 'shared'|'personal' }
   // ====== Library (Fase 1) ======
   library: {},            // { routineId: {id, name, focus, icon, exercises[], scope:'shared', updatedAt} }
   personalLibrary: {},    // { routineId: {... scope:'personal'} } — del usuario actual
@@ -427,10 +417,9 @@ const LS_SOURCE = 'gym_routinesource_v2'; // per-day choice (per device)
 
 // ====== GROUP HELPERS ======
 function groupPath(){ return state.currentGroup || DEFAULT_GROUP; }
-function isPersonalSpaceId(groupId){ return groupId === PERSONAL_SPACE || String(groupId || '').startsWith('personal-'); }
 function groupLocalKey(base, groupId = groupPath()){ return groupId === DEFAULT_GROUP ? base : base + ':' + groupId; }
 function loadCurrentGroup(){ return localStorage.getItem(LS_GROUP) || DEFAULT_GROUP; }
-function saveCurrentGroup(groupId){ localStorage.setItem(LS_GROUP, groupId || PERSONAL_SPACE); }
+function saveCurrentGroup(groupId){ localStorage.setItem(LS_GROUP, groupId); }
 function loadJoinedGroups(){
   try {
     const groups = JSON.parse(localStorage.getItem(LS_GROUPS) || 'null');
@@ -438,7 +427,7 @@ function loadJoinedGroups(){
   } catch { return [DEFAULT_GROUP]; }
 }
 function saveJoinedGroups(groups){ localStorage.setItem(LS_GROUPS, JSON.stringify(Array.from(new Set([DEFAULT_GROUP, ...groups])))); }
-function rememberGroup(groupId){ if (isPersonalSpaceId(groupId)) return; state.joinedGroups = Array.from(new Set([DEFAULT_GROUP, ...state.joinedGroups, groupId])); saveJoinedGroups(state.joinedGroups); }
+function rememberGroup(groupId){ state.joinedGroups = Array.from(new Set([DEFAULT_GROUP, ...state.joinedGroups, groupId])); saveJoinedGroups(state.joinedGroups); }
 function forgetGroup(groupId){ state.joinedGroups = state.joinedGroups.filter(g => g !== groupId); saveJoinedGroups(state.joinedGroups); }
 function slugGroupName(name){ return String(name || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,48); }
 function membershipLocalKey(userId){ return 'membership:'+userId; }
@@ -475,16 +464,12 @@ async function forgetMembership(userId, groupId){
     if (userId === state.currentUser){ state.joinedGroups = groups.length ? groups : [DEFAULT_GROUP]; saveJoinedGroups(state.joinedGroups); }
   } catch(e){ console.error(e); }
 }
-function personalGroupIdForAuth(user = state.authUser){
-  return user && user.uid ? 'personal-' + user.uid.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0,64) : '';
-}
 function defaultAccount(user){
   return {
     uid: user.uid,
     email: user.email || '',
     displayName: user.displayName || '',
     groups: [],
-    personalGroupId: PERSONAL_SPACE,
     linkedProfiles: {},
     createdAt: Date.now(),
     updatedAt: Date.now()
@@ -497,12 +482,6 @@ async function loadAccount(user){
     const snap = await getDoc(ref);
     const account = snap.exists() ? { ...defaultAccount(user), ...snap.data(), uid: user.uid } : defaultAccount(user);
     account.groups = Array.from(new Set(account.groups || []));
-    account.personalGroupId = PERSONAL_SPACE;
-    account.groups = (account.groups || []).filter(g => g && !isPersonalSpaceId(g));
-    account.profileSetupComplete = snap.exists() ? !!(account.profileSetupComplete && account.profilePinHash) : false;
-    account.profileColor = account.profileColor || userColor(0);
-    account.avatarEmoji = account.avatarEmoji || '💪';
-    account.profilePinHash = account.profilePinHash || '';
     account.linkedProfiles = account.linkedProfiles || {};
     if (!snap.exists()) await setDoc(ref, account);
     return account;
@@ -540,8 +519,6 @@ async function saveAccount(patch = {}){
     updatedAt: Date.now()
   };
   next.groups = Array.from(new Set(next.groups || []));
-  next.personalGroupId = PERSONAL_SPACE;
-  next.groups = (next.groups || []).filter(g => g && !isPersonalSpaceId(g));
   next.linkedProfiles = next.linkedProfiles || {};
   state.account = next;
   try { await setDoc(doc(db, 'accounts', state.authUser.uid), next); }
@@ -551,67 +528,10 @@ function linkedProfileForGroup(groupId = groupPath()){
   return state.account && state.account.linkedProfiles ? state.account.linkedProfiles[groupId] : null;
 }
 function visibleAccountGroups(){
-  const personalId = state.account?.personalGroupId || '';
-  const groups = state.authUser && state.account ? (state.account.groups || []) : (state.joinedGroups || []);
-  return Array.from(new Set(groups)).filter(g => g && g !== personalId && !isPersonalSpaceId(g));
-}
-function isPersonalGroup(groupId = state.currentGroup){
-  return !!(state.personalMode || isPersonalSpaceId(groupId) || (state.account && state.account.personalGroupId && groupId === state.account.personalGroupId));
-}
-function personalDisplayName(){ return 'Mi Espacio Personal'; }
-function accountProfileName(){
-  return (state.authUser?.displayName || state.account?.displayName || state.authUser?.email?.split('@')[0] || 'Yo').trim();
-}
-function accountProfileUser(){
-  const color = state.account?.profileColor || '#3b9eff';
-  return {
-    id: 'profile_' + (state.authUser?.uid || 'local'),
-    name: accountProfileName(),
-    color,
-    pinHash: '',
-    authOwnerUid: state.authUser?.uid || '',
-    authOwnerEmail: state.authUser?.email || '',
-    authLinkedAt: Date.now(),
-    joinedAt: Date.now(),
-    profile: { ...(state.account?.personalProfile || {}), avatarEmoji: state.account?.avatarEmoji || state.account?.personalProfile?.avatarEmoji || '💪' },
-    createdAt: Date.now()
-  };
-}
-async function ensurePersonalSpace(options = {}){
-  if (!state.authUser || !state.account) return null;
-  unsubs.forEach(u => u && u());
-  unsubs = [];
-  const profile = accountProfileUser();
-  profile.pinHash = state.account.profilePinHash || profile.pinHash || '';
-  state.personalMode = true;
-  state.currentGroup = PERSONAL_SPACE;
-  saveCurrentGroup(PERSONAL_SPACE);
-  state.currentUser = profile.id;
-  state.users = [profile];
-  state.groupConfig = { groupName: personalDisplayName(), personalSpace: true, adminIds: [] };
-  state.invitationPassword = '';
-  state.sharedRoutine = {};
-  state.personalRoutines = {};
-  state.routineSource = {};
-  state.library = {};
-  state.personalLibrary = await loadPersonalLibrary();
-  state.logs = await loadAccountPersonalLogs();
-  state.currentDay = null;
-  state.currentExerciseIdx = null;
-  state.editingSession = null;
-  state.setupStep = null;
-  state.view = 'home';
-  setHomeRoutineScope('personal');
-  saveMe(profile.id);
-  setAuth(profile.id);
-  const cleanGroups = visibleAccountGroups();
-  const linkedProfiles = { ...(state.account.linkedProfiles || {}) };
-  Object.keys(linkedProfiles).forEach(g => { if (isPersonalSpaceId(g)) delete linkedProfiles[g]; });
-  await saveAccount({ groups: cleanGroups, linkedProfiles, personalGroupId: PERSONAL_SPACE });
-  state.joinedGroups = cleanGroups;
-  saveJoinedGroups(cleanGroups);
-  if (!options.skipRender) render();
-  return PERSONAL_SPACE;
+  if (state.authUser && state.account){
+    return Array.from(new Set(state.account.groups || [])).filter(Boolean);
+  }
+  return Array.from(new Set(state.joinedGroups || [])).filter(Boolean);
 }
 function removeStrayBodyTextNodes(){
   Array.from(document.body.childNodes).forEach(node => {
@@ -692,20 +612,6 @@ async function loadUsers(groupId = groupPath()){
   } catch(e){ console.error(e); return []; }
 }
 async function saveUsers(users){
-  if (isPersonalGroup()){
-    state.users = Array.isArray(users) ? users : state.users;
-    const me = state.users.find(u => u.id === state.currentUser) || state.users[0];
-    if (me && state.account){
-      await saveAccount({
-        displayName: me.name || state.account.displayName || '',
-        profileColor: me.color || state.account.profileColor || userColor(0),
-        avatarEmoji: me.profile?.avatarEmoji || state.account.avatarEmoji || '💪',
-        profilePinHash: me.pinHash || state.account.profilePinHash || '',
-        personalProfile: me.profile || state.account.personalProfile || {}
-      });
-    }
-    return;
-  }
   if (!firebaseReady){ localStorage.setItem(groupLocalKey('users'), JSON.stringify(users)); return; }
   state.syncing = true;
   try { await setDoc(doc(db,'salas',groupPath(),'meta','users'), { users }); }
@@ -778,11 +684,6 @@ async function loadAllLogs(groupId = groupPath()){
   } catch(e){ console.error(e); return {}; }
 }
 async function saveUserLogs(userId, logs){
-  if (isPersonalGroup()){
-    state.logs[userId] = logs || {};
-    await saveAccountPersonalLogs(state.logs);
-    return;
-  }
   if (!firebaseReady){ localStorage.setItem(groupLocalKey('logs:'+userId), JSON.stringify(logs)); return; }
   state.syncing = true;
   try { await setDoc(doc(db,'salas',groupPath(),'logs',userId), logs); }
@@ -853,56 +754,25 @@ async function deleteLibraryRoutine(routineId){
   try { await deleteDoc(doc(db,'salas',groupPath(),'library',routineId)); }
   catch(e){ console.error(e); toast('Error al eliminar'); }
 }
-function personalLibraryStorageKey(userId = state.authUser?.uid || state.currentUser){
-  return 'accountPersonalLibrary:' + (userId || 'local');
-}
-async function loadPersonalLibrary(userId = state.authUser?.uid){
-  const ownerId = state.authUser?.uid || userId;
-  if (!ownerId) return {};
+async function loadPersonalLibrary(userId, groupId = groupPath()){
+  if (!userId) return {};
   if (!firebaseReady){
-    return JSON.parse(localStorage.getItem(personalLibraryStorageKey(ownerId))||'{}');
+    return JSON.parse(localStorage.getItem(groupLocalKey('personalLibrary:'+userId, groupId))||'{}');
   }
   try {
-    const snap = await getDoc(doc(db,'accounts',ownerId,'personal','library'));
+    const snap = await getDoc(doc(db,'salas',groupId,'personalLibraries',userId));
     return snap.exists() ? (snap.data().routines || {}) : {};
   } catch(e){ console.error(e); return {}; }
 }
 async function savePersonalLibrary(userId, routines){
-  const ownerId = state.authUser?.uid || userId;
-  if (!ownerId) return;
+  if (!userId) return;
   if (!firebaseReady){
-    localStorage.setItem(personalLibraryStorageKey(ownerId), JSON.stringify(routines));
+    localStorage.setItem(groupLocalKey('personalLibrary:'+userId), JSON.stringify(routines));
     return;
   }
   state.syncing = true;
-  try { await setDoc(doc(db,'accounts',ownerId,'personal','library'), { routines, updatedAt: Date.now() }); }
+  try { await setDoc(doc(db,'salas',groupPath(),'personalLibraries',userId), { routines }); }
   catch(e){ console.error(e); toast('Error al guardar biblioteca'); }
-  state.syncing = false;
-}
-function accountPersonalLogsKey(userId = state.authUser?.uid || state.currentUser){
-  return 'accountPersonalLogs:' + (userId || 'local');
-}
-async function loadAccountPersonalLogs(userId = state.authUser?.uid){
-  const ownerId = state.authUser?.uid || userId;
-  if (!ownerId) return {};
-  if (!firebaseReady){
-    return JSON.parse(localStorage.getItem(accountPersonalLogsKey(ownerId)) || '{}');
-  }
-  try {
-    const snap = await getDoc(doc(db,'accounts',ownerId,'personal','logs'));
-    return snap.exists() ? (snap.data().logs || {}) : {};
-  } catch(e){ console.error(e); return {}; }
-}
-async function saveAccountPersonalLogs(logs, userId = state.authUser?.uid){
-  const ownerId = state.authUser?.uid || userId;
-  if (!ownerId) return;
-  if (!firebaseReady){
-    localStorage.setItem(accountPersonalLogsKey(ownerId), JSON.stringify(logs || {}));
-    return;
-  }
-  state.syncing = true;
-  try { await setDoc(doc(db,'accounts',ownerId,'personal','logs'), { logs: logs || {}, updatedAt: Date.now() }); }
-  catch(e){ console.error(e); toast('Error al guardar progreso personal'); }
   state.syncing = false;
 }
 async function migrateSharedRoutineToLibrary(){
@@ -958,17 +828,12 @@ function clearAuth(){ localStorage.removeItem(groupLocalKey(LS_AUTH)); if (group
 async function afterLogin(userId){
   saveMe(userId);
   setAuth(userId);
-  if (isPersonalGroup()){
-    state.joinedGroups = visibleAccountGroups();
-    saveJoinedGroups(state.joinedGroups);
-    return true;
-  }
   await rememberMembership(userId, groupPath());
   await linkAuthToProfile(userId, groupPath());
-  const memberships = (await loadMembershipGroups(userId)).filter(g => !isPersonalSpaceId(g));
-  const accountGroups = (state.account && state.account.groups ? state.account.groups : []).filter(g => !isPersonalSpaceId(g));
-  const recoveredGroups = (await recoverAccountGroupsFromProfiles()).filter(g => !isPersonalSpaceId(g));
-  state.joinedGroups = Array.from(new Set([...(memberships || []), ...(accountGroups || []), ...(recoveredGroups || []), groupPath()].filter(g => g && !isPersonalSpaceId(g))));
+  const memberships = await loadMembershipGroups(userId);
+  const accountGroups = state.account && state.account.groups ? state.account.groups : [];
+  const recoveredGroups = await recoverAccountGroupsFromProfiles();
+  state.joinedGroups = Array.from(new Set([...(memberships || []), ...(accountGroups || []), ...(recoveredGroups || []), groupPath()]));
   await saveAccount({ groups: state.joinedGroups });
   saveJoinedGroups(state.joinedGroups);
   return true;
@@ -979,33 +844,21 @@ async function handleAuthState(user){
   state.account = user ? await loadAccount(user) : null;
   if (state.account?.homeTourSeen) localStorage.setItem(LS_TOUR, '1');
   else if (state.account && localStorage.getItem(LS_TOUR)) await saveAccount({ homeTourSeen: true });
+  if (state.account) await recoverAccountGroupsFromProfiles();
+  if (state.account && state.account.groups && state.account.groups.length){
+    state.joinedGroups = Array.from(new Set(state.account.groups));
+    saveJoinedGroups(state.joinedGroups);
+    if (!state.joinedGroups.includes(state.currentGroup)){
+      state.currentGroup = state.joinedGroups[0] || DEFAULT_GROUP;
+      saveCurrentGroup(state.currentGroup);
+    }
+  }
   if (!user){
     state.currentUser = null;
     state.setupStep = null;
     state.view = 'setup';
     render();
     return;
-  }
-  if (state.account && !state.account.profileSetupComplete){
-    state.currentUser = null;
-    state.setupStep = 'profileSetup';
-    state.view = 'setup';
-    render();
-    return;
-  }
-  if (state.account) await recoverAccountGroupsFromProfiles();
-  const accountGroups = visibleAccountGroups();
-  if (!accountGroups.length || isPersonalSpaceId(state.currentGroup)){
-    try { await ensurePersonalSpace(); }
-    catch(e){ console.error(e); toast('No pude abrir tu espacio personal'); render(); }
-    return;
-  }
-  state.personalMode = false;
-  state.joinedGroups = Array.from(new Set(accountGroups));
-  saveJoinedGroups(state.joinedGroups);
-  if (!state.joinedGroups.includes(state.currentGroup)){
-    state.currentGroup = state.joinedGroups[0];
-    saveCurrentGroup(state.currentGroup);
   }
   await reloadGroup();
 }
@@ -1067,15 +920,12 @@ async function loadGroupState(groupId = groupPath()){
   }
   // Cargar biblioteca personal si hay usuario actual
   if (state.currentUser){
-    state.personalLibrary = await loadPersonalLibrary();
+    state.personalLibrary = await loadPersonalLibrary(state.currentUser, groupId);
   } else {
     state.personalLibrary = {};
   }
 }
 function chooseInitialViewForGroup(){
-  if (isPersonalGroup()){
-    state.currentUser = accountProfileUser().id; state.view = 'home'; state.setupStep = null; state.enteringGroup = false; return;
-  }
   const meId = loadMe();
   const linkedId = linkedProfileForGroup();
   const linkedUser = linkedId ? state.users.find(u=>u.id===linkedId) : null;
@@ -1110,12 +960,6 @@ async function reloadGroup(options = {}){
   const { skipRender = false } = options;
   unsubs.forEach(u => u && u());
   unsubs = [];
-  if (isPersonalGroup()){
-    await ensurePersonalSpace({ skipRender: true });
-    if (!skipRender) render();
-    return;
-  }
-  state.personalMode = false;
   await loadGroupState();
   if (state.account){
     const recoveredGroups = await recoverAccountGroupsFromProfiles();
@@ -1129,11 +973,6 @@ async function reloadGroup(options = {}){
 }
 async function switchGroup(groupId){
   if (!groupId) return;
-  if (isPersonalSpaceId(groupId)){
-    await ensurePersonalSpace();
-    return;
-  }
-  state.personalMode = false;
   if (groupId === state.currentGroup){
     // Si ya estamos en este grupo, simplemente regresar al home limpiamente.
     state.enteringGroup = false;
@@ -1198,7 +1037,7 @@ async function switchGroup(groupId){
     chooseInitialViewForGroup();
     // AHORA sí cargar la biblioteca personal del usuario correcto del nuevo grupo
     if (state.currentUser){
-      try { state.personalLibrary = await loadPersonalLibrary(); }
+      try { state.personalLibrary = await loadPersonalLibrary(state.currentUser, groupId); }
       catch(e){ console.error(e); state.personalLibrary = {}; }
     } else {
       state.personalLibrary = {};
@@ -1316,7 +1155,6 @@ async function joinGroup(groupId, password){
 }
 async function deleteCurrentGroup(){
   if (groupPath() === DEFAULT_GROUP){ toast('El grupo original está protegido'); return; }
-  if (isPersonalGroup()){ toast('Tu espacio personal no se elimina'); return; }
   if (!isAdmin()){ toast('Solo admin'); return; }
   const gid = groupPath();
   if (!firebaseReady){
@@ -1334,20 +1172,7 @@ async function deleteCurrentGroup(){
   }
   for (const u of state.users){ await forgetMembership(u.id, gid); }
   forgetGroup(gid);
-  const remainingGroups = (state.account?.groups || []).filter(g => g && g !== gid && g !== state.account?.personalGroupId);
-  if (state.account){
-    const linkedProfiles = { ...(state.account.linkedProfiles || {}) };
-    delete linkedProfiles[gid];
-    await saveAccount({ groups: remainingGroups, linkedProfiles });
-  }
-  state.joinedGroups = remainingGroups;
-  saveJoinedGroups(remainingGroups);
-  if (remainingGroups.length){
-    await switchGroup(remainingGroups[0]);
-  } else {
-    await ensurePersonalSpace();
-    await reloadGroup();
-  }
+  await switchGroup(DEFAULT_GROUP);
   toast('Grupo eliminado');
 }
 function buildGroupBackup(){
@@ -1404,7 +1229,6 @@ function prettyGroupName(id){
     .join(' ');
 }
 function groupDisplayName(id){
-  if (isPersonalGroup(id)) return personalDisplayName();
   if (id === groupPath() && state.groupConfig && state.groupConfig.groupName && state.groupConfig.groupName !== id) return state.groupConfig.groupName;
   return prettyGroupName(id);
 }
@@ -1485,7 +1309,6 @@ async function copyText(text, label){
   }
 }
 function isAdmin(){
-  if (isPersonalGroup()) return false;
   const me = state.users.find(u => u.id === state.currentUser);
   if (!me) return false;
   const admins = state.groupConfig.adminIds || [];
@@ -1724,13 +1547,6 @@ function renderSetRow(i, set = null, lastSet = null, unilateralMode = false){
 }
 
 // Returns the routine the current user is viewing for a given day or library routine.
-function getHomeRoutineScope(){
-  return state.homeRoutineScope === 'personal' ? 'personal' : 'group';
-}
-function setHomeRoutineScope(scope){
-  state.homeRoutineScope = scope === 'personal' ? 'personal' : 'group';
-  saveHomeRoutineScope(state.homeRoutineScope);
-}
 function isLibraryRoutineKey(key){
   return !!((state.library && state.library[key]) || (state.personalLibrary && state.personalLibrary[key]));
 }
@@ -1746,50 +1562,39 @@ function libraryRoutineAsDay(routine){
   };
 }
 function getRoutineForDay(dayKey){
-  const scope = getHomeRoutineScope();
-  if (scope === 'personal'){
-    if (state.personalLibrary && state.personalLibrary[dayKey]) return libraryRoutineAsDay(state.personalLibrary[dayKey]);
-    return null;
-  }
+  if (state.personalLibrary && state.personalLibrary[dayKey]) return libraryRoutineAsDay(state.personalLibrary[dayKey]);
   if (state.library && state.library[dayKey]) return libraryRoutineAsDay(state.library[dayKey]);
+  const src = state.routineSource[dayKey] || 'shared';
+  if (src === 'personal'){
+    const pr = state.personalRoutines[state.currentUser];
+    if (pr && pr[dayKey]) return pr[dayKey];
+  }
   return (state.sharedRoutine && state.sharedRoutine[dayKey]) || null;
 }
 function getCurrentSource(dayKey){
-  const scope = getHomeRoutineScope();
-  if (scope === 'personal'){
-    if (state.personalLibrary && state.personalLibrary[dayKey]) return 'personalLibrary';
-    return 'personal';
-  }
+  if (state.personalLibrary && state.personalLibrary[dayKey]) return 'personalLibrary';
   if (state.library && state.library[dayKey]) return 'library';
-  return 'shared';
+  return state.routineSource[dayKey] || 'shared';
 }
 function setCurrentSource(dayKey, src){
-  if (src === 'personal') setHomeRoutineScope('personal');
-  else if (src === 'shared') setHomeRoutineScope('group');
   state.routineSource[dayKey] = src;
   saveRoutineSource(state.routineSource);
 }
-function scopedLibraryKeys(lib){
-  return Object.values(lib || {})
+function getAllDayKeys(){
+  const all = new Set(DAY_ORDER);
+  if (state.sharedRoutine) Object.keys(state.sharedRoutine).forEach(k => all.add(k));
+  const pr = state.personalRoutines[state.currentUser];
+  if (pr) Object.keys(pr).forEach(k => all.add(k));
+  const libraryKeys = [
+    ...Object.values(state.library || {}),
+    ...Object.values(state.personalLibrary || {})
+  ]
     .filter(r => r && r.id && !r.originDay)
     .sort((a,b) => (a.createdAt || 0) - (b.createdAt || 0) || (a.name || '').localeCompare(b.name || ''))
     .map(r => r.id);
-}
-function getAllDayKeys(){
-  const scope = getHomeRoutineScope();
-  const all = new Set();
-  if (scope === 'personal'){
-    scopedLibraryKeys(state.personalLibrary).forEach(k => all.add(k));
-  } else {
-    if (state.sharedRoutine) Object.keys(state.sharedRoutine).forEach(k => all.add(k));
-    scopedLibraryKeys(state.library).forEach(k => all.add(k));
-  }
   const ordered = DAY_ORDER.filter(k => all.has(k));
   const extras = [...all].filter(k => !DAY_ORDER.includes(k));
-  return [...ordered, ...extras];
-}
-function hasPersonalRoutineContent(){
-  return Object.keys(state.personalLibrary || {}).length > 0;
+  return [...ordered, ...extras, ...libraryKeys.filter(k => !all.has(k))];
 }
 
 // ====== BODY DIAGRAM SVG ======
@@ -2271,7 +2076,6 @@ function configBanner(){
     <div><strong>Modo local:</strong> Los datos solo se guardan en este navegador.</div></div>`;
 }
 function headerBar(title, backFn){
-
   const me = state.users.find(u=>u.id===state.currentUser);
   const userPill = me ? `<button class="user-pill" data-action="userMenu">
     ${avatarHtml(me, 22)}${esc(me.name)}
@@ -2289,38 +2093,6 @@ function headerBar(title, backFn){
 
 // ====== SETUP / AUTH ======
 function renderSetup(){
-  if (state.setupStep === 'profileSetup'){
-    const account = state.account || {};
-    const suggestedName = esc(account.displayName || state.authUser?.displayName || state.authUser?.email?.split('@')[0] || '');
-    const selectedColor = account.profileColor || userColor(0);
-    root.innerHTML = `
-      <div style="max-width:460px;margin:0 auto;padding-top:32px;">
-        ${configBanner()}
-        <div class="fade-in" style="margin-bottom:22px;">
-          <div style="font-size:44px;margin-bottom:8px;">💪</div>
-          <h1 style="margin-bottom:6px;">Crea Tu Perfil</h1>
-          <p class="muted" style="font-size:14px;margin:0;">Este perfil es tuyo. Luego decides si quieres usar rutina personal, unirte a un grupo o crear uno.</p>
-        </div>
-        <div class="card fade-in" style="margin-bottom:14px;animation-delay:60ms;">
-          <label class="section-label" style="margin-bottom:6px;">Tu nombre</label>
-          <input id="profileSetupName" type="text" maxlength="24" value="${suggestedName}" placeholder="Ej. Jazmin" style="margin-bottom:12px;" autofocus />
-          <label class="section-label" style="margin-bottom:6px;">Icono / avatar</label>
-          <input id="profileSetupEmoji" type="text" maxlength="4" value="${esc(account.avatarEmoji || '💪')}" placeholder="Ej. 💪, ⭐, 🏋️" style="margin-bottom:12px;" />
-          <label class="section-label" style="margin-bottom:6px;">Color</label>
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-            <input id="profileSetupColor" type="color" value="${esc(selectedColor)}" style="width:48px;height:42px;padding:4px;flex-shrink:0;" />
-            <div id="profileColorSwatches" style="display:flex;gap:7px;flex-wrap:wrap;">${colorSwatches(selectedColor)}</div>
-          </div>
-          <label class="section-label" style="margin-bottom:6px;">PIN del gym</label>
-          <input id="profileSetupPin" type="password" inputmode="numeric" maxlength="20" placeholder="Mínimo 4 caracteres" style="margin-bottom:8px;" />
-          <div class="muted" style="font-size:12px;line-height:1.45;">Tu contraseña de cuenta sigue siendo la de login. Este PIN protege acciones del perfil del gym.</div>
-        </div>
-        <div id="profileSetupErr" style="color:var(--danger);font-size:12px;text-align:center;margin-bottom:10px;min-height:14px;"></div>
-        <button class="primary" data-action="saveProfileSetup" style="width:100%;padding:14px;font-weight:600;font-size:15px;">Continuar</button>
-      </div>`;
-    attach();
-    return;
-  }
   if (state.setupStep === 'groupHub'){
     const accountGroups = visibleAccountGroups();
     const groupCards = accountGroups.length ? accountGroups.map(g => `
@@ -2505,19 +2277,16 @@ function renderHome(){
     return { user:u, latest };
   });
 
-  if (isPersonalGroup()) setHomeRoutineScope('personal');
-  const homeScope = getHomeRoutineScope();
-  const isPersonalHome = homeScope === 'personal';
   const allDays = getAllDayKeys();
   const globalMuscleStats = fullRoutineMuscleStats();
-  const globalMuscleMapBtn = allDays.length ? `
+  const globalMuscleMapBtn = `
     <button data-action="toggleGlobalRoutineMuscles" style="margin-bottom:12px;padding:11px;width:100%;background:${state.showGlobalRoutineMuscles?'var(--accent-bg-strong)':'var(--bg-elev)'};color:${state.showGlobalRoutineMuscles?'var(--accent)':'var(--text)'};border:1px solid ${state.showGlobalRoutineMuscles?'var(--accent-border)':'var(--border)'};display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:500;">
       <i class="ti ti-body-scan" style="font-size:15px;"></i> ${state.showGlobalRoutineMuscles ? 'Ocultar Mapa Muscular General' : 'Mapa Muscular General'}
-    </button>` : '';
-  const globalMuscleOverview = allDays.length && state.showGlobalRoutineMuscles
+    </button>`;
+  const globalMuscleOverview = state.showGlobalRoutineMuscles
     ? routineMuscleOverview(globalMuscleStats, {
       title: 'Mapa Muscular General',
-      subtitle: isPersonalHome ? 'Resumen de tus rutinas personales actuales.' : 'Resumen de las rutinas del grupo actual.',
+      subtitle: 'Resumen de todos los días de tu rutina actual. Usa la rutina compartida o personal seleccionada en cada día.',
       scope: 'general'
     })
     : '';
@@ -2534,7 +2303,7 @@ function renderHome(){
     }
     const pct = totalEx ? Math.round((logged/totalEx)*100) : 0;
     const src = getCurrentSource(dk);
-    const sourceLabel = isPersonalHome ? `<span class="badge" style="background:var(--info-bg);color:var(--info);font-size:10px;padding:2px 8px;font-family:var(--font-mono);">PERSONAL</span>` : '';
+    const sourceLabel = src === 'personal' ? `<span class="badge" style="background:var(--info-bg);color:var(--info);font-size:10px;padding:2px 8px;font-family:var(--font-mono);">PERSONAL</span>` : '';
     return `<button data-action="openDay" data-day="${dk}" class="day-card fade-in" style="animation-delay:${i*60}ms;">
       <div class="row" style="position:relative;z-index:1;">
         <div class="icon-tile">
@@ -2555,7 +2324,7 @@ function renderHome(){
     </button>`;
   }).join('');
 
-  const partnersBlock = isPersonalHome ? '' : (others.length ? `
+  const partnersBlock = others.length ? `
     <div style="margin-top:28px;">
       <div class="section-label">Compañeros</div>
       ${others.map((u,i)=>{
@@ -2578,19 +2347,7 @@ function renderHome(){
     <div class="card fade-in" style="margin-top:28px;padding:16px;font-size:13px;color:var(--text-muted);text-align:center;">
       <i class="ti ti-users" style="font-size:24px;color:var(--text-dim);display:block;margin-bottom:6px;"></i>
       Cuando tu compañero entre, aparecerá aquí.
-    </div>`);
-
-  const personalEmptyBlock = isPersonalHome && !allDays.length ? `
-    <div class="card fade-in" style="padding:22px 18px;text-align:center;margin-bottom:18px;">
-      <i class="ti ti-user-heart" style="font-size:30px;color:var(--accent);display:block;margin-bottom:8px;"></i>
-      <h2 style="margin-bottom:6px;">Tu Rutina Personal</h2>
-      <p class="muted" style="font-size:13px;margin:0 0 14px;">Crea una rutina solo para ti. Puedes copiar la rutina del grupo como base o empezar desde cero.</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
-        ${!isPersonalGroup() ? '<button class="primary" data-action="copyGroupToPersonal" style="padding:11px 14px;">Copiar Del Grupo</button>' : ''}
-        <button data-action="createPersonalWeek" data-mode="blank" style="padding:11px 14px;">Empezar Desde Cero</button>
-      </div>
-    </div>` : '';
-
+    </div>`;
 
   const me = state.users.find(u=>u.id===state.currentUser);
   const viewOnlyBanner = !state.currentUser ? `
@@ -2599,22 +2356,12 @@ function renderHome(){
     </div>` : '';
 
   const currentGroupName = state.currentGroup ? groupDisplayName(state.currentGroup) : '';
-  const groupPill = state.currentGroup && !isPersonalGroup() ? `
+  const groupPill = state.currentGroup ? `
     <button data-action="goGroupHub" class="group-pill" style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px 4px 8px;margin-top:6px;border-radius:var(--radius-pill);background:var(--bg-elev);border:1px solid var(--border);font-size:12px;color:var(--text-muted);font-family:inherit;cursor:pointer;transition:all 0.15s;">
       <i class="ti ti-users-group" style="font-size:13px;color:var(--accent);"></i>
       <span style="color:var(--text);font-weight:500;">${esc(currentGroupName)}</span>
       <i class="ti ti-chevron-right" style="font-size:12px;opacity:0.5;"></i>
     </button>` : '';
-  const hasRealGroups = visibleAccountGroups().length > 0 && !isPersonalGroup();
-  const scopeSwitcher = state.currentUser && hasRealGroups ? `
-    <div class="tab-bar fade-in" style="margin-bottom:16px;animation-delay:110ms;">
-      <button class="${!isPersonalHome?'active':''}" data-action="setHomeScope" data-scope="group">
-        <i class="ti ti-users" style="font-size:13px;vertical-align:-1px;"></i> Grupo
-      </button>
-      <button class="${isPersonalHome?'active':''}" data-action="setHomeScope" data-scope="personal">
-        <i class="ti ti-user" style="font-size:13px;vertical-align:-1px;"></i> Personal
-      </button>
-    </div>` : '';
 
   root.innerHTML = `
     ${configBanner()}
@@ -2633,7 +2380,7 @@ function renderHome(){
         <i class="ti ti-chevron-down" style="font-size:14px;color:var(--text-muted);"></i>
       </button>` : `<button data-action="switchUser" style="font-size:13px;">Iniciar Sesión</button>`}
     </div>
-    <div class="fade-in" style="display:flex;gap:8px;margin-bottom:16px;animation-delay:80ms;">
+    <div class="fade-in" style="display:flex;gap:8px;margin-bottom:20px;animation-delay:80ms;">
       <button data-action="goCompare" style="flex:1;padding:14px;background:var(--bg-elev);display:flex;align-items:center;justify-content:center;gap:8px;font-weight:500;border:1px solid var(--border);">
         <i class="ti ti-chart-line" style="font-size:17px;color:var(--accent);"></i> Ver Progreso
       </button>
@@ -2641,10 +2388,8 @@ function renderHome(){
         <i class="ti ti-settings" style="font-size:17px;color:var(--text-muted);"></i>
       </button>
     </div>
-    ${scopeSwitcher}
     ${globalMuscleMapBtn}
     ${globalMuscleOverview}
-    ${personalEmptyBlock}
     ${dayCards}
     ${partnersBlock}`;
   attach();
@@ -2665,7 +2410,6 @@ function renderDay(){
   }
   const src = getCurrentSource(dayKey);
   const personalAvail = !!(state.personalRoutines[state.currentUser] && state.personalRoutines[state.currentUser][dayKey]);
-
 
   const me = state.users.find(u=>u.id===state.currentUser);
   const meColor = me ? me.color : 'var(--border)';
@@ -2694,7 +2438,15 @@ function renderDay(){
   }).join('');
 
   const isLibraryRoutine = src === 'library' || src === 'personalLibrary';
-  const switcher = '';
+  const switcher = state.currentUser && !isLibraryRoutine ? `
+    <div class="tab-bar">
+      <button class="${src==='shared'?'active':''}" data-action="setSource" data-src="shared">
+        <i class="ti ti-users" style="font-size:13px;vertical-align:-1px;"></i> Compartida
+      </button>
+      <button class="${src==='personal'?'active':''}" data-action="setSource" data-src="personal">
+        <i class="ti ti-user" style="font-size:13px;vertical-align:-1px;"></i> ${personalAvail ? 'Personal' : 'Crear Personal'}
+      </button>
+    </div>` : '';
 
   const editBtn = state.currentUser ? `
     <button data-action="editRoutine" style="margin-bottom:16px;padding:11px;width:100%;background:var(--bg-elev);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:500;">
@@ -3148,7 +2900,7 @@ function renderSettings(){
 
   root.innerHTML = `
     ${headerBar('Configuración', 'goHome')}
-    ${!isPersonalGroup() ? `<div class="section-label">Grupo</div>
+    <div class="section-label">Grupo</div>
     <div class="card" style="margin-bottom:16px;padding:6px;">
       <div style="padding:10px 12px 8px;display:flex;align-items:center;gap:10px;">
         <div style="flex:1;min-width:0;">
@@ -3168,10 +2920,10 @@ function renderSettings(){
       <button data-action="joinGroupModal" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:transparent;border:none;text-align:left;border-radius:8px;">
         <i class="ti ti-login" style="font-size:18px;color:var(--accent);"></i><span>Unirse A Un Grupo</span>
       </button>
-      ${adm && groupPath() !== DEFAULT_GROUP && !isPersonalGroup() ? `<button data-action="deleteGroupModal" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:transparent;border:none;text-align:left;color:var(--danger);border-radius:8px;">
+      ${adm && groupPath() !== DEFAULT_GROUP ? `<button data-action="deleteGroupModal" style="width:100%;padding:12px;display:flex;align-items:center;gap:10px;background:transparent;border:none;text-align:left;color:var(--danger);border-radius:8px;">
         <i class="ti ti-trash" style="font-size:18px;"></i><span>Eliminar Este Grupo</span>
       </button>` : ''}
-    </div>` : ''}
+    </div>
 
     <div class="section-label">Cuenta</div>
     <div class="card" style="margin-bottom:16px;padding:6px;">
@@ -3209,10 +2961,10 @@ function renderSettings(){
       </button>
     </div>
 
-    ${!isPersonalGroup() ? `<div class="section-label">Usuarios</div>` : ''}
-    ${!isPersonalGroup() ? usersList : ''}
+    <div class="section-label">Usuarios</div>
+    ${usersList}
 
-    ${adm && !isPersonalGroup() ? `<div class="section-label" style="margin-top:24px;">Admin</div>
+    ${adm ? `<div class="section-label" style="margin-top:24px;">Admin</div>
     <div class="card" style="padding:6px;">
       <div style="display:flex;align-items:center;gap:8px;">
         <button data-action="changeInvitationPw" style="flex:1;padding:14px 12px;display:flex;align-items:center;gap:12px;background:transparent;border:none;text-align:left;border-radius:8px;">
@@ -3253,8 +3005,7 @@ function renderSettings(){
 
 // ====== LIBRARY (Fase 1) ======
 function renderLibrary(){
-  const inPersonalSpace = isPersonalGroup();
-  const view = inPersonalSpace ? 'personal' : (state.libraryView || 'shared');
+  const view = state.libraryView || 'shared';
   const lib = view === 'shared' ? (state.library || {}) : (state.personalLibrary || {});
   const routines = Object.values(lib).sort((a,b) => {
     const ai = DAY_ORDER.indexOf(a.originDay);
@@ -3305,14 +3056,14 @@ function renderLibrary(){
       <i class="ti ti-info-circle"></i>
       <div>Esta es tu nueva biblioteca de rutinas (Fase 1). Por ahora puedes verlas y editarlas. En Fase 2 podrás asignarlas a los días de la semana.</div>
     </div>
-    ${!inPersonalSpace ? `<div class="tab-bar">
+    <div class="tab-bar">
       <button class="${view==='shared'?'active':''}" data-action="libView" data-v="shared">
         <i class="ti ti-users" style="font-size:13px;vertical-align:-1px;"></i> Del grupo (${Object.keys(state.library||{}).length})
       </button>
       <button class="${view==='personal'?'active':''}" data-action="libView" data-v="personal">
         <i class="ti ti-user" style="font-size:13px;vertical-align:-1px;"></i> Mis personales (${Object.keys(state.personalLibrary||{}).length})
       </button>
-    </div>` : ''}
+    </div>
     ${empty}
     ${cards}
     ${canEdit && routines.length > 0 ? `
@@ -3729,31 +3480,6 @@ async function handle(e){
     return;
   }
 
-  if (a === 'saveProfileSetup'){
-    const name = (document.getElementById('profileSetupName')?.value || '').trim();
-    const emoji = (document.getElementById('profileSetupEmoji')?.value || '').trim() || '💪';
-    const color = (document.getElementById('profileSetupColor')?.value || userColor(0)).trim();
-    const pin = document.getElementById('profileSetupPin')?.value || '';
-    const err = document.getElementById('profileSetupErr');
-    if (name.length < 2){ err.textContent = 'Escribe tu nombre'; return; }
-    if (pin.length < 4){ err.textContent = 'El PIN debe tener mínimo 4 caracteres'; return; }
-    const patch = {
-      displayName: name,
-      avatarEmoji: emoji,
-      profileColor: color,
-      profileSetupComplete: true
-    };
-    patch.profilePinHash = await sha(pin);
-    try {
-      if (state.authUser && state.authUser.displayName !== name) await updateProfile(state.authUser, { displayName: name });
-    } catch(e){ console.error(e); }
-    await saveAccount(patch);
-    try { await ensurePersonalSpace(); }
-    catch(e){ console.error(e); toast('No pude crear tu espacio personal'); }
-    await reloadGroup();
-    return;
-  }
-
   // ====== Groups ======
   if (a === 'groupMenu'){
     closeModal();
@@ -3861,7 +3587,6 @@ async function handle(e){
     return;
   }
   if (a === 'deleteGroupModal'){
-    if (isPersonalGroup()){ toast('Tu espacio personal no se elimina'); return; }
     if (!isAdmin()){ toast('Solo admin'); return; }
     if (groupPath() === DEFAULT_GROUP){ toast('El grupo original está protegido'); return; }
     openModal(`
@@ -4053,12 +3778,11 @@ async function handle(e){
   }
   if (a === 'pickProfileColor'){
     const color = btn.dataset.color;
-    const input = document.getElementById('profileColor') || document.getElementById('profileSetupColor');
+    const input = document.getElementById('profileColor');
     const swatches = document.getElementById('profileColorSwatches');
     if (input && color) input.value = color;
     if (swatches) swatches.innerHTML = colorSwatches(color);
     modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle));
-    root.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle));
     return;
   }
   if (a === 'saveProfile'){
@@ -4254,7 +3978,7 @@ async function handle(e){
   if (a === 'editRoutineNew'){ state.currentDay = btn.dataset.day || state.currentDay; state.view = 'editRoutine'; render(); return; }
 
   // ====== LIBRARY (Fase 1) ======
-  if (a === 'goLibrary'){ state.view = 'library'; state.libraryView = isPersonalGroup() ? 'personal' : (state.libraryView || 'shared'); render(); return; }
+  if (a === 'goLibrary'){ state.view = 'library'; state.libraryView = state.libraryView || 'shared'; render(); return; }
   if (a === 'libView'){ state.libraryView = btn.dataset.v || 'shared'; render(); return; }
   if (a === 'openLibraryRoutine'){
     state.editingLibraryRoutineId = btn.dataset.rid;
@@ -4262,7 +3986,7 @@ async function handle(e){
     render(); return;
   }
   if (a === 'createLibraryRoutine'){
-    const scope = isPersonalGroup() || state.libraryView === 'personal' ? 'personal' : 'shared';
+    const scope = state.libraryView === 'personal' ? 'personal' : 'shared';
     if (scope === 'shared' && !isAdmin()){ toast('Solo admins pueden crear rutinas compartidas'); return; }
     const r = createEmptyLibraryRoutine(scope);
     if (scope === 'shared'){
@@ -4376,57 +4100,6 @@ async function handle(e){
       render();
     });
     return;
-  }
-
-  // ====== Home routine scope ======
-  if (a === 'setHomeScope'){
-    setHomeRoutineScope(btn.dataset.scope || 'group');
-    state.currentDay = null;
-    state.currentExerciseIdx = null;
-    state.showGlobalRoutineMuscles = false;
-    render(); return;
-  }
-  if (a === 'copyGroupToPersonal'){
-    if (!state.currentUser){ toast('Inicia sesión para copiar rutinas'); return; }
-    const next = { ...(state.personalLibrary || {}) };
-    let copied = 0;
-    const base = state.sharedRoutine && Object.keys(state.sharedRoutine).length ? state.sharedRoutine : {};
-    Object.keys(base).forEach(dayKey => {
-      const day = base[dayKey];
-      if (!day || !Array.isArray(day.exercises) || !day.exercises.length) return;
-      const r = {
-        id: newRoutineId(),
-        name: day.label || (DEFAULT_ROUTINE[dayKey]?.label) || 'Rutina',
-        focus: day.focus || '',
-        icon: day.icon || 'ti-barbell',
-        exercises: JSON.parse(JSON.stringify(day.exercises || [])),
-        scope: 'personal',
-        sourceGroup: groupPath(),
-        sourceDay: dayKey,
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      };
-      next[r.id] = r;
-      copied += 1;
-    });
-    if (!copied){ toast('No hay rutina de grupo para copiar'); return; }
-    state.personalLibrary = next;
-    await savePersonalLibrary(state.currentUser, state.personalLibrary);
-    setHomeRoutineScope('personal');
-    toast(`${copied} rutina${copied===1?'':'s'} copiadas a Personal`);
-    render(); return;
-  }
-  if (a === 'createPersonalWeek'){
-    if (!state.currentUser){ toast('Inicia sesión para crear tu rutina personal'); return; }
-    const next = { ...(state.personalLibrary || {}) };
-    const r = createEmptyLibraryRoutine('personal');
-    r.name = 'Mi Rutina Personal';
-    next[r.id] = r;
-    state.personalLibrary = next;
-    await savePersonalLibrary(state.currentUser, state.personalLibrary);
-    setHomeRoutineScope('personal');
-    toast('Rutina personal creada');
-    render(); return;
   }
 
   // ====== Source switch ======
@@ -4954,32 +4627,6 @@ init();
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
