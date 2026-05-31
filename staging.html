@@ -1509,8 +1509,24 @@ function renderSetRow(i, set = null, lastSet = null, unilateralMode = false){
   </div>`;
 }
 
-// Returns the routine the current user is viewing for a given day.
+// Returns the routine the current user is viewing for a given day or library routine.
+function isLibraryRoutineKey(key){
+  return !!((state.library && state.library[key]) || (state.personalLibrary && state.personalLibrary[key]));
+}
+function libraryRoutineAsDay(routine){
+  if (!routine) return null;
+  return {
+    label: routine.name || routine.label || 'Rutina',
+    focus: routine.focus || '',
+    icon: routine.icon || 'ti-barbell',
+    exercises: Array.isArray(routine.exercises) ? routine.exercises : [],
+    libraryId: routine.id,
+    scope: routine.scope || 'shared'
+  };
+}
 function getRoutineForDay(dayKey){
+  if (state.personalLibrary && state.personalLibrary[dayKey]) return libraryRoutineAsDay(state.personalLibrary[dayKey]);
+  if (state.library && state.library[dayKey]) return libraryRoutineAsDay(state.library[dayKey]);
   const src = state.routineSource[dayKey] || 'shared';
   if (src === 'personal'){
     const pr = state.personalRoutines[state.currentUser];
@@ -1519,6 +1535,8 @@ function getRoutineForDay(dayKey){
   return (state.sharedRoutine && state.sharedRoutine[dayKey]) || null;
 }
 function getCurrentSource(dayKey){
+  if (state.personalLibrary && state.personalLibrary[dayKey]) return 'personalLibrary';
+  if (state.library && state.library[dayKey]) return 'library';
   return state.routineSource[dayKey] || 'shared';
 }
 function setCurrentSource(dayKey, src){
@@ -1530,9 +1548,16 @@ function getAllDayKeys(){
   if (state.sharedRoutine) Object.keys(state.sharedRoutine).forEach(k => all.add(k));
   const pr = state.personalRoutines[state.currentUser];
   if (pr) Object.keys(pr).forEach(k => all.add(k));
+  const libraryKeys = [
+    ...Object.values(state.library || {}),
+    ...Object.values(state.personalLibrary || {})
+  ]
+    .filter(r => r && r.id && !r.originDay)
+    .sort((a,b) => (a.createdAt || 0) - (b.createdAt || 0) || (a.name || '').localeCompare(b.name || ''))
+    .map(r => r.id);
   const ordered = DAY_ORDER.filter(k => all.has(k));
   const extras = [...all].filter(k => !DAY_ORDER.includes(k));
-  return [...ordered, ...extras];
+  return [...ordered, ...extras, ...libraryKeys.filter(k => !all.has(k))];
 }
 
 // ====== BODY DIAGRAM SVG ======
@@ -2369,7 +2394,8 @@ function renderDay(){
     </button>`;
   }).join('');
 
-  const switcher = state.currentUser ? `
+  const isLibraryRoutine = src === 'library' || src === 'personalLibrary';
+  const switcher = state.currentUser && !isLibraryRoutine ? `
     <div class="tab-bar">
       <button class="${src==='shared'?'active':''}" data-action="setSource" data-src="shared">
         <i class="ti ti-users" style="font-size:13px;vertical-align:-1px;"></i> Compartida
@@ -2381,7 +2407,7 @@ function renderDay(){
 
   const editBtn = state.currentUser ? `
     <button data-action="editRoutine" style="margin-bottom:16px;padding:11px;width:100%;background:var(--bg-elev);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:500;">
-      <i class="ti ti-edit" style="font-size:15px;color:var(--accent);"></i> Editar ${src==='personal' ? 'Mi Rutina' : 'Rutina Compartida'}
+      <i class="ti ti-edit" style="font-size:15px;color:var(--accent);"></i> ${isLibraryRoutine ? 'Editar Rutina De Biblioteca' : `Editar ${src==='personal' ? 'Mi Rutina' : 'Rutina Compartida'}`}
     </button>` : '';
   const routineMapBtn = `
     <button data-action="toggleRoutineMuscles" style="margin-bottom:12px;padding:11px;width:100%;background:${state.showRoutineMuscles?'var(--accent-bg-strong)':'var(--bg-elev)'};color:${state.showRoutineMuscles?'var(--accent)':'var(--text)'};border:1px solid ${state.showRoutineMuscles?'var(--accent-border)':'var(--border)'};display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:500;">
@@ -3857,7 +3883,14 @@ async function handle(e){
   if (a === 'goSettings'){ closeModal(); state.view = 'settings'; render(); return; }
   if (a === 'goGroupHub'){ closeModal(); state.setupStep = 'groupHub'; state.view = 'setup'; render(); return; }
   if (a === 'goEditRoutine'){ state.view = 'editRoutine'; render(); return; }
-  if (a === 'editRoutine'){ state.view = 'editRoutine'; render(); return; }
+  if (a === 'editRoutine'){
+    if (isLibraryRoutineKey(state.currentDay)){
+      state.editingLibraryRoutineId = state.currentDay;
+      state.view = 'libraryEdit';
+      render(); return;
+    }
+    state.view = 'editRoutine'; render(); return;
+  }
   if (a === 'editRoutineNew'){ state.currentDay = btn.dataset.day || state.currentDay; state.view = 'editRoutine'; render(); return; }
 
   // ====== LIBRARY (Fase 1) ======
