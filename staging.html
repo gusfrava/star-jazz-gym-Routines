@@ -2359,7 +2359,7 @@ function openDbPicker(onPick){
   let query = '';
   let filterCat = '';
 
-  function render(){
+  function buildResultsHtml(){
     const results = searchExercises(query, { category: filterCat }).slice(0, 30);
     const cards = results.map(ex => {
       const tinfo = TIER_INFO[ex.t] || TIER_INFO.B;
@@ -2373,38 +2373,58 @@ function openDbPicker(onPick){
         <div class="mono" style="font-size:11px;color:var(--text-dim);">${ex.s||'—'}</div>
       </button>`;
     }).join('');
+    return { html: results.length ? cards : '<div class="muted" style="text-align:center;padding:30px;font-size:13px;">Sin resultados.</div>', total: results.length };
+  }
 
+  function attachPickHandlers(){
+    document.querySelectorAll('#dbpResults [data-pick-id]').forEach(b => {
+      b.addEventListener('click', () => {
+        const ex = EXERCISE_DB.find(e => e.id === b.dataset.pickId);
+        if (ex) { closeModal(); onPick(ex); }
+      });
+    });
+  }
+
+  function updateResultsOnly(){
+    const r = buildResultsHtml();
+    const el = document.getElementById('dbpResults');
+    if (el) el.innerHTML = r.html;
+    const cnt = document.getElementById('dbpCounter');
+    if (cnt) cnt.textContent = `${r.total} mostrados de ${EXERCISE_DB.length} disponibles`;
+    attachPickHandlers();
+  }
+
+  function render(){
+    const r = buildResultsHtml();
     modalRoot.innerHTML = `<div class="modal-backdrop" id="dbmb">
       <div class="modal" onclick="event.stopPropagation()" style="max-width:560px;max-height:85vh;display:flex;flex-direction:column;">
         <h2 style="margin-bottom:12px;">Buscar ejercicio</h2>
-        <input id="dbpInput" type="text" placeholder="Nombre, músculo o grupo..." value="${esc(query)}" style="margin-bottom:10px;" autofocus />
+        <input id="dbpInput" type="text" placeholder="Nombre, músculo o grupo..." value="${esc(query)}" style="margin-bottom:10px;" />
         <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:12px;">
           ${['','fuerza','cardio','movilidad'].map(c => `<button data-fc="${c}" class="small ${filterCat===c?'primary':''}" style="font-size:11px;padding:4px 10px;">${c?(c==='fuerza'?'Fuerza':c==='cardio'?'Cardio':'Movilidad'):'Todo'}</button>`).join('')}
         </div>
-        <div style="flex:1;overflow-y:auto;min-height:200px;max-height:50vh;margin-bottom:12px;">
-          ${results.length ? cards : '<div class="muted" style="text-align:center;padding:30px;font-size:13px;">Sin resultados.</div>'}
+        <div id="dbpResults" style="flex:1;overflow-y:auto;min-height:200px;max-height:50vh;margin-bottom:12px;">
+          ${r.html}
         </div>
-        <div class="muted" style="font-size:11px;text-align:center;margin-bottom:10px;">${results.length} mostrados de ${EXERCISE_DB.length} disponibles</div>
+        <div id="dbpCounter" class="muted" style="font-size:11px;text-align:center;margin-bottom:10px;">${r.total} mostrados de ${EXERCISE_DB.length} disponibles</div>
         <button id="dbpCancel" style="width:100%;padding:10px;">Cancelar</button>
       </div>
     </div>`;
     document.getElementById('dbmb').addEventListener('click', e => { if (e.target.id === 'dbmb') closeModal(); });
     document.getElementById('dbpCancel').addEventListener('click', closeModal);
     const inp = document.getElementById('dbpInput');
+    inp.focus();
+    inp.setSelectionRange(inp.value.length, inp.value.length);
     let timer;
     inp.addEventListener('input', e => {
+      query = e.target.value;
       clearTimeout(timer);
-      timer = setTimeout(() => { query = e.target.value; render(); }, 200);
+      timer = setTimeout(updateResultsOnly, 180);
     });
     document.querySelectorAll('[data-fc]').forEach(b => {
       b.addEventListener('click', () => { filterCat = (filterCat === b.dataset.fc) ? '' : b.dataset.fc; render(); });
     });
-    document.querySelectorAll('[data-pick-id]').forEach(b => {
-      b.addEventListener('click', () => {
-        const ex = EXERCISE_DB.find(e => e.id === b.dataset.pickId);
-        if (ex) { closeModal(); onPick(ex); }
-      });
-    });
+    attachPickHandlers();
   }
   render();
 }
