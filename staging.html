@@ -1563,7 +1563,19 @@ function renderSetRow(i, set = null, lastSet = null, unilateralMode = false){
 
 // Returns the routine the current user is viewing for a given day or library routine.
 function isLibraryRoutineKey(key){
-  return !!((state.library && state.library[key]) || (state.personalLibrary && state.personalLibrary[key]));
+  return !!((state.library && isSharedLibraryRoutine(state.library[key])) || (state.personalLibrary && isPersonalLibraryRoutine(state.personalLibrary[key])));
+}
+function isSharedLibraryRoutine(routine){
+  return !!routine && (routine.scope || 'shared') === 'shared';
+}
+function isPersonalLibraryRoutine(routine){
+  return !!routine && (routine.scope || 'personal') === 'personal';
+}
+function sharedLibraryCount(){
+  return Object.values(state.library || {}).filter(isSharedLibraryRoutine).length;
+}
+function personalLibraryCount(){
+  return Object.values(state.personalLibrary || {}).filter(isPersonalLibraryRoutine).length;
 }
 function libraryRoutineAsDay(routine){
   if (!routine) return null;
@@ -1579,21 +1591,21 @@ function libraryRoutineAsDay(routine){
 function getRoutineForDay(dayKey){
   const scope = getHomeRoutineScope();
   if (scope === 'personal'){
-    if (state.personalLibrary && state.personalLibrary[dayKey]) return libraryRoutineAsDay(state.personalLibrary[dayKey]);
+    if (state.personalLibrary && isPersonalLibraryRoutine(state.personalLibrary[dayKey])) return libraryRoutineAsDay(state.personalLibrary[dayKey]);
     const pr = state.personalRoutines[state.currentUser];
     if (pr && pr[dayKey]) return pr[dayKey];
     return null;
   }
-  if (state.library && state.library[dayKey]) return libraryRoutineAsDay(state.library[dayKey]);
+  if (state.library && isSharedLibraryRoutine(state.library[dayKey])) return libraryRoutineAsDay(state.library[dayKey]);
   return (state.sharedRoutine && state.sharedRoutine[dayKey]) || null;
 }
 function getCurrentSource(dayKey){
   const scope = getHomeRoutineScope();
   if (scope === 'personal'){
-    if (state.personalLibrary && state.personalLibrary[dayKey]) return 'personalLibrary';
+    if (state.personalLibrary && isPersonalLibraryRoutine(state.personalLibrary[dayKey])) return 'personalLibrary';
     return 'personal';
   }
-  if (state.library && state.library[dayKey]) return 'library';
+  if (state.library && isSharedLibraryRoutine(state.library[dayKey])) return 'library';
   return 'shared';
 }
 function setCurrentSource(dayKey, src){
@@ -1610,7 +1622,7 @@ function getAllDayKeys(){
     const pr = state.personalRoutines[state.currentUser];
     if (pr) Object.keys(pr).forEach(k => all.add(k));
     const personalLibraryKeys = Object.values(state.personalLibrary || {})
-      .filter(r => r && r.id && !r.originDay)
+      .filter(r => isPersonalLibraryRoutine(r) && r.id && !r.originDay)
       .sort((a,b) => (a.createdAt || 0) - (b.createdAt || 0) || (a.name || '').localeCompare(b.name || ''))
       .map(r => r.id);
     const orderedPersonal = DAY_ORDER.filter(k => all.has(k));
@@ -1619,7 +1631,7 @@ function getAllDayKeys(){
   }
   if (state.sharedRoutine) Object.keys(state.sharedRoutine).forEach(k => all.add(k));
   const libraryKeys = Object.values(state.library || {})
-    .filter(r => r && r.id && !r.originDay)
+    .filter(r => isSharedLibraryRoutine(r) && r.id && !r.originDay)
     .sort((a,b) => (a.createdAt || 0) - (b.createdAt || 0) || (a.name || '').localeCompare(b.name || ''))
     .map(r => r.id);
   const ordered = DAY_ORDER.filter(k => all.has(k));
@@ -2996,7 +3008,7 @@ function renderSettings(){
         <i class="ti ti-book-2" style="font-size:18px;color:var(--accent);"></i>
         <div style="flex:1;min-width:0;">
           <div style="font-weight:500;">Biblioteca de Rutinas</div>
-          <div class="muted" style="font-size:12px;margin-top:2px;">${Object.keys(state.library||{}).length} compartidas · ${Object.keys(state.personalLibrary||{}).length} personales <span class="pill" style="font-size:9px;margin-left:4px;">BETA</span></div>
+          <div class="muted" style="font-size:12px;margin-top:2px;">${sharedLibraryCount()} compartidas · ${personalLibraryCount()} personales <span class="pill" style="font-size:9px;margin-left:4px;">BETA</span></div>
         </div>
         <i class="ti ti-chevron-right" style="color:var(--text-dim);"></i>
       </button>
@@ -3048,7 +3060,7 @@ function renderSettings(){
 function renderLibrary(){
   const view = state.libraryView || 'shared';
   const lib = view === 'shared' ? (state.library || {}) : (state.personalLibrary || {});
-  const routines = Object.values(lib).sort((a,b) => {
+  const routines = Object.values(lib).filter(view === 'shared' ? isSharedLibraryRoutine : isPersonalLibraryRoutine).sort((a,b) => {
     const ai = DAY_ORDER.indexOf(a.originDay);
     const bi = DAY_ORDER.indexOf(b.originDay);
     if (ai !== -1 || bi !== -1){
@@ -3099,10 +3111,10 @@ function renderLibrary(){
     </div>
     <div class="tab-bar">
       <button class="${view==='shared'?'active':''}" data-action="libView" data-v="shared">
-        <i class="ti ti-users" style="font-size:13px;vertical-align:-1px;"></i> Del grupo (${Object.keys(state.library||{}).length})
+        <i class="ti ti-users" style="font-size:13px;vertical-align:-1px;"></i> Del grupo (${sharedLibraryCount()})
       </button>
       <button class="${view==='personal'?'active':''}" data-action="libView" data-v="personal">
-        <i class="ti ti-user" style="font-size:13px;vertical-align:-1px;"></i> Mis personales (${Object.keys(state.personalLibrary||{}).length})
+        <i class="ti ti-user" style="font-size:13px;vertical-align:-1px;"></i> Mis personales (${personalLibraryCount()})
       </button>
     </div>
     ${empty}
