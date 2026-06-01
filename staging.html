@@ -4346,6 +4346,46 @@ function readDropRows(row, rowUnilateral, measurement){
     return Number(drop.reps) > 0 && (measurement === 'reps_only' || Number(drop.weight) >= 0);
   });
 }
+function setDraftFromRow(row, measurement){
+  if (!row) return null;
+  if (measurement === 'time'){
+    const minutes = Number(row.querySelector('.time-min-in')?.value || 0);
+    const seconds = Number(row.querySelector('.time-sec-in')?.value || 0);
+    return { durationSeconds: minutes * 60 + seconds };
+  }
+  const rowUnilateral = !!row.querySelector('.set-unilateral')?.checked;
+  let draft;
+  if (rowUnilateral){
+    const left = {
+      reps: row.querySelector('.left-reps-in')?.value || '',
+      weight: measurement === 'reps_only' ? 0 : (row.querySelector('.left-weight-in')?.value || '')
+    };
+    const right = {
+      reps: row.querySelector('.right-reps-in')?.value || '',
+      weight: measurement === 'reps_only' ? 0 : (row.querySelector('.right-weight-in')?.value || '')
+    };
+    draft = { unilateral:true, left, right };
+  } else {
+    draft = {
+      reps: row.querySelector('.reps-in')?.value || '',
+      weight: measurement === 'reps_only' ? 0 : (row.querySelector('.weight-in')?.value || '')
+    };
+  }
+  const drops = readDropRows(row, rowUnilateral, measurement);
+  if (drops.length) draft.drops = drops;
+  return draft;
+}
+function renderCopiedDrops(row, sourceSet, measurement){
+  if (!row || measurement === 'time') return;
+  const drops = sourceSet?.drops || [];
+  setRowDrop(row, drops.length > 0);
+  if (!drops.length) return;
+  const container = row.querySelector('.drops-container');
+  if (!container) return;
+  const isUnilateral = !!row.querySelector('.set-unilateral')?.checked;
+  container.innerHTML = drops.map((drop, i) => renderDropRow(drop, i, isUnilateral, measurement)).join('');
+  container.querySelectorAll('.del-drop').forEach(b => b.addEventListener('click', e => e.target.closest('.drop-row')?.remove()));
+}
 
 async function handle(e){
   const btn = e.currentTarget; const a = btn.dataset.action;
@@ -5375,6 +5415,7 @@ async function handle(e){
     if (rows.length < 2){ toast('No hay sets para copiar'); return; }
     const first = rows[0];
     const measurement = first.dataset.measurement || 'weight_reps';
+    const firstDraft = setDraftFromRow(first, measurement);
     if (measurement === 'time'){
       const min = first.querySelector('.time-min-in')?.value || '';
       const sec = first.querySelector('.time-sec-in')?.value || '';
@@ -5398,6 +5439,7 @@ async function handle(e){
         const dst = row.querySelector('.'+cls);
         if (src && dst && !dst.value) dst.value = src.value;
       });
+      renderCopiedDrops(row, firstDraft, measurement);
     });
     toast('Set 1 copiado a los campos vacíos');
     return;
@@ -5409,20 +5451,7 @@ async function handle(e){
     const prev = c.lastElementChild;
     let seed = null;
     if (prev){
-      const prevUnilateral = !!prev.querySelector('.set-unilateral')?.checked;
-      if (measurement === 'time'){
-        const minutes = Number(prev.querySelector('.time-min-in')?.value || 0);
-        const seconds = Number(prev.querySelector('.time-sec-in')?.value || 0);
-        seed = { durationSeconds: minutes * 60 + seconds };
-      } else if (prevUnilateral){
-        seed = {
-          unilateral:true,
-          left:{ reps: prev.querySelector('.left-reps-in')?.value || '', weight: prev.querySelector('.left-weight-in')?.value || '' },
-          right:{ reps: prev.querySelector('.right-reps-in')?.value || '', weight: prev.querySelector('.right-weight-in')?.value || '' }
-        };
-      } else {
-        seed = { reps: prev.querySelector('.reps-in')?.value || '', weight: prev.querySelector('.weight-in')?.value || '' };
-      }
+      seed = setDraftFromRow(prev, measurement);
     }
     c.insertAdjacentHTML('beforeend', renderSetRow(n - 1, seed, null, seed ? !!seed.unilateral : unilateral, measurement));
     const added = c.lastElementChild;
