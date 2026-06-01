@@ -2304,28 +2304,24 @@ function renderHome(){
   const dayCards = allDays.map((dk, i) => {
     // Filtrar las rutinas de biblioteca standalone según el tab activo
     if (state.library && state.library[dk] && !state.library[dk].originDay){
-      // Library routine compartida: solo en tab "shared"
       if (homeSrc !== 'shared') return '';
     }
     if (state.personalLibrary && state.personalLibrary[dk] && !state.personalLibrary[dk].originDay){
-      // Library routine personal: solo en tab "personal"
       if (homeSrc !== 'personal') return '';
     }
 
-    // Obtener la rutina según el source activo del home
     let r;
-    let hasPersonalForDay = false;
-    if (state.personalRoutines[state.currentUser] && state.personalRoutines[state.currentUser][dk]){
-      hasPersonalForDay = true;
-    }
     if (homeSrc === 'personal'){
-      r = state.personalRoutines[state.currentUser]?.[dk]
-        || (state.personalLibrary && state.personalLibrary[dk])
-        || getRoutineForDay(dk);  // fallback a shared si no hay personal
+      // En Personal: solo mostrar si el usuario tiene algo personal para este día.
+      // No hacer fallback a la rutina compartida.
+      const personalForDay = state.personalRoutines[state.currentUser]?.[dk];
+      const personalLibForDay = state.personalLibrary && state.personalLibrary[dk];
+      if (!personalForDay && !personalLibForDay) return '';
+      r = personalForDay || personalLibForDay;
     } else {
+      // En Compartida: mostrar rutina del grupo (biblioteca migrada o sharedRoutine)
       r = (state.library && state.library[dk])
-        || (state.sharedRoutine && state.sharedRoutine[dk])
-        || getRoutineForDay(dk);
+        || (state.sharedRoutine && state.sharedRoutine[dk]);
     }
     if (!r) return '';
     const totalEx = (r.exercises || []).length;
@@ -2337,9 +2333,7 @@ function renderHome(){
       if (state.currentUser && getEntries(state.currentUser, ek).some(e => e.date >= wss)) logged++;
     }
     const pct = totalEx ? Math.round((logged/totalEx)*100) : 0;
-    // Indicador si estás viendo Personal pero no tienes una propia (fallback a shared)
-    const showFallback = homeSrc === 'personal' && !hasPersonalForDay && !(state.personalLibrary && state.personalLibrary[dk]);
-    const sourceLabel = showFallback ? `<span class="badge" style="background:var(--bg-elev-2);color:var(--text-dim);font-size:10px;padding:2px 8px;font-family:var(--font-mono);">VER COMP.</span>` : '';
+    const sourceLabel = '';
     return `<button data-action="openDay" data-day="${dk}" class="day-card fade-in" style="animation-delay:${i*60}ms;">
       <div class="row" style="position:relative;z-index:1;">
         <div class="icon-tile">
@@ -2359,6 +2353,17 @@ function renderHome(){
       </div>
     </button>`;
   }).join('');
+
+  // Empty state cuando estamos en Personal y no hay nada para mostrar
+  const dayCardsEmpty = !dayCards.trim() && homeSrc === 'personal' && state.currentUser ? `
+    <div class="card fade-in" style="padding:40px 20px;text-align:center;">
+      <i class="ti ti-user-plus" style="font-size:36px;color:var(--text-dim);display:block;margin-bottom:8px;"></i>
+      <div style="font-weight:500;margin-bottom:4px;">No tienes rutinas personales aún</div>
+      <div class="muted" style="font-size:13px;margin-bottom:14px;">Crea una rutina personal para verla aquí sin afectar al grupo.</div>
+      <button class="primary" data-action="goLibrary" style="padding:11px 18px;font-weight:600;">
+        <i class="ti ti-plus" style="font-size:14px;vertical-align:-2px;"></i> Ir a Mi Biblioteca
+      </button>
+    </div>` : '';
 
   const partnersBlock = others.length ? `
     <div style="margin-top:28px;">
@@ -2428,6 +2433,7 @@ function renderHome(){
     ${globalMuscleOverview}
     ${sourceTabs}
     ${dayCards}
+    ${dayCardsEmpty}
     ${partnersBlock}`;
   attach();
   if (state.currentUser && shouldShowTour()){
