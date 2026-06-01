@@ -579,6 +579,7 @@ const state = {
   exQuery: '',
   exFilters: { category: '', tier: '', group: '', level: '' },
   exSelectedId: null,
+  exAddToDay: null,  // si vienes de un día → muestra botón "Agregar a [día]"
   homeExQuery: '',  // búsqueda rápida en el home
   // ====== Library (Fase 1) ======
   library: {},            // { routineId: {id, name, focus, icon, exercises[], scope:'shared', updatedAt} }
@@ -1756,6 +1757,12 @@ function libraryRoutineAsDay(routine){
     scope: routine.scope || 'shared'
   };
 }
+function getDayLabel(dayKey){
+  if (!dayKey) return '';
+  const r = getRoutineForDay(dayKey);
+  if (r && r.label) return r.label;
+  return dayKey.charAt(0).toUpperCase() + dayKey.slice(1);
+}
 function getRoutineForDay(dayKey){
   if (state.personalLibrary && state.personalLibrary[dayKey]) return libraryRoutineAsDay(state.personalLibrary[dayKey]);
   if (state.library && state.library[dayKey]) return libraryRoutineAsDay(state.library[dayKey]);
@@ -1904,7 +1911,118 @@ function openModal(html, onAttach){
 }
 function closeModal(){ modalRoot.innerHTML = ''; state.modalOpen = null; }
 
-// ====== EXPLORER FILTERS MODAL (Sesión 1) ======
+// ====== SEARCH MODAL (Sesión 1) — quick search with filters from home/day ======
+function openSearchModal(opts = {}){
+  const fromDay = opts.fromDay || null; // si viene de una vista de día
+  let query = state.homeExQuery || '';
+  let cat = '', tier = '', level = '', group = '';
+  let showFilters = false;
+
+  function build(){
+    const results = searchExercises(query, { category: cat, tier, level, group }).slice(0, 50);
+    const tierPills = ['','S','A','B','C'].map(t => `<button data-ft="${t}" class="small ${tier===t?'primary':''}" style="font-size:11px;padding:4px 10px;">${t?'Tier '+t:'Cualquier tier'}</button>`).join('');
+    const catPills = [['','Todo'],['fuerza','Fuerza'],['cardio','Cardio'],['movilidad','Movilidad']].map(([v,l]) => `<button data-fc="${v}" class="small ${cat===v?'primary':''}" style="font-size:11px;padding:4px 10px;">${l}</button>`).join('');
+    const levelPills = [['','Todos'],['principiante','Principiante'],['intermedio','Intermedio'],['avanzado','Avanzado']].map(([v,l]) => `<button data-fl="${v}" class="small ${level===v?'primary':''}" style="font-size:11px;padding:4px 10px;">${l}</button>`).join('');
+
+    const groupOptions = [
+      ['', 'Todos los grupos'],['pecho','Pecho'],['espalda','Espalda'],['hombros','Hombros'],
+      ['cuádriceps/glúteos','Cuádriceps/Glúteos'],['femorales/isquiosurales','Femorales'],
+      ['glúteos','Glúteos'],['bíceps/brazo','Bíceps'],['tríceps/brazo','Tríceps'],
+      ['core','Core'],['pantorrillas/aductores/antebrazo','Pantorrillas / aductores'],
+      ['cardio','Cardio'],['movilidad/recuperación','Movilidad'],
+    ];
+
+    const filtersBlock = showFilters ? `
+      <div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:10px;">
+        <div class="section-label" style="margin-bottom:6px;">Categoría</div>
+        <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px;">${catPills}</div>
+        <div class="section-label" style="margin-bottom:6px;">Tier</div>
+        <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px;">${tierPills}</div>
+        <div class="section-label" style="margin-bottom:6px;">Nivel</div>
+        <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px;">${levelPills}</div>
+        <div class="section-label" style="margin-bottom:6px;">Grupo muscular</div>
+        <select id="smGroup" style="width:100%;margin-bottom:6px;">
+          ${groupOptions.map(([v,l]) => `<option value="${esc(v)}" ${group===v?'selected':''}>${esc(l)}</option>`).join('')}
+        </select>
+      </div>` : '';
+
+    const cards = results.length ? results.map(ex => {
+      const tinfo = TIER_INFO[ex.t] || TIER_INFO.B;
+      const muscles = Object.entries(ex.sv||{}).sort((a,b)=>b[1]-a[1]).slice(0,2).map(([k])=>MUSCLES[k]?.label||k).join(' · ');
+      return `<button data-sm-open="${esc(ex.id)}" style="width:100%;text-align:left;padding:10px;margin-bottom:5px;background:var(--bg-elev-2);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;gap:10px;">
+        <div style="width:30px;height:30px;border-radius:8px;background:${tinfo.color}22;color:${tinfo.color};display:flex;align-items:center;justify-content:center;font-weight:700;font-family:var(--font-mono);font-size:11px;flex-shrink:0;">${ex.t}</div>
+        <div style="min-width:0;flex:1;">
+          <div style="font-weight:500;font-size:13px;">${esc(ex.n)}</div>
+          <div class="muted" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px;">${esc(muscles || ex.g || '')}</div>
+        </div>
+        <div class="mono" style="font-size:11px;color:var(--text-dim);">${ex.s||'—'}</div>
+      </button>`;
+    }).join('') : `<div class="muted" style="text-align:center;padding:24px;font-size:13px;">${query.trim() ? 'Sin resultados. Probá con otro término.' : 'Empezá a escribir para buscar...'}</div>`;
+
+    modalRoot.innerHTML = `<div class="modal-backdrop" id="smb">
+      <div class="modal" onclick="event.stopPropagation()" style="max-width:560px;max-height:90vh;display:flex;flex-direction:column;">
+        <div class="row" style="gap:8px;margin-bottom:10px;">
+          <h2 style="flex:1;">Buscar ejercicios</h2>
+          <button id="smClose" aria-label="Cerrar" style="padding:6px 10px;font-size:18px;line-height:1;background:transparent;border:none;">×</button>
+        </div>
+        ${fromDay ? `<div class="banner banner-info" style="margin-bottom:10px;padding:8px 10px;font-size:12px;"><i class="ti ti-info-circle"></i><div>Vista detalle te permitirá agregar al día <strong>${esc(fromDay)}</strong>.</div></div>` : ''}
+        <div style="position:relative;margin-bottom:8px;">
+          <i class="ti ti-search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-dim);font-size:15px;pointer-events:none;"></i>
+          <input id="smInput" type="text" placeholder="Nombre, músculo, grupo..." value="${esc(query)}" style="width:100%;padding:11px 12px 11px 36px;" autofocus />
+        </div>
+        <div class="row" style="margin-bottom:10px;gap:8px;">
+          <button id="smFilterToggle" class="small ${showFilters?'primary':''}" style="font-size:11px;padding:4px 10px;">
+            <i class="ti ti-adjustments-horizontal" style="font-size:12px;vertical-align:-1px;"></i> ${showFilters ? 'Ocultar filtros' : 'Filtros'}
+          </button>
+          ${cat||tier||level||group ? `<button id="smClearFilters" class="small" style="font-size:11px;padding:4px 10px;color:var(--warning);">Limpiar filtros</button>` : ''}
+          <div class="spacer"></div>
+          <span class="muted" style="font-size:11px;">${results.length} de ${EXERCISE_DB.length}</span>
+        </div>
+        ${filtersBlock}
+        <div style="flex:1;overflow-y:auto;min-height:200px;max-height:55vh;">
+          ${cards}
+        </div>
+        <div class="muted" style="font-size:11px;text-align:center;margin-top:10px;">
+          <a id="smHelp" style="color:var(--accent);cursor:pointer;text-decoration:underline;">¿Cómo funciona el rating?</a>
+        </div>
+      </div>
+    </div>`;
+
+    document.getElementById('smb').addEventListener('click', e => { if (e.target.id === 'smb') closeModal(); });
+    document.getElementById('smClose').addEventListener('click', closeModal);
+    document.getElementById('smFilterToggle').addEventListener('click', () => { showFilters = !showFilters; build(); });
+    document.getElementById('smHelp').addEventListener('click', () => { closeModal(); state.view = 'howRatingWorks'; render(); });
+
+    const clearBtn = document.getElementById('smClearFilters');
+    if (clearBtn) clearBtn.addEventListener('click', () => { cat = tier = level = group = ''; build(); });
+
+    let timer;
+    const inp = document.getElementById('smInput');
+    inp.addEventListener('input', e => {
+      clearTimeout(timer);
+      timer = setTimeout(() => { query = e.target.value; state.homeExQuery = query; build(); }, 200);
+    });
+
+    document.querySelectorAll('[data-fc]').forEach(b => b.addEventListener('click', () => { cat = (cat === b.dataset.fc) ? '' : b.dataset.fc; build(); }));
+    document.querySelectorAll('[data-ft]').forEach(b => b.addEventListener('click', () => { tier = (tier === b.dataset.ft) ? '' : b.dataset.ft; build(); }));
+    document.querySelectorAll('[data-fl]').forEach(b => b.addEventListener('click', () => { level = (level === b.dataset.fl) ? '' : b.dataset.fl; build(); }));
+    const groupSel = document.getElementById('smGroup');
+    if (groupSel) groupSel.addEventListener('change', e => { group = e.target.value; build(); });
+
+    document.querySelectorAll('[data-sm-open]').forEach(b => {
+      b.addEventListener('click', () => {
+        state.exSelectedId = b.dataset.smOpen;
+        if (fromDay) state.exAddToDay = fromDay;  // marca el día para mostrar botón "Agregar"
+        closeModal();
+        state.view = 'exerciseDetail';
+        render();
+      });
+    });
+  }
+  build();
+}
+
+
 function openExplorerFilters(){
   const f = state.exFilters || {};
   let cat = f.category || '', tier = f.tier || '', level = f.level || '', group = f.group || '';
@@ -2669,10 +2787,11 @@ function renderHome(){
       const personalForDay = state.personalRoutines[state.currentUser]?.[dk];
       const personalLibForDay = state.personalLibrary && state.personalLibrary[dk];
       if (!personalForDay && !personalLibForDay) return '';
-      r = personalForDay || personalLibForDay;
+      r = personalForDay || (personalLibForDay ? libraryRoutineAsDay(personalLibForDay) : null);
     } else {
       // En Compartida: mostrar rutina del grupo (biblioteca migrada o sharedRoutine)
-      r = (state.library && state.library[dk])
+      const libForDay = state.library && state.library[dk];
+      r = (libForDay ? libraryRoutineAsDay(libForDay) : null)
         || (state.sharedRoutine && state.sharedRoutine[dk]);
     }
     if (!r) return '';
@@ -2774,20 +2893,12 @@ function renderHome(){
       </button>` : `<button data-action="switchUser" style="font-size:13px;">Iniciar Sesión</button>`}
     </div>
 
-    <div class="fade-in" style="display:flex;gap:8px;margin-bottom:14px;animation-delay:60ms;">
-      <div style="flex:1;position:relative;">
-        <i class="ti ti-search" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text-dim);font-size:16px;pointer-events:none;"></i>
-        <input id="homeExSearch" type="text" placeholder="Buscar ejercicios..." value="${esc(state.homeExQuery||'')}" style="width:100%;padding:12px 14px 12px 40px;background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;font-size:14px;" />
-      </div>
-      <button data-action="openSearchFilters" aria-label="Filtros" style="padding:12px 14px;background:var(--bg-elev);border:1px solid var(--border);flex-shrink:0;">
-        <i class="ti ti-adjustments-horizontal" style="font-size:17px;color:var(--accent);"></i>
-      </button>
-    </div>
-    <div id="homeExResults"></div>
-
     <div class="fade-in" style="display:flex;gap:8px;margin-bottom:20px;animation-delay:80ms;">
       <button data-action="goCompare" style="flex:1;padding:14px;background:var(--bg-elev);display:flex;align-items:center;justify-content:center;gap:8px;font-weight:500;border:1px solid var(--border);">
         <i class="ti ti-chart-line" style="font-size:17px;color:var(--accent);"></i> Ver Progreso
+      </button>
+      <button data-action="openSearchModal" aria-label="Buscar ejercicios" style="padding:14px;background:var(--bg-elev);border:1px solid var(--border);">
+        <i class="ti ti-search" style="font-size:17px;color:var(--accent);"></i>
       </button>
       <button data-action="goSettings" aria-label="Configuración" style="padding:14px;background:var(--bg-elev);border:1px solid var(--border);">
         <i class="ti ti-settings" style="font-size:17px;color:var(--text-muted);"></i>
@@ -2800,52 +2911,6 @@ function renderHome(){
     ${dayCardsEmpty}
     ${partnersBlock}`;
   attach();
-
-  // ====== Wire home search (Sesión 1) ======
-  const homeSearchInput = document.getElementById('homeExSearch');
-  const homeResultsEl = document.getElementById('homeExResults');
-  if (homeSearchInput && homeResultsEl){
-    let timer;
-    function renderHomeResults(){
-      const q = state.homeExQuery || '';
-      if (!q.trim()){
-        homeResultsEl.innerHTML = '';
-        return;
-      }
-      const results = searchExercises(q, {}).slice(0, 3);
-      if (!results.length){
-        homeResultsEl.innerHTML = `<div class="card" style="margin-bottom:14px;padding:14px;text-align:center;color:var(--text-muted);font-size:13px;">
-          Sin resultados para "${esc(q)}". <a data-action="goExerciseExplorer" style="color:var(--accent);cursor:pointer;text-decoration:underline;">Ver todos los ejercicios →</a>
-        </div>`;
-      } else {
-        homeResultsEl.innerHTML = `<div class="card fade-in" style="margin-bottom:14px;padding:8px;">
-          ${results.map(ex => {
-            const tinfo = TIER_INFO[ex.t] || TIER_INFO.B;
-            const muscles = Object.entries(ex.sv||{}).sort((a,b)=>b[1]-a[1]).slice(0,2).map(([k])=>MUSCLES[k]?.label||k).join(' · ');
-            return `<button data-action="exOpen" data-id="${esc(ex.id)}" style="width:100%;text-align:left;padding:9px 10px;margin-bottom:4px;background:transparent;border:none;border-radius:8px;display:flex;align-items:center;gap:10px;">
-              <div style="width:30px;height:30px;border-radius:8px;background:${tinfo.color}22;color:${tinfo.color};display:flex;align-items:center;justify-content:center;font-weight:700;font-family:var(--font-mono);font-size:11px;flex-shrink:0;">${ex.t}</div>
-              <div style="min-width:0;flex:1;">
-                <div style="font-weight:500;font-size:13px;">${esc(ex.n)}</div>
-                <div class="muted" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px;">${esc(muscles || ex.g || '')}</div>
-              </div>
-              <div class="mono" style="font-size:11px;color:var(--text-dim);">${ex.s||'—'}</div>
-            </button>`;
-          }).join('')}
-          <button data-action="goExerciseExplorerWithQuery" style="width:100%;padding:10px;margin-top:4px;background:transparent;border:none;color:var(--accent);font-weight:500;font-size:13px;border-top:1px solid var(--border);border-radius:0;">
-            Ver todos los resultados →
-          </button>
-        </div>`;
-      }
-      // Re-attach handlers for newly rendered buttons
-      homeResultsEl.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle));
-    }
-    renderHomeResults(); // initial render in case state has a query
-    homeSearchInput.addEventListener('input', e => {
-      state.homeExQuery = e.target.value;
-      clearTimeout(timer);
-      timer = setTimeout(renderHomeResults, 200);
-    });
-  }
 
   if (state.currentUser && shouldShowTour()){
     setTimeout(() => startHomeTour(), 500);
@@ -2907,9 +2972,14 @@ function renderDay(){
       <i class="ti ti-edit" style="font-size:15px;color:var(--accent);"></i> ${isLibraryRoutine ? 'Editar Rutina De Biblioteca' : `Editar ${src==='personal' ? 'Mi Rutina' : 'Rutina Compartida'}`}
     </button>` : '';
   const routineMapBtn = `
-    <button data-action="toggleRoutineMuscles" style="margin-bottom:12px;padding:11px;width:100%;background:${state.showRoutineMuscles?'var(--accent-bg-strong)':'var(--bg-elev)'};color:${state.showRoutineMuscles?'var(--accent)':'var(--text)'};border:1px solid ${state.showRoutineMuscles?'var(--accent-border)':'var(--border)'};display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:500;">
-      <i class="ti ti-body-scan" style="font-size:15px;"></i> ${state.showRoutineMuscles ? 'Ocultar Mapa Muscular' : 'Mapa Muscular De La Rutina'}
-    </button>`;
+    <div class="row" style="gap:8px;margin-bottom:12px;">
+      <button data-action="toggleRoutineMuscles" style="flex:1;padding:11px;background:${state.showRoutineMuscles?'var(--accent-bg-strong)':'var(--bg-elev)'};color:${state.showRoutineMuscles?'var(--accent)':'var(--text)'};border:1px solid ${state.showRoutineMuscles?'var(--accent-border)':'var(--border)'};display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:500;">
+        <i class="ti ti-body-scan" style="font-size:15px;"></i> ${state.showRoutineMuscles ? 'Ocultar Mapa Muscular' : 'Mapa Muscular De La Rutina'}
+      </button>
+      <button data-action="openSearchModalForDay" aria-label="Buscar ejercicios" title="Buscar ejercicios para este día" style="padding:11px 13px;background:var(--bg-elev);border:1px solid var(--border);">
+        <i class="ti ti-search" style="font-size:15px;color:var(--accent);"></i>
+      </button>
+    </div>`;
   const routineOverview = state.showRoutineMuscles ? routineMuscleOverview(r, {
     title: 'Mapa Muscular Del Día',
     subtitle: 'Resumen de los ejercicios de este día. Sirve para ver qué zonas domina esta sesión.',
@@ -3608,6 +3678,11 @@ function renderExerciseDetail(){
       <div class="section-label" style="margin-bottom:10px;">Músculos trabajados</div>
       ${muscleBars || '<div class="muted" style="font-size:13px;">Sin datos de músculos.</div>'}
     </div>
+    ${state.exAddToDay ? `
+      <button class="primary" data-action="addExerciseToDay" style="width:100%;padding:14px;margin-bottom:10px;font-weight:600;">
+        <i class="ti ti-plus" style="font-size:15px;vertical-align:-2px;"></i> Agregar a ${esc(getDayLabel(state.exAddToDay))}
+      </button>
+    ` : ''}
     <a href="${videoUrl}" target="_blank" rel="noopener" style="display:block;text-decoration:none;">
       <button style="width:100%;padding:12px;background:var(--bg-elev);border:1px solid var(--border);">
         <i class="ti ti-brand-youtube" style="color:#ff0033;font-size:16px;vertical-align:-2px;"></i>
@@ -4666,12 +4741,60 @@ async function handle(e){
   if (a === 'goLibrary'){ state.view = 'library'; state.libraryView = state.libraryView || 'shared'; render(); return; }
 
   // ====== EXERCISE EXPLORER (Sesión 1) ======
-  if (a === 'goExerciseExplorer'){ closeModal(); state.view = 'exerciseExplorer'; render(); return; }
+  if (a === 'goExerciseExplorer'){ closeModal(); state.exAddToDay = null; state.view = 'exerciseExplorer'; render(); return; }
   if (a === 'goExerciseExplorerWithQuery'){
     closeModal();
     state.exQuery = state.homeExQuery || '';
+    state.exFilters = { category: '', tier: '', group: '', level: '' };
     state.view = 'exerciseExplorer';
     render(); return;
+  }
+  if (a === 'openSearchModal'){ openSearchModal({}); return; }
+  if (a === 'openSearchModalForDay'){ openSearchModal({ fromDay: state.currentDay }); return; }
+  if (a === 'addExerciseToDay'){
+    const dk = state.exAddToDay;
+    const dbEx = EXERCISE_DB.find(e => e.id === state.exSelectedId);
+    if (!dk || !dbEx){ toast('No se pudo agregar'); return; }
+    const newEx = dbToAppExercise(dbEx);
+    // Determine where to save: library routine, sharedRoutine, or personalRoutine
+    const personalLibForDay = state.personalLibrary && state.personalLibrary[dk];
+    const sharedLibForDay = state.library && state.library[dk];
+    try {
+      if (personalLibForDay){
+        personalLibForDay.exercises = personalLibForDay.exercises || [];
+        personalLibForDay.exercises.push(newEx);
+        await savePersonalLibrary(state.currentUser, state.personalLibrary);
+      } else if (sharedLibForDay){
+        if (!isAdmin()){ toast('Solo admins pueden editar la rutina compartida'); return; }
+        sharedLibForDay.exercises = sharedLibForDay.exercises || [];
+        sharedLibForDay.exercises.push(newEx);
+        await saveLibraryRoutine(sharedLibForDay);
+      } else {
+        // Old format: sharedRoutine or personalRoutine
+        const src = state.routineSource[dk] || 'shared';
+        if (src === 'personal'){
+          const pr = state.personalRoutines[state.currentUser] || {};
+          if (!pr[dk]) pr[dk] = { label: getDayLabel(dk), focus:'', icon:'ti-barbell', exercises: [] };
+          pr[dk].exercises.push(newEx);
+          state.personalRoutines[state.currentUser] = pr;
+          await savePersonalRoutine(state.currentUser, pr);
+        } else {
+          if (!isAdmin()){ toast('Solo admins pueden editar la rutina compartida'); return; }
+          if (!state.sharedRoutine) state.sharedRoutine = {};
+          if (!state.sharedRoutine[dk]) state.sharedRoutine[dk] = { label: getDayLabel(dk), focus:'', icon:'ti-barbell', exercises: [] };
+          state.sharedRoutine[dk].exercises.push(newEx);
+          await saveSharedRoutine(state.sharedRoutine);
+        }
+      }
+      toast(`Agregado a ${getDayLabel(dk)}`, 'success');
+      state.exAddToDay = null;
+      state.view = 'day';
+      state.currentDay = dk;
+      render();
+    } catch (e){
+      console.error(e); toast('Error al agregar');
+    }
+    return;
   }
   if (a === 'openSearchFilters'){
     openExplorerFilters();
