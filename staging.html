@@ -2918,6 +2918,12 @@ function renderHome(){
     }
     if (!r) return '';
     const totalEx = (r.exercises || []).length;
+    const muscleSummary = [...new Set((r.exercises || []).flatMap(ex => ex.primary || []))]
+      .slice(0, 3)
+      .map(id => MUSCLES[id]?.label)
+      .filter(Boolean)
+      .join(' · ');
+    const detailText = r.focus || muscleSummary || `${totalEx} ejercicio${totalEx===1?'':'s'}`;
     let logged = 0;
     const ws = new Date(); ws.setDate(ws.getDate()-((ws.getDay()+6)%7));
     const wss = dateKey(ws);
@@ -2934,7 +2940,7 @@ function renderHome(){
         </div>
         <div style="min-width:0;flex:1;">
           <div style="font-size:15px;font-weight:600;display:flex;align-items:center;gap:6px;">${esc(r.label)} ${sourceLabel}</div>
-          <div class="muted" style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">${esc(r.focus)}</div>
+          <div class="muted" style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">${esc(detailText)}</div>
         </div>
         ${state.currentUser ? `<div style="text-align:right;">
           <div class="mono" style="font-size:11px;color:var(--text-dim);letter-spacing:0.02em;">${logged}/${totalEx}</div>
@@ -5638,6 +5644,5 @@ init();
 </script>
 </body>
 </html>
-
 
 
