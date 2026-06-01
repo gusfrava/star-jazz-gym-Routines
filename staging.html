@@ -332,15 +332,20 @@ const MUSCLE_GROUPS = {
   espalda: { label: 'Espalda', svg: ['lats','midBack','lowerBack'], aliases: ['espaldas','back'] },
   pecho:   { label: 'Pecho', svg: ['chest'], aliases: ['chest','pectoral','pectorales'] },
   hombros: { label: 'Hombros', svg: ['shouldersF','shouldersB'], aliases: ['hombro','shoulder','shoulders','delt','delts','deltoid','deltoides'] },
-  brazo:   { label: 'Brazo', svg: ['bicepsF','triceps','forearmsF','forearmsB'], aliases: ['brazos','arm','arms','arms'] },
+  brazo:   { label: 'Brazo', svg: ['bicepsF','triceps','forearmsF','forearmsB'], aliases: ['brazos','arm','arms'] },
   biceps:  { label: 'Bíceps', svg: ['bicepsF'], aliases: ['bicep','biceps','bíceps'] },
   triceps: { label: 'Tríceps', svg: ['triceps'], aliases: ['tricep','triceps','tríceps'] },
   abs:     { label: 'Abdomen', svg: ['abs','obliques'], aliases: ['abdomen','abdominales','core','six pack','sixpack','oblicuos','obliques'] },
   cuadriceps: { label: 'Cuádriceps', svg: ['quads'], aliases: ['quad','quads','cuadricep','cuadriceps','cuádriceps'] },
   glutes:  { label: 'Glúteos', svg: ['glutes'], aliases: ['gluteo','glúteos','gluteos','butt','glutes','glute'] },
   femorales: { label: 'Femorales', svg: ['hamstrings'], aliases: ['hamstring','hamstrings','femoral','isquiosurales','isquios'] },
-  pantorrilla: { label: 'Pantorrillas', svg: ['calves'], aliases: ['calf','calves','pantorrilla','pantorrillas','soleo','sóleo'] },
+  pantorrilla: { label: 'Pantorrillas', svg: ['calves'], aliases: ['calf','calves','pantorrilla','pantorrillas','soleo','sóleo','gemelos','gastrocnemio'] },
   lats:    { label: 'Dorsales', svg: ['lats'], aliases: ['dorsal','dorsales','lat','lats','dorsal ancho'] },
+  abductores: { label: 'Abductores', svg: ['abductors'], aliases: ['abductor','abductores','abduction','abduct'] },
+  aductores: { label: 'Aductores', svg: ['adductors'], aliases: ['aductor','aductores','adductor','adductors','adduction','adduct'] },
+  antebrazos: { label: 'Antebrazos', svg: ['forearmsF','forearmsB'], aliases: ['antebrazo','forearm','forearms','grip','agarre'] },
+  trapecio: { label: 'Trapecio', svg: ['midBack'], aliases: ['trapecios','trapezius','trap','traps'] },
+  lumbar: { label: 'Lumbar', svg: ['lowerBack'], aliases: ['lumbares','espalda baja','lower back','lowerback','erectores','erector'] },
   cardio:  { label: 'Cardio', svg: [], aliases: ['cardio','aerobic','aerobico','aerobics','condicionamiento'] }
 };
 
@@ -364,56 +369,80 @@ function normalizeText(s){
 // Encuentra grupo muscular por texto (soporta sinónimos)
 function findMuscleGroup(query){
   const n = normalizeText(query);
+  if (!n) return null;
   for (const [key, info] of Object.entries(MUSCLE_GROUPS)){
     const all = [key, info.label, ...info.aliases].map(normalizeText);
-    if (all.includes(n) || all.some(a => a.includes(n) || n.includes(a))) return { key, ...info };
+    // exact match
+    if (all.includes(n)) return { key, ...info };
+    // partial match (only for queries >= 4 chars to avoid false positives like "lat" → lats)
+    if (n.length >= 4){
+      if (all.some(a => a.length >= 4 && (a.includes(n) || n.includes(a)))) return { key, ...info };
+    }
   }
   return null;
 }
 
-// Buscar ejercicios por texto libre (nombre, músculo, grupo)
+// Buscar ejercicios por texto libre. Revisa TODO: nombre ES, nombre EN, grupo,
+// músculos (CSV + SVG), categoría. Combina match de nombre con match de grupo muscular.
 function searchExercises(query, filters = {}){
   const n = normalizeText(query);
   let results = EXERCISE_DB;
-  
+
   // Filtros estructurados
   if (filters.category) results = results.filter(e => e.c === filters.category[0]);
   if (filters.tier) results = results.filter(e => e.t === filters.tier);
   if (filters.group) results = results.filter(e => normalizeText(e.g||'').includes(normalizeText(filters.group)));
   if (filters.level && filters.level !== 'todos') results = results.filter(e => (e.lv||'').startsWith(filters.level[0]));
-  
+
   if (!n) return results.sort((a,b) => (b.s||0) - (a.s||0));
-  
-  // Detect if query is a muscle group
+
+  // Detectar si el query es un grupo muscular conocido (piernas, espalda, abductores, etc.)
   const mg = findMuscleGroup(n);
-  if (mg && mg.svg.length){
-    // Filter by SVG weight in any of group muscles
-    results = results.filter(e => {
-      if (!e.sv) return false;
-      return mg.svg.some(svg => (e.sv[svg]||0) >= 40);
-    });
-    // Sort by max score in group muscles
-    results.sort((a,b) => {
-      const sa = Math.max(...mg.svg.map(s => (a.sv && a.sv[s])||0));
-      const sb = Math.max(...mg.svg.map(s => (b.sv && b.sv[s])||0));
-      return sb - sa;
-    });
-    return results;
-  }
-  
-  // Text search on name (n, en)
+
+  // Buscar en todos los campos posibles y dar score combinado
   const scored = results.map(e => {
     const nameN = normalizeText(e.n);
     const enN = normalizeText(e.en||'');
     const groupN = normalizeText(e.g||'');
+    const patternN = normalizeText(e.p||'');
+    const eqN = normalizeText(e.eq||'');
     let score = 0;
-    if (nameN === n) score = 1000;
-    else if (nameN.startsWith(n)) score = 500;
-    else if (nameN.includes(n)) score = 200;
-    else if (enN.includes(n)) score = 150;
-    else if (groupN.includes(n)) score = 100;
+
+    // Match por nombre (prioridad alta)
+    if (nameN === n) score += 1000;
+    else if (nameN.startsWith(n)) score += 500;
+    else if (nameN.includes(n)) score += 200;
+    if (enN.includes(n)) score += Math.max(score, 150) - score + 150;
+
+    // Match por grupo / patrón / equipo
+    if (groupN.includes(n)) score += 100;
+    if (patternN.includes(n)) score += 60;
+    if (eqN.includes(n)) score += 40;
+
+    // Match contra los muscle IDs del CSV (cw) — por ejemplo "biceps_femoral", "gluteo_mayor"
+    if (e.cw){
+      for (const muscleId of Object.keys(e.cw)){
+        const muscleNorm = normalizeText(muscleId.replace(/_/g, ' '));
+        if (muscleNorm.includes(n) || n.includes(muscleNorm)){
+          // Score proporcional al peso del músculo en ese ejercicio
+          const weight = e.cw[muscleId] || 0;
+          score += Math.max(score, weight); // tope al weight
+          break;
+        }
+      }
+    }
+
+    // Match por grupo muscular detectado (piernas, abductores, etc.)
+    if (mg && mg.svg.length && e.sv){
+      const maxScore = Math.max(...mg.svg.map(s => e.sv[s] || 0));
+      if (maxScore >= 40){
+        score += maxScore;
+      }
+    }
+
     return { ex: e, score };
   }).filter(r => r.score > 0);
+
   scored.sort((a,b) => b.score - a.score || (b.ex.s||0) - (a.ex.s||0));
   return scored.map(r => r.ex);
 }
