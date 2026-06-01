@@ -275,6 +275,7 @@ const firebaseConfig = {
 const DEFAULT_GROUP = "jazmin-y-buddy-2026";
 const LS_GROUP = 'gym_current_group_v3';
 const LS_GROUPS = 'gym_joined_groups_v3';
+const LS_HOME_SCOPE = 'gym_home_routine_scope_v1';
 // ============================================================
 // ADMIN — solo este nombre (sin distinguir mayúsculas) puede eliminar usuarios
 // y cambiar la contraseña de invitación.
@@ -415,7 +416,6 @@ const modalRoot = document.getElementById('modalRoot');
 const LS_ME = 'gym_me_v2';
 const LS_AUTH = 'gym_auth_v2';
 const LS_SOURCE = 'gym_routinesource_v2'; // per-day choice (per device)
-const LS_HOME_SCOPE = 'gym_home_routine_scope_v1';
 
 // ====== GROUP HELPERS ======
 function groupPath(){ return state.currentGroup || DEFAULT_GROUP; }
