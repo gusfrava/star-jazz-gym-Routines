@@ -1561,7 +1561,9 @@ function renderSetRow(i, set = null, lastSet = null, unilateralMode = false){
   </div>`;
 }
 
-// Returns the routine the current user is viewing for a given day or library routine.
+// Returns the routine the current user is viewing for an assigned day.
+// Library routines are templates only; they should not appear in Mi Rutina
+// until a later explicit assign/copy action adds them to a day routine.
 function isLibraryRoutineKey(key){
   return !!((state.library && isSharedLibraryRoutine(state.library[key])) || (state.personalLibrary && isPersonalLibraryRoutine(state.personalLibrary[key])));
 }
@@ -1591,21 +1593,17 @@ function libraryRoutineAsDay(routine){
 function getRoutineForDay(dayKey){
   const scope = getHomeRoutineScope();
   if (scope === 'personal'){
-    if (state.personalLibrary && isPersonalLibraryRoutine(state.personalLibrary[dayKey])) return libraryRoutineAsDay(state.personalLibrary[dayKey]);
     const pr = state.personalRoutines[state.currentUser];
     if (pr && pr[dayKey]) return pr[dayKey];
     return null;
   }
-  if (state.library && isSharedLibraryRoutine(state.library[dayKey])) return libraryRoutineAsDay(state.library[dayKey]);
   return (state.sharedRoutine && state.sharedRoutine[dayKey]) || null;
 }
 function getCurrentSource(dayKey){
   const scope = getHomeRoutineScope();
   if (scope === 'personal'){
-    if (state.personalLibrary && isPersonalLibraryRoutine(state.personalLibrary[dayKey])) return 'personalLibrary';
     return 'personal';
   }
-  if (state.library && isSharedLibraryRoutine(state.library[dayKey])) return 'library';
   return 'shared';
 }
 function setCurrentSource(dayKey, src){
@@ -1621,22 +1619,14 @@ function getAllDayKeys(){
     all.clear();
     const pr = state.personalRoutines[state.currentUser];
     if (pr) Object.keys(pr).forEach(k => all.add(k));
-    const personalLibraryKeys = Object.values(state.personalLibrary || {})
-      .filter(r => isPersonalLibraryRoutine(r) && r.id && !r.originDay)
-      .sort((a,b) => (a.createdAt || 0) - (b.createdAt || 0) || (a.name || '').localeCompare(b.name || ''))
-      .map(r => r.id);
     const orderedPersonal = DAY_ORDER.filter(k => all.has(k));
     const extrasPersonal = [...all].filter(k => !DAY_ORDER.includes(k));
-    return [...orderedPersonal, ...extrasPersonal, ...personalLibraryKeys.filter(k => !all.has(k))];
+    return [...orderedPersonal, ...extrasPersonal];
   }
   if (state.sharedRoutine) Object.keys(state.sharedRoutine).forEach(k => all.add(k));
-  const libraryKeys = Object.values(state.library || {})
-    .filter(r => isSharedLibraryRoutine(r) && r.id && !r.originDay)
-    .sort((a,b) => (a.createdAt || 0) - (b.createdAt || 0) || (a.name || '').localeCompare(b.name || ''))
-    .map(r => r.id);
   const ordered = DAY_ORDER.filter(k => all.has(k));
   const extras = [...all].filter(k => !DAY_ORDER.includes(k));
-  return [...ordered, ...extras, ...libraryKeys.filter(k => !all.has(k))];
+  return [...ordered, ...extras];
 }
 
 // ====== BODY DIAGRAM SVG ======
