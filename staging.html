@@ -1117,12 +1117,6 @@ async function loadGroupState(groupId = groupPath()){
   if (Object.keys(state.library).length === 0 && state.sharedRoutine){
     await migrateSharedRoutineToLibrary();
   }
-  // Cargar biblioteca personal si hay usuario actual
-  if (state.currentUser){
-    state.personalLibrary = await loadPersonalLibrary(state.currentUser, groupId);
-  } else {
-    state.personalLibrary = {};
-  }
 }
 function chooseInitialViewForGroup(){
   const meId = loadMe();
@@ -1167,6 +1161,12 @@ async function reloadGroup(options = {}){
     saveJoinedGroups(state.joinedGroups);
   }
   chooseInitialViewForGroup();
+  if (state.currentUser){
+    try { state.personalLibrary = await loadPersonalLibrary(state.currentUser); }
+    catch(e){ console.error(e); state.personalLibrary = {}; }
+  } else {
+    state.personalLibrary = {};
+  }
   subscribeRealtime();
   if (!skipRender) render();
 }
@@ -5638,7 +5638,6 @@ init();
 </script>
 </body>
 </html>
-
 
 
 
