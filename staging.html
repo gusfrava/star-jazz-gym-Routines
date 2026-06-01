@@ -580,6 +580,8 @@ const state = {
   exFilters: { category: '', tier: '', group: '', level: '' },
   exSelectedId: null,
   exAddToDay: null,  // si vienes de un día → muestra botón "Agregar a [día]"
+  exReturnView: null,  // vista a la que volver desde el detalle del ejercicio
+  exReturnDay: null,   // día al que volver desde el detalle
   homeExQuery: '',  // búsqueda rápida en el home
   muscleGradientMap: true,  // Sesión 2: usar gradient en mapa muscular (default ON)
   // ====== Library (Fase 1) ======
@@ -1989,40 +1991,21 @@ function openSimilarSuggestions(savedEx, similars){
 
 
 function openSearchModal(opts = {}){
-  const fromDay = opts.fromDay || null; // si viene de una vista de día
+  const fromDay = opts.fromDay || null;
+  const returnView = state.view;
+  const returnDay = state.currentDay;
   let query = state.homeExQuery || '';
   let cat = '', tier = '', level = '', group = '';
   let showFilters = false;
 
-  function build(){
-    const results = searchExercises(query, { category: cat, tier, level, group }).slice(0, 50);
-    const tierPills = ['','S','A','B','C'].map(t => `<button data-ft="${t}" class="small ${tier===t?'primary':''}" style="font-size:11px;padding:4px 10px;">${t?'Tier '+t:'Cualquier tier'}</button>`).join('');
-    const catPills = [['','Todo'],['fuerza','Fuerza'],['cardio','Cardio'],['movilidad','Movilidad']].map(([v,l]) => `<button data-fc="${v}" class="small ${cat===v?'primary':''}" style="font-size:11px;padding:4px 10px;">${l}</button>`).join('');
-    const levelPills = [['','Todos'],['principiante','Principiante'],['intermedio','Intermedio'],['avanzado','Avanzado']].map(([v,l]) => `<button data-fl="${v}" class="small ${level===v?'primary':''}" style="font-size:11px;padding:4px 10px;">${l}</button>`).join('');
-
-    const groupOptions = [
-      ['', 'Todos los grupos'],['pecho','Pecho'],['espalda','Espalda'],['hombros','Hombros'],
-      ['cuádriceps/glúteos','Cuádriceps/Glúteos'],['femorales/isquiosurales','Femorales'],
-      ['glúteos','Glúteos'],['bíceps/brazo','Bíceps'],['tríceps/brazo','Tríceps'],
-      ['core','Core'],['pantorrillas/aductores/antebrazo','Pantorrillas / aductores'],
-      ['cardio','Cardio'],['movilidad/recuperación','Movilidad'],
-    ];
-
-    const filtersBlock = showFilters ? `
-      <div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:10px;">
-        <div class="section-label" style="margin-bottom:6px;">Categoría</div>
-        <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px;">${catPills}</div>
-        <div class="section-label" style="margin-bottom:6px;">Tier</div>
-        <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px;">${tierPills}</div>
-        <div class="section-label" style="margin-bottom:6px;">Nivel</div>
-        <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px;">${levelPills}</div>
-        <div class="section-label" style="margin-bottom:6px;">Grupo muscular</div>
-        <select id="smGroup" style="width:100%;margin-bottom:6px;">
-          ${groupOptions.map(([v,l]) => `<option value="${esc(v)}" ${group===v?'selected':''}>${esc(l)}</option>`).join('')}
-        </select>
-      </div>` : '';
-
-    const cards = results.length ? results.map(ex => {
+  function getResults(){
+    return searchExercises(query, { category: cat, tier, level, group });
+  }
+  function resultsHtml(){
+    const all = getResults();
+    const shown = all.slice(0, 3);
+    const more = all.length - shown.length;
+    const cards = shown.length ? shown.map(ex => {
       const tinfo = TIER_INFO[ex.t] || TIER_INFO.B;
       const muscles = Object.entries(ex.sv||{}).sort((a,b)=>b[1]-a[1]).slice(0,2).map(([k])=>MUSCLES[k]?.label||k).join(' · ');
       return `<button data-sm-open="${esc(ex.id)}" style="width:100%;text-align:left;padding:10px;margin-bottom:5px;background:var(--bg-elev-2);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;gap:10px;">
@@ -2033,7 +2016,59 @@ function openSearchModal(opts = {}){
         </div>
         <div class="mono" style="font-size:11px;color:var(--text-dim);">${ex.s||'—'}</div>
       </button>`;
-    }).join('') : `<div class="muted" style="text-align:center;padding:24px;font-size:13px;">${query.trim() ? 'Sin resultados. Probá con otro término.' : 'Empezá a escribir para buscar...'}</div>`;
+    }).join('') : `<div class="muted" style="text-align:center;padding:24px;font-size:13px;">${query.trim() ? 'Sin resultados.' : 'Empezá a escribir...'}</div>`;
+    const seeMore = more > 0 ? `<button id="smSeeMore" style="width:100%;padding:11px;margin-top:6px;background:transparent;border:1px dashed var(--border);color:var(--accent);font-weight:500;font-size:13px;">Ver todos los ${all.length} resultados →</button>` : '';
+    return { html: cards + seeMore, totalCount: all.length };
+  }
+  function attachResultHandlers(){
+    document.querySelectorAll('#smResults [data-sm-open]').forEach(b => {
+      b.addEventListener('click', () => {
+        state.exSelectedId = b.dataset.smOpen;
+        if (fromDay) state.exAddToDay = fromDay;
+        state.exReturnView = returnView;
+        state.exReturnDay = returnDay;
+        closeModal();
+        state.view = 'exerciseDetail';
+        render();
+      });
+    });
+    const sm = document.getElementById('smSeeMore');
+    if (sm) sm.addEventListener('click', () => {
+      state.exQuery = query;
+      state.exFilters = { category: cat, tier, group, level };
+      state.exReturnView = returnView;
+      state.exReturnDay = returnDay;
+      closeModal();
+      state.view = 'exerciseExplorer';
+      render();
+    });
+  }
+  function updateResultsOnly(){
+    const r = resultsHtml();
+    const el = document.getElementById('smResults');
+    if (el) el.innerHTML = r.html;
+    const counter = document.getElementById('smCounter');
+    if (counter) counter.textContent = `${r.totalCount} de ${EXERCISE_DB.length}`;
+    attachResultHandlers();
+  }
+  function build(){
+    const r = resultsHtml();
+    const tierPills = ['','S','A','B','C'].map(t => `<button data-ft="${t}" class="small ${tier===t?'primary':''}" style="font-size:11px;padding:4px 10px;">${t?'Tier '+t:'Cualquier tier'}</button>`).join('');
+    const catPills = [['','Todo'],['fuerza','Fuerza'],['cardio','Cardio'],['movilidad','Movilidad']].map(([v,l]) => `<button data-fc="${v}" class="small ${cat===v?'primary':''}" style="font-size:11px;padding:4px 10px;">${l}</button>`).join('');
+    const levelPills = [['','Todos'],['principiante','Principiante'],['intermedio','Intermedio'],['avanzado','Avanzado']].map(([v,l]) => `<button data-fl="${v}" class="small ${level===v?'primary':''}" style="font-size:11px;padding:4px 10px;">${l}</button>`).join('');
+    const groupOptions = [['','Todos los grupos'],['pecho','Pecho'],['espalda','Espalda'],['hombros','Hombros'],['cuádriceps/glúteos','Cuádriceps/Glúteos'],['femorales/isquiosurales','Femorales'],['glúteos','Glúteos'],['bíceps/brazo','Bíceps'],['tríceps/brazo','Tríceps'],['core','Core'],['pantorrillas/aductores/antebrazo','Pantorrillas / aductores'],['cardio','Cardio'],['movilidad/recuperación','Movilidad']];
+    const filtersBlock = showFilters ? `<div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:10px;">
+      <div class="section-label" style="margin-bottom:6px;">Categoría</div>
+      <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px;">${catPills}</div>
+      <div class="section-label" style="margin-bottom:6px;">Tier</div>
+      <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px;">${tierPills}</div>
+      <div class="section-label" style="margin-bottom:6px;">Nivel</div>
+      <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px;">${levelPills}</div>
+      <div class="section-label" style="margin-bottom:6px;">Grupo muscular</div>
+      <select id="smGroup" style="width:100%;margin-bottom:6px;">
+        ${groupOptions.map(([v,l]) => `<option value="${esc(v)}" ${group===v?'selected':''}>${esc(l)}</option>`).join('')}
+      </select>
+    </div>` : '';
 
     modalRoot.innerHTML = `<div class="modal-backdrop" id="smb">
       <div class="modal" onclick="event.stopPropagation()" style="max-width:560px;max-height:90vh;display:flex;flex-direction:column;">
@@ -2041,10 +2076,10 @@ function openSearchModal(opts = {}){
           <h2 style="flex:1;">Buscar ejercicios</h2>
           <button id="smClose" aria-label="Cerrar" style="padding:6px 10px;font-size:18px;line-height:1;background:transparent;border:none;">×</button>
         </div>
-        ${fromDay ? `<div class="banner banner-info" style="margin-bottom:10px;padding:8px 10px;font-size:12px;"><i class="ti ti-info-circle"></i><div>Vista detalle te permitirá agregar al día <strong>${esc(fromDay)}</strong>.</div></div>` : ''}
+        ${fromDay ? `<div class="banner banner-info" style="margin-bottom:10px;padding:8px 10px;font-size:12px;"><i class="ti ti-info-circle"></i><div>Click en un ejercicio para agregarlo al día <strong>${esc(getDayLabel(fromDay))}</strong>.</div></div>` : ''}
         <div style="position:relative;margin-bottom:8px;">
           <i class="ti ti-search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-dim);font-size:15px;pointer-events:none;"></i>
-          <input id="smInput" type="text" placeholder="Nombre, músculo, grupo..." value="${esc(query)}" style="width:100%;padding:11px 12px 11px 36px;" autofocus />
+          <input id="smInput" type="text" placeholder="Nombre, músculo, grupo..." value="${esc(query)}" style="width:100%;padding:11px 12px 11px 36px;" />
         </div>
         <div class="row" style="margin-bottom:10px;gap:8px;">
           <button id="smFilterToggle" class="small ${showFilters?'primary':''}" style="font-size:11px;padding:4px 10px;">
@@ -2052,11 +2087,11 @@ function openSearchModal(opts = {}){
           </button>
           ${cat||tier||level||group ? `<button id="smClearFilters" class="small" style="font-size:11px;padding:4px 10px;color:var(--warning);">Limpiar filtros</button>` : ''}
           <div class="spacer"></div>
-          <span class="muted" style="font-size:11px;">${results.length} de ${EXERCISE_DB.length}</span>
+          <span id="smCounter" class="muted" style="font-size:11px;">${r.totalCount} de ${EXERCISE_DB.length}</span>
         </div>
         ${filtersBlock}
-        <div style="flex:1;overflow-y:auto;min-height:200px;max-height:55vh;">
-          ${cards}
+        <div id="smResults" style="flex:1;overflow-y:auto;min-height:120px;max-height:55vh;">
+          ${r.html}
         </div>
         <div class="muted" style="font-size:11px;text-align:center;margin-top:10px;">
           <a id="smHelp" style="color:var(--accent);cursor:pointer;text-decoration:underline;">¿Cómo funciona el rating?</a>
@@ -2068,35 +2103,31 @@ function openSearchModal(opts = {}){
     document.getElementById('smClose').addEventListener('click', closeModal);
     document.getElementById('smFilterToggle').addEventListener('click', () => { showFilters = !showFilters; build(); });
     document.getElementById('smHelp').addEventListener('click', () => { closeModal(); state.view = 'howRatingWorks'; render(); });
-
-    const clearBtn = document.getElementById('smClearFilters');
-    if (clearBtn) clearBtn.addEventListener('click', () => { cat = tier = level = group = ''; build(); });
+    const cb = document.getElementById('smClearFilters');
+    if (cb) cb.addEventListener('click', () => { cat = tier = level = group = ''; build(); });
 
     let timer;
     const inp = document.getElementById('smInput');
+    inp.focus();
+    inp.setSelectionRange(inp.value.length, inp.value.length);
     inp.addEventListener('input', e => {
+      query = e.target.value;
+      state.homeExQuery = query;
       clearTimeout(timer);
-      timer = setTimeout(() => { query = e.target.value; state.homeExQuery = query; build(); }, 200);
+      timer = setTimeout(updateResultsOnly, 180);
     });
 
     document.querySelectorAll('[data-fc]').forEach(b => b.addEventListener('click', () => { cat = (cat === b.dataset.fc) ? '' : b.dataset.fc; build(); }));
     document.querySelectorAll('[data-ft]').forEach(b => b.addEventListener('click', () => { tier = (tier === b.dataset.ft) ? '' : b.dataset.ft; build(); }));
     document.querySelectorAll('[data-fl]').forEach(b => b.addEventListener('click', () => { level = (level === b.dataset.fl) ? '' : b.dataset.fl; build(); }));
-    const groupSel = document.getElementById('smGroup');
-    if (groupSel) groupSel.addEventListener('change', e => { group = e.target.value; build(); });
+    const gs = document.getElementById('smGroup');
+    if (gs) gs.addEventListener('change', e => { group = e.target.value; build(); });
 
-    document.querySelectorAll('[data-sm-open]').forEach(b => {
-      b.addEventListener('click', () => {
-        state.exSelectedId = b.dataset.smOpen;
-        if (fromDay) state.exAddToDay = fromDay;  // marca el día para mostrar botón "Agregar"
-        closeModal();
-        state.view = 'exerciseDetail';
-        render();
-      });
-    });
+    attachResultHandlers();
   }
   build();
 }
+
 
 
 function openExplorerFilters(){
@@ -3754,8 +3785,11 @@ function renderExerciseDetail(){
   const videoUrl = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(videoQuery);
   const measurementLabel = ex.m === 'time' ? '⏱️ Tiempo' : ex.m === 'reps_only' ? '🔢 Solo reps' : '🏋️ Peso × Reps';
 
+  const backAction = state.exReturnView === 'day' ? 'exDetailBackToDay' :
+                     state.exReturnView === 'home' ? 'exDetailBackHome' :
+                     'goExerciseExplorer';
   root.innerHTML = `
-    ${headerBar(ex.n, 'goExerciseExplorer')}
+    ${headerBar(ex.n, backAction)}
     <div class="card" style="margin-bottom:14px;">
       <div class="row" style="gap:12px;margin-bottom:14px;">
         <div style="display:flex;align-items:center;justify-content:center;width:60px;height:60px;border-radius:14px;background:${tinfo.color}22;color:${tinfo.color};font-weight:700;font-family:var(--font-mono);font-size:24px;flex-shrink:0;">${ex.t}</div>
@@ -4061,6 +4095,9 @@ function renderEditExercise(){
 
   root.innerHTML = `
     ${headerBar(isNew ? 'Nuevo ejercicio' : 'Editar ejercicio', 'goEditRoutine')}
+    <button data-action="openExEditorSearch" style="width:100%;padding:11px;margin-bottom:14px;background:var(--accent-bg);border:1px solid var(--accent-border);color:var(--accent);font-weight:500;">
+      <i class="ti ti-database-search" style="font-size:14px;vertical-align:-2px;"></i> Buscar en biblioteca de 359 ejercicios
+    </button>
     <div class="card" style="margin-bottom:18px;">
       <label class="section-label" style="margin-bottom:6px;">Nombre</label>
       <input id="exName" type="text" value="${esc(window._editEx.name)}" maxlength="80" style="margin-bottom:12px;" />
@@ -4857,6 +4894,36 @@ async function handle(e){
     toast(state.muscleGradientMap ? 'Gradiente activado' : 'Gradiente desactivado', 'success');
     render(); return;
   }
+  if (a === 'exDetailBackToDay'){
+    closeModal();
+    const dk = state.exReturnDay;
+    state.exAddToDay = null;
+    state.exReturnView = null;
+    state.exReturnDay = null;
+    if (dk){ state.currentDay = dk; state.view = 'day'; }
+    else state.view = 'home';
+    render(); return;
+  }
+  if (a === 'exDetailBackHome'){
+    closeModal();
+    state.exAddToDay = null;
+    state.exReturnView = null;
+    state.exReturnDay = null;
+    state.view = 'home';
+    render(); return;
+  }
+  if (a === 'openExEditorSearch'){
+    openDbPicker((dbEx) => {
+      const conv = dbToAppExercise(dbEx);
+      window._editEx.name = conv.name;
+      window._editEx.video = conv.video;
+      window._editEx.primary = conv.primary;
+      window._editEx.secondary = conv.secondary;
+      window._editEx.alts = conv.alts;
+      render();
+    });
+    return;
+  }
   if (a === 'openSearchModal'){ openSearchModal({}); return; }
   if (a === 'openSearchModalForDay'){ openSearchModal({ fromDay: state.currentDay }); return; }
   if (a === 'addExerciseToDay'){
@@ -4896,6 +4963,8 @@ async function handle(e){
       }
       toast(`Agregado a ${getDayLabel(dk)}`, 'success');
       state.exAddToDay = null;
+      state.exReturnView = null;
+      state.exReturnDay = null;
       state.view = 'day';
       state.currentDay = dk;
       render();
