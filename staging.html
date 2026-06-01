@@ -1416,7 +1416,12 @@ async function importGroupBackup(backup){
 }
 
 // ====== HELPERS ======
-const exerciseKey = (d,i) => d+':'+i;
+function newExerciseLogId(){ return 'log_'+Date.now()+'_'+Math.random().toString(36).slice(2,8); }
+function exerciseKey(d,i){
+  const routine = getRoutineForDay(d);
+  const ex = routine && routine.exercises ? routine.exercises[i] : null;
+  return ex && ex.logId ? `${d}:ex:${ex.logId}` : `${d}:${i}`;
+}
 const today = () => dateKey();
 const userColor = (i) => ['#f97316','#22c55e','#3b82f6','#a855f7','#ec4899','#eab308','#06b6d4','#84cc16'][i % 8];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -1431,6 +1436,16 @@ function prettyGroupName(id){
 function groupDisplayName(id){
   if (id === groupPath() && state.groupConfig && state.groupConfig.groupName && state.groupConfig.groupName !== id) return state.groupConfig.groupName;
   return prettyGroupName(id);
+}
+function applyExerciseBaselineReset(nextExercise, previousExercise, previousKey){
+  nextExercise.logId = newExerciseLogId();
+  nextExercise.baselineResetAt = Date.now();
+  nextExercise.historyKeys = [
+    ...((previousExercise && previousExercise.historyKeys) || []),
+    { key: previousKey, name: previousExercise?.name || 'Ejercicio anterior', archivedAt: Date.now() }
+  ];
+  delete nextExercise._resetProgressBaseline;
+  return nextExercise;
 }
 function getMe(){ return state.users.find(u => u.id === state.currentUser); }
 function avatarHtml(u, size = 28){
@@ -1519,10 +1534,26 @@ function isUserAdmin(u){
   return !!u && (admins.includes(u.id) || u.name.toLowerCase().trim() === ADMIN_NAME.toLowerCase().trim());
 }
 const getEntries = (uid, ek) => (state.logs[uid] && state.logs[uid][ek]) || [];
+function archivedExerciseNameForKey(ek){
+  for (const dayKey of getAllDayKeys()){
+    const routine = getRoutineForDay(dayKey);
+    for (const ex of routine?.exercises || []){
+      const hit = (ex.historyKeys || []).find(item => item && item.key === ek);
+      if (hit && hit.name) return hit.name;
+    }
+  }
+  return null;
+}
 function exerciseNameForKey(ek){
-  const [day, idxRaw] = String(ek).split(':');
-  const idx = Number(idxRaw);
+  const archived = archivedExerciseNameForKey(ek);
+  if (archived) return archived;
+  const [day, marker, logId] = String(ek).split(':');
   const routine = (state.sharedRoutine && state.sharedRoutine[day]) || getRoutineForDay(day);
+  if (marker === 'ex' && logId){
+    const match = (routine?.exercises || []).find(ex => ex.logId === logId);
+    return match ? match.name : ek;
+  }
+  const idx = Number(marker);
   return routine && routine.exercises && routine.exercises[idx] ? routine.exercises[idx].name : ek;
 }
 function setMaxWeight(set){
@@ -2439,6 +2470,13 @@ function openLibExerciseEditor(initial, onSave){
           <option value="reps_only" ${exerciseMeasurementType(ex)==='reps_only'?'selected':''}>Solo reps</option>
           <option value="time" ${exerciseMeasurementType(ex)==='time'?'selected':''}>Tiempo (min + seg)</option>
         </select>
+        ${initial && initial.name ? `<label style="display:flex;align-items:flex-start;gap:9px;padding:10px 12px;background:var(--warning-bg);border:1px solid rgba(251,191,36,0.25);border-radius:var(--radius-sm);margin-bottom:14px;cursor:pointer;">
+          <input type="checkbox" id="libResetBaseline" style="margin-top:3px;" />
+          <span style="font-size:12px;line-height:1.4;color:var(--warning);">
+            <strong>Reiniciar progreso de este ejercicio</strong><br>
+            El historial anterior se conserva, pero este ejercicio empezará desde una nueva base.
+          </span>
+        </label>` : ''}
 
         <div class="section-label">Músculos trabajados</div>
         <div class="muted" style="font-size:12px;margin-bottom:10px;">Toca: vacío → <strong style="color:var(--accent);">principal ●●</strong> → <strong style="color:var(--warning);">secundario ●</strong> → vacío</div>
@@ -2471,6 +2509,7 @@ function openLibExerciseEditor(initial, onSave){
       ex.video = (document.getElementById('libExVideo').value || '').trim();
       ex.measurement = document.getElementById('libMeasurement')?.value || 'weight_reps';
       ex.alts = Array.from(document.querySelectorAll('[data-alt-i]')).map(i => i.value.trim()).filter(Boolean);
+      ex._resetProgressBaseline = !!document.getElementById('libResetBaseline')?.checked;
       const wantSuggest = !!document.getElementById('libSuggest')?.checked;
       ex._suggestSimilar = wantSuggest;
       closeModal();
@@ -4243,6 +4282,13 @@ function renderEditExercise(){
         <option value="reps_only" ${exerciseMeasurementType(window._editEx)==='reps_only'?'selected':''}>Solo reps</option>
         <option value="time" ${exerciseMeasurementType(window._editEx)==='time'?'selected':''}>Tiempo (min + seg)</option>
       </select>
+      ${!isNew ? `<label style="display:flex;align-items:flex-start;gap:9px;padding:10px 12px;background:var(--warning-bg);border:1px solid rgba(251,191,36,0.25);border-radius:var(--radius-sm);margin-top:12px;cursor:pointer;">
+        <input type="checkbox" id="resetExerciseBaseline" style="margin-top:3px;" />
+        <span style="font-size:12px;line-height:1.4;color:var(--warning);">
+          <strong>Reiniciar progreso de este ejercicio</strong><br>
+          El historial anterior se conserva, pero este ejercicio empezará desde una nueva base.
+        </span>
+      </label>` : ''}
     </div>
 
     <div class="section-label">Músculos trabajados</div>
@@ -5324,6 +5370,13 @@ async function handle(e){
     const existing = isNew ? { name:'', video:'', primary:[], secondary:[], alts:[] } : (ed.exercises[idx] || {});
     openLibExerciseEditor(existing, async (updated) => {
       if (!updated.name || !updated.name.trim()){ toast('Ingresa un nombre'); return; }
+      if (!isNew && updated._resetProgressBaseline){
+        const previous = ed.exercises[idx] || {};
+        const previousKey = exerciseKey(ed.id, idx);
+        if (!confirm(`¿Reiniciar el progreso de "${previous.name || 'este ejercicio'}"?\n\nNo se borra el historial anterior. Solo evita que el nuevo ejercicio compare contra esos pesos/reps.`)) return;
+        updated = applyExerciseBaselineReset(updated, previous, previousKey);
+      }
+      delete updated._resetProgressBaseline;
       if (isNew) ed.exercises.push(updated);
       else ed.exercises[idx] = updated;
       if (ed.scope === 'shared'){
@@ -5751,6 +5804,13 @@ async function handle(e){
       if (!state.sharedRoutine[dayKey]) state.sharedRoutine[dayKey] = { label:'Día', focus:'', icon:'ti-barbell', exercises:[] };
       routine = state.sharedRoutine[dayKey];
     }
+    if (!isNew && document.getElementById('resetExerciseBaseline')?.checked){
+      const previous = routine.exercises[idx] || {};
+      const previousKey = exerciseKey(dayKey, idx);
+      if (!confirm(`¿Reiniciar el progreso de "${previous.name || 'este ejercicio'}"?\n\nNo se borra el historial anterior. Solo evita que el nuevo ejercicio compare contra esos pesos/reps.`)) return;
+      applyExerciseBaselineReset(ed, previous, previousKey);
+    }
+    delete ed._resetProgressBaseline;
     if (isNew){ routine.exercises.push(ed); }
     else { routine.exercises[idx] = ed; }
     if (src === 'personal'){ await savePersonalRoutine(state.currentUser, state.personalRoutines[state.currentUser]); }
