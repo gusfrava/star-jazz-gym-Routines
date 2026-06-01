@@ -385,6 +385,7 @@ const state = {
   sharedRoutine: null,
   personalRoutines: {},
   routineSource: {},      // { dayKey: 'shared'|'personal' }
+  homeRoutineScope: loadHomeRoutineScope(), // 'shared' | 'personal'
   // ====== Library (Fase 1) ======
   library: {},            // { routineId: {id, name, focus, icon, exercises[], scope:'shared', updatedAt} }
   personalLibrary: {},    // { routineId: {... scope:'personal'} } — del usuario actual
@@ -414,6 +415,7 @@ const modalRoot = document.getElementById('modalRoot');
 const LS_ME = 'gym_me_v2';
 const LS_AUTH = 'gym_auth_v2';
 const LS_SOURCE = 'gym_routinesource_v2'; // per-day choice (per device)
+const LS_HOME_SCOPE = 'gym_home_routine_scope_v1';
 
 // ====== GROUP HELPERS ======
 function groupPath(){ return state.currentGroup || DEFAULT_GROUP; }
@@ -867,6 +869,19 @@ function loadRoutineSource(groupId = groupPath()){
 }
 function saveRoutineSource(src){
   localStorage.setItem(groupLocalKey(LS_SOURCE), JSON.stringify(src));
+}
+function loadHomeRoutineScope(){
+  return localStorage.getItem(LS_HOME_SCOPE) === 'personal' ? 'personal' : 'shared';
+}
+function saveHomeRoutineScope(scope){
+  localStorage.setItem(LS_HOME_SCOPE, scope === 'personal' ? 'personal' : 'shared');
+}
+function getHomeRoutineScope(){
+  return state.homeRoutineScope === 'personal' ? 'personal' : 'shared';
+}
+function setHomeRoutineScope(scope){
+  state.homeRoutineScope = scope === 'personal' ? 'personal' : 'shared';
+  saveHomeRoutineScope(state.homeRoutineScope);
 }
 
 function blankRoutine(){
@@ -1562,33 +1577,48 @@ function libraryRoutineAsDay(routine){
   };
 }
 function getRoutineForDay(dayKey){
-  if (state.personalLibrary && state.personalLibrary[dayKey]) return libraryRoutineAsDay(state.personalLibrary[dayKey]);
-  if (state.library && state.library[dayKey]) return libraryRoutineAsDay(state.library[dayKey]);
-  const src = state.routineSource[dayKey] || 'shared';
-  if (src === 'personal'){
+  const scope = getHomeRoutineScope();
+  if (scope === 'personal'){
+    if (state.personalLibrary && state.personalLibrary[dayKey]) return libraryRoutineAsDay(state.personalLibrary[dayKey]);
     const pr = state.personalRoutines[state.currentUser];
     if (pr && pr[dayKey]) return pr[dayKey];
+    return null;
   }
+  if (state.library && state.library[dayKey]) return libraryRoutineAsDay(state.library[dayKey]);
   return (state.sharedRoutine && state.sharedRoutine[dayKey]) || null;
 }
 function getCurrentSource(dayKey){
-  if (state.personalLibrary && state.personalLibrary[dayKey]) return 'personalLibrary';
+  const scope = getHomeRoutineScope();
+  if (scope === 'personal'){
+    if (state.personalLibrary && state.personalLibrary[dayKey]) return 'personalLibrary';
+    return 'personal';
+  }
   if (state.library && state.library[dayKey]) return 'library';
-  return state.routineSource[dayKey] || 'shared';
+  return 'shared';
 }
 function setCurrentSource(dayKey, src){
   state.routineSource[dayKey] = src;
   saveRoutineSource(state.routineSource);
+  if (src === 'personal') setHomeRoutineScope('personal');
+  if (src === 'shared') setHomeRoutineScope('shared');
 }
 function getAllDayKeys(){
   const all = new Set(DAY_ORDER);
+  const scope = getHomeRoutineScope();
+  if (scope === 'personal'){
+    all.clear();
+    const pr = state.personalRoutines[state.currentUser];
+    if (pr) Object.keys(pr).forEach(k => all.add(k));
+    const personalLibraryKeys = Object.values(state.personalLibrary || {})
+      .filter(r => r && r.id && !r.originDay)
+      .sort((a,b) => (a.createdAt || 0) - (b.createdAt || 0) || (a.name || '').localeCompare(b.name || ''))
+      .map(r => r.id);
+    const orderedPersonal = DAY_ORDER.filter(k => all.has(k));
+    const extrasPersonal = [...all].filter(k => !DAY_ORDER.includes(k));
+    return [...orderedPersonal, ...extrasPersonal, ...personalLibraryKeys.filter(k => !all.has(k))];
+  }
   if (state.sharedRoutine) Object.keys(state.sharedRoutine).forEach(k => all.add(k));
-  const pr = state.personalRoutines[state.currentUser];
-  if (pr) Object.keys(pr).forEach(k => all.add(k));
-  const libraryKeys = [
-    ...Object.values(state.library || {}),
-    ...Object.values(state.personalLibrary || {})
-  ]
+  const libraryKeys = Object.values(state.library || {})
     .filter(r => r && r.id && !r.originDay)
     .sort((a,b) => (a.createdAt || 0) - (b.createdAt || 0) || (a.name || '').localeCompare(b.name || ''))
     .map(r => r.id);
@@ -2277,13 +2307,15 @@ function renderHome(){
     return { user:u, latest };
   });
 
+  const homeScope = getHomeRoutineScope();
+  const isPersonalHome = homeScope === 'personal';
   const allDays = getAllDayKeys();
   const globalMuscleStats = fullRoutineMuscleStats();
-  const globalMuscleMapBtn = `
+  const globalMuscleMapBtn = allDays.length ? `
     <button data-action="toggleGlobalRoutineMuscles" style="margin-bottom:12px;padding:11px;width:100%;background:${state.showGlobalRoutineMuscles?'var(--accent-bg-strong)':'var(--bg-elev)'};color:${state.showGlobalRoutineMuscles?'var(--accent)':'var(--text)'};border:1px solid ${state.showGlobalRoutineMuscles?'var(--accent-border)':'var(--border)'};display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:500;">
       <i class="ti ti-body-scan" style="font-size:15px;"></i> ${state.showGlobalRoutineMuscles ? 'Ocultar Mapa Muscular General' : 'Mapa Muscular General'}
-    </button>`;
-  const globalMuscleOverview = state.showGlobalRoutineMuscles
+    </button>` : '';
+  const globalMuscleOverview = allDays.length && state.showGlobalRoutineMuscles
     ? routineMuscleOverview(globalMuscleStats, {
       title: 'Mapa Muscular General',
       subtitle: 'Resumen de todos los días de tu rutina actual. Usa la rutina compartida o personal seleccionada en cada día.',
@@ -2303,7 +2335,7 @@ function renderHome(){
     }
     const pct = totalEx ? Math.round((logged/totalEx)*100) : 0;
     const src = getCurrentSource(dk);
-    const sourceLabel = src === 'personal' ? `<span class="badge" style="background:var(--info-bg);color:var(--info);font-size:10px;padding:2px 8px;font-family:var(--font-mono);">PERSONAL</span>` : '';
+    const sourceLabel = (src === 'personal' || src === 'personalLibrary') ? `<span class="badge" style="background:var(--info-bg);color:var(--info);font-size:10px;padding:2px 8px;font-family:var(--font-mono);">PERSONAL</span>` : '';
     return `<button data-action="openDay" data-day="${dk}" class="day-card fade-in" style="animation-delay:${i*60}ms;">
       <div class="row" style="position:relative;z-index:1;">
         <div class="icon-tile">
@@ -2324,7 +2356,7 @@ function renderHome(){
     </button>`;
   }).join('');
 
-  const partnersBlock = others.length ? `
+  const partnersBlock = isPersonalHome ? '' : (others.length ? `
     <div style="margin-top:28px;">
       <div class="section-label">Compañeros</div>
       ${others.map((u,i)=>{
@@ -2347,7 +2379,7 @@ function renderHome(){
     <div class="card fade-in" style="margin-top:28px;padding:16px;font-size:13px;color:var(--text-muted);text-align:center;">
       <i class="ti ti-users" style="font-size:24px;color:var(--text-dim);display:block;margin-bottom:6px;"></i>
       Cuando tu compañero entre, aparecerá aquí.
-    </div>`;
+    </div>`);
 
   const me = state.users.find(u=>u.id===state.currentUser);
   const viewOnlyBanner = !state.currentUser ? `
@@ -2362,6 +2394,21 @@ function renderHome(){
       <span style="color:var(--text);font-weight:500;">${esc(currentGroupName)}</span>
       <i class="ti ti-chevron-right" style="font-size:12px;opacity:0.5;"></i>
     </button>` : '';
+  const scopeSwitcher = state.currentUser ? `
+    <div class="tab-bar fade-in" style="margin-bottom:16px;animation-delay:110ms;">
+      <button class="${!isPersonalHome?'active':''}" data-action="setHomeScope" data-scope="shared">
+        <i class="ti ti-users" style="font-size:13px;vertical-align:-1px;"></i> Compartida
+      </button>
+      <button class="${isPersonalHome?'active':''}" data-action="setHomeScope" data-scope="personal">
+        <i class="ti ti-user" style="font-size:13px;vertical-align:-1px;"></i> Personal
+      </button>
+    </div>` : '';
+  const personalEmptyBlock = isPersonalHome && !allDays.length ? `
+    <div class="card fade-in" style="padding:22px 18px;text-align:center;margin-bottom:18px;">
+      <i class="ti ti-user-heart" style="font-size:30px;color:var(--accent);display:block;margin-bottom:8px;"></i>
+      <h2 style="margin-bottom:6px;">Tu Rutina Personal</h2>
+      <p class="muted" style="font-size:13px;margin:0;">Todavía no tienes días personales. Cambia a Compartida, abre un día y crea tu versión personal desde ahí.</p>
+    </div>` : '';
 
   root.innerHTML = `
     ${configBanner()}
@@ -2388,8 +2435,10 @@ function renderHome(){
         <i class="ti ti-settings" style="font-size:17px;color:var(--text-muted);"></i>
       </button>
     </div>
+    ${scopeSwitcher}
     ${globalMuscleMapBtn}
     ${globalMuscleOverview}
+    ${personalEmptyBlock}
     ${dayCards}
     ${partnersBlock}`;
   attach();
@@ -2438,15 +2487,7 @@ function renderDay(){
   }).join('');
 
   const isLibraryRoutine = src === 'library' || src === 'personalLibrary';
-  const switcher = state.currentUser && !isLibraryRoutine ? `
-    <div class="tab-bar">
-      <button class="${src==='shared'?'active':''}" data-action="setSource" data-src="shared">
-        <i class="ti ti-users" style="font-size:13px;vertical-align:-1px;"></i> Compartida
-      </button>
-      <button class="${src==='personal'?'active':''}" data-action="setSource" data-src="personal">
-        <i class="ti ti-user" style="font-size:13px;vertical-align:-1px;"></i> ${personalAvail ? 'Personal' : 'Crear Personal'}
-      </button>
-    </div>` : '';
+  const switcher = '';
 
   const editBtn = state.currentUser ? `
     <button data-action="editRoutine" style="margin-bottom:16px;padding:11px;width:100%;background:var(--bg-elev);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:500;">
@@ -3962,6 +4003,13 @@ async function handle(e){
   if (a === 'goHome'){ state.view = 'home'; state.currentDay = null; state.currentExerciseIdx = null; state.showAlts = false; state.showMuscles = false; state.showRoutineMuscles = false; render(); return; }
   if (a === 'goDay'){ state.view = 'day'; state.currentExerciseIdx = null; state.showAlts = false; state.showMuscles = false; render(); return; }
   if (a === 'openEx'){ state.currentExerciseIdx = Number(btn.dataset.idx); state.view = 'exercise'; state.showAlts = false; state.showMuscles = false; render(); return; }
+  if (a === 'setHomeScope'){
+    setHomeRoutineScope(btn.dataset.scope || 'shared');
+    state.currentDay = null;
+    state.currentExerciseIdx = null;
+    state.showGlobalRoutineMuscles = false;
+    render(); return;
+  }
   if (a === 'goCompare'){ state.view = 'compare'; state.currentDay = null; state.currentExerciseIdx = null; render(); return; }
   if (a === 'goCompareEx'){ state.view = 'compare'; render(); return; }
   if (a === 'goSettings'){ closeModal(); state.view = 'settings'; render(); return; }
@@ -4627,7 +4675,3 @@ init();
 </script>
 </body>
 </html>
-
-
-
-
