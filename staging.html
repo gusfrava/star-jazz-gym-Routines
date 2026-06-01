@@ -490,6 +490,7 @@ function dbToAppExercise(dbEx){
   return {
     name: dbEx.n,
     video: (dbEx.n || dbEx.en).toLowerCase() + ' tecnica',
+    measurement: dbEx.m || 'weight_reps',
     primary,
     secondary,
     alts: [],
@@ -1526,10 +1527,11 @@ function exerciseNameForKey(ek){
 }
 function setMaxWeight(set){
   if (!set) return 0;
+  const dropMax = (set.drops || []).reduce((max, drop) => Math.max(max, setMaxWeight(drop)), 0);
   if (set.unilateral){
-    return Math.max(Number(set.left?.weight)||0, Number(set.right?.weight)||0);
+    return Math.max(Number(set.left?.weight)||0, Number(set.right?.weight)||0, dropMax);
   }
-  return Number(set.weight)||0;
+  return Math.max(Number(set.weight)||0, dropMax);
 }
 function setDisplayReps(set){
   if (!set) return 0;
@@ -1538,23 +1540,86 @@ function setDisplayReps(set){
   }
   return Number(set.reps)||0;
 }
-function setVolume(set){
+function setDurationSeconds(set){
   if (!set) return 0;
+  return Number(set.durationSeconds) || ((Number(set.minutes)||0) * 60) + (Number(set.seconds)||0);
+}
+function exerciseMeasurementType(ex){
+  return ex?.measurement || ex?._measurement || 'weight_reps';
+}
+function setBaseVolume(set, measurement = 'weight_reps'){
+  if (!set) return 0;
+  if (measurement === 'time') return setDurationSeconds(set);
   if (set.unilateral){
+    if (measurement === 'reps_only'){
+      return (Number(set.left?.reps)||0) + (Number(set.right?.reps)||0);
+    }
     return (Number(set.left?.reps)||0) * (Number(set.left?.weight)||0) +
       (Number(set.right?.reps)||0) * (Number(set.right?.weight)||0);
   }
+  if (measurement === 'reps_only') return Number(set.reps)||0;
   return (Number(set.reps)||0) * (Number(set.weight)||0);
 }
-function formatSetLine(set, idx){
+function setVolume(set, measurement = 'weight_reps'){
+  if (!set) return 0;
+  return setBaseVolume(set, measurement) + (set.drops || []).reduce((sum, drop) => sum + setBaseVolume(drop, measurement), 0);
+}
+function effectiveSetCount(set){
+  return set ? 1 + ((set.drops || []).length) : 0;
+}
+function entrySetCount(entry){
+  return (entry?.sets || []).reduce((sum, set) => sum + effectiveSetCount(set), 0);
+}
+function formatDuration(seconds){
+  const total = Math.max(0, Number(seconds)||0);
+  const min = Math.floor(total / 60);
+  const sec = total % 60;
+  if (min && sec) return `${min}m ${sec}s`;
+  if (min) return `${min}m`;
+  return `${sec}s`;
+}
+function formatSetBaseLine(set, measurement = 'weight_reps'){
+  if (measurement === 'time') return formatDuration(setDurationSeconds(set));
+  if (set.unilateral){
+    const l = set.left || {}; const r = set.right || {};
+    if (measurement === 'reps_only') return `Izq ${l.reps||0} / Der ${r.reps||0}`;
+    return `Izq ${l.weight||0}lb × ${l.reps||0} / Der ${r.weight||0}lb × ${r.reps||0}`;
+  }
+  if (measurement === 'reps_only') return `${set.reps||0} reps`;
+  return `${set.weight||0}lb × ${set.reps||0}`;
+}
+function formatSetLine(set, idx, measurement = 'weight_reps'){
+  const drops = (set.drops || []).map((drop, i) => `drop ${i+1}: ${formatSetBaseLine(drop, measurement)}`).join(' · ');
+  const dropText = drops ? ` · ${drops}` : '';
+  const noteText = set.note ? ' · '+set.note : '';
+  return `${idx+1}) ${formatSetBaseLine(set, measurement)}${dropText}${noteText}`;
+}
+function sessionMetricSummary(entry, best, volume, measurement = 'weight_reps'){
+  const sets = entrySetCount(entry);
+  if (measurement === 'time') return `${sets} sets · tiempo ${formatDuration(volume)}`;
+  if (measurement === 'reps_only') return `${sets} sets · reps ${Math.round(volume)} · mejor ${best ? setDisplayReps(best)+' reps' : '–'}`;
+  return `${sets} sets · max ${best ? setMaxWeight(best)+'lb × '+setDisplayReps(best) : '–'} · vol ${Math.round(volume)}`;
+}
+/*
+function formatSetLineOld(set, idx){
   if (set.unilateral){
     const l = set.left || {}; const r = set.right || {};
     return `${idx+1}) Izq ${l.weight||0}lb × ${l.reps||0} / Der ${r.weight||0}lb × ${r.reps||0}${set.note ? ' · '+set.note : ''}`;
   }
   return `${idx+1}) ${set.weight}lb × ${set.reps}${set.note ? ' · '+set.note : ''}`;
 }
-const bestSet = (e) => !e.sets || !e.sets.length ? null : e.sets.reduce((b,s)=> setMaxWeight(s)>setMaxWeight(b)?s:b, e.sets[0]);
-const totalVolume = (e) => !e.sets ? 0 : e.sets.reduce((sum,x)=> sum + setVolume(x), 0);
+*/
+function setComparableValue(set, measurement = 'weight_reps'){
+  if (measurement === 'time') return setDurationSeconds(set);
+  if (measurement === 'reps_only') return setBaseVolume(set, measurement);
+  return setMaxWeight(set);
+}
+const bestSet = (e) => {
+  if (!e.sets || !e.sets.length) return null;
+  const measurement = e.measurement || 'weight_reps';
+  return e.sets.reduce((best,set)=> setComparableValue(set, measurement) > setComparableValue(best, measurement) ? set : best, e.sets[0]);
+};
+const totalVolume = (e) => !e.sets ? 0 : e.sets.reduce((sum,x)=> sum + setVolume(x, e.measurement || 'weight_reps'), 0);
 function publicTrainingStats(uid){
   const userLogs = state.logs[uid] || {};
   const sessions = [];
@@ -1567,15 +1632,16 @@ function publicTrainingStats(uid){
       const sets = entry.sets || [];
       const volume = totalVolume(entry);
       const best = bestSet(entry);
-      totalSets += sets.length;
+      const setCount = entrySetCount(entry);
+      totalSets += setCount;
       totalVolumeNum += volume;
       maxWeight = Math.max(maxWeight, best ? setMaxWeight(best) : 0);
       if (!byExercise[ek]) byExercise[ek] = { ek, name: exerciseNameForKey(ek), sessions:0, sets:0, volume:0, maxWeight:0 };
       byExercise[ek].sessions += 1;
-      byExercise[ek].sets += sets.length;
+      byExercise[ek].sets += setCount;
       byExercise[ek].volume += volume;
       byExercise[ek].maxWeight = Math.max(byExercise[ek].maxWeight, best ? setMaxWeight(best) : 0);
-      sessions.push({ ek, name: exerciseNameForKey(ek), date: entry.date, sets: sets.length, volume, maxWeight: best ? setMaxWeight(best) : 0 });
+      sessions.push({ ek, name: exerciseNameForKey(ek), date: entry.date, sets: setCount, volume, maxWeight: best ? setMaxWeight(best) : 0 });
     });
   }
   sessions.sort((a,b) => String(b.date).localeCompare(String(a.date)));
@@ -1725,38 +1791,82 @@ function routineMuscleOverview(routineOrStats, options = {}){
     </div>
   </div>`;
 }
-function renderSetRow(i, set = null, lastSet = null, unilateralMode = false){
+function renderDropRow(drop = null, i = 0, isUnilateral = false, measurement = 'weight_reps'){
+  const left = drop?.left || {};
+  const right = drop?.right || {};
+  const normalReps = drop && !drop.unilateral ? drop.reps : '';
+  const normalWeight = drop && !drop.unilateral ? drop.weight : '';
+  const repsOnly = measurement === 'reps_only';
+  return `<div class="drop-row" style="margin-top:8px;padding:9px;background:rgba(59,158,255,0.06);border:1px solid var(--border);border-radius:8px;">
+    <div class="drop-normal-fields" style="display:${isUnilateral?'none':'grid'};grid-template-columns:48px ${repsOnly?'1fr':'1fr 1fr'} 28px;gap:7px;align-items:center;">
+      <div class="mono" style="font-size:11px;color:var(--accent);font-weight:600;">Drop ${i+1}</div>
+      <input type="number" class="drop-reps-in" inputmode="numeric" min="0" value="${normalReps !== '' ? esc(normalReps) : ''}" placeholder="reps" style="text-align:center;padding:7px;" />
+      ${repsOnly ? '' : `<input type="number" class="drop-weight-in" inputmode="decimal" step="0.5" min="0" value="${normalWeight !== '' ? esc(normalWeight) : ''}" placeholder="peso lb" style="text-align:center;padding:7px;" />`}
+      <button class="del-drop" aria-label="Eliminar drop" style="padding:4px;border:none;color:var(--text-dim);background:transparent;"><i class="ti ti-x" style="font-size:14px;"></i></button>
+    </div>
+    <div class="drop-unilateral-fields" style="display:${isUnilateral?'grid':'none'};grid-template-columns:48px repeat(${repsOnly ? 2 : 4},1fr) 28px;gap:6px;align-items:center;">
+      <div class="mono" style="font-size:11px;color:var(--accent);font-weight:600;">Drop ${i+1}</div>
+      <input type="number" class="drop-left-reps-in" inputmode="numeric" min="0" value="${left.reps ?? ''}" placeholder="Izq reps" style="text-align:center;padding:7px;" />
+      ${repsOnly ? '' : `<input type="number" class="drop-left-weight-in" inputmode="decimal" step="0.5" min="0" value="${left.weight ?? ''}" placeholder="Izq lb" style="text-align:center;padding:7px;" />`}
+      <input type="number" class="drop-right-reps-in" inputmode="numeric" min="0" value="${right.reps ?? ''}" placeholder="Der reps" style="text-align:center;padding:7px;" />
+      ${repsOnly ? '' : `<input type="number" class="drop-right-weight-in" inputmode="decimal" step="0.5" min="0" value="${right.weight ?? ''}" placeholder="Der lb" style="text-align:center;padding:7px;" />`}
+      <button class="del-drop" aria-label="Eliminar drop" style="padding:4px;border:none;color:var(--text-dim);background:transparent;"><i class="ti ti-x" style="font-size:14px;"></i></button>
+    </div>
+  </div>`;
+}
+function renderSetRow(i, set = null, lastSet = null, unilateralMode = false, measurement = 'weight_reps'){
   // Cada set guardado mantiene su propio modo. El unilateralMode global SOLO aplica
   // a sets nuevos (sin datos previos). Esto permite mezclar normales y unilaterales.
   const isUnilateral = set ? !!set.unilateral : !!unilateralMode;
+  const repsOnly = measurement === 'reps_only';
+  const timeMode = measurement === 'time';
   const normalReps = set && !set.unilateral ? set.reps : '';
   const normalWeight = set && !set.unilateral ? set.weight : '';
+  const duration = setDurationSeconds(set);
+  const minutes = set ? Math.floor(duration / 60) : '';
+  const seconds = set ? duration % 60 : '';
   const left = set?.left || {};
   const right = set?.right || {};
   const ph_r = lastSet ? (lastSet.reps || setDisplayReps(lastSet) || '') : '';
   const ph_w = lastSet ? (lastSet.weight || setMaxWeight(lastSet) || '') : '';
   const ph_n = lastSet && lastSet.note ? lastSet.note : '';
-  return `<div class="set-row">
-    <div class="normal-fields" style="display:${isUnilateral?'none':'grid'};grid-template-columns:30px 1fr 1fr 28px;gap:8px;align-items:center;margin-bottom:6px;">
+  const hasDrops = !timeMode && Array.isArray(set?.drops) && set.drops.length > 0;
+  const dropRows = !timeMode ? (set?.drops || []).map((drop, di) => renderDropRow(drop, di, isUnilateral, measurement)).join('') : '';
+  return `<div class="set-row" data-measurement="${esc(measurement)}">
+    <div class="normal-fields" style="display:${isUnilateral && !timeMode?'none':'grid'};grid-template-columns:30px ${timeMode || !repsOnly ? '1fr 1fr' : '1fr'} 28px;gap:8px;align-items:center;margin-bottom:6px;">
       <div class="mono" style="font-size:13px;text-align:center;font-weight:600;color:var(--accent);">${i+1}</div>
-      <input type="number" class="reps-in" inputmode="numeric" min="0" value="${normalReps !== '' ? esc(normalReps) : ''}" placeholder="${ph_r || 'reps'}" style="text-align:center;padding:9px;" />
-      <input type="number" class="weight-in" inputmode="decimal" step="0.5" min="0" value="${normalWeight !== '' ? esc(normalWeight) : ''}" placeholder="${ph_w ? ph_w+' lb' : 'peso lb'}" style="text-align:center;padding:9px;" />
+      ${timeMode ? `
+        <input type="number" class="time-min-in" inputmode="numeric" min="0" value="${minutes !== '' ? esc(minutes) : ''}" placeholder="min" style="text-align:center;padding:9px;" />
+        <input type="number" class="time-sec-in" inputmode="numeric" min="0" max="59" value="${seconds !== '' ? esc(seconds) : ''}" placeholder="seg" style="text-align:center;padding:9px;" />
+      ` : `
+        <input type="number" class="reps-in" inputmode="numeric" min="0" value="${normalReps !== '' ? esc(normalReps) : ''}" placeholder="${ph_r || 'reps'}" style="text-align:center;padding:9px;" />
+        ${repsOnly ? '' : `<input type="number" class="weight-in" inputmode="decimal" step="0.5" min="0" value="${normalWeight !== '' ? esc(normalWeight) : ''}" placeholder="${ph_w ? ph_w+' lb' : 'peso lb'}" style="text-align:center;padding:9px;" />`}
+      `}
       <button class="del-set" aria-label="Eliminar" style="padding:4px;border:none;color:var(--text-dim);background:transparent;"><i class="ti ti-x" style="font-size:14px;"></i></button>
     </div>
-    <div class="unilateral-fields" style="display:${isUnilateral?'grid':'none'};grid-template-columns:30px repeat(4,1fr) 28px;gap:6px;align-items:center;margin-bottom:6px;">
+    <div class="unilateral-fields" style="display:${isUnilateral && !timeMode?'grid':'none'};grid-template-columns:30px repeat(${repsOnly ? 2 : 4},1fr) 28px;gap:6px;align-items:center;margin-bottom:6px;">
       <div class="mono" style="font-size:13px;text-align:center;font-weight:600;color:var(--accent);">${i+1}</div>
       <input type="number" class="left-reps-in" inputmode="numeric" min="0" value="${left.reps ?? ''}" placeholder="Izq reps" style="text-align:center;padding:8px;" />
-      <input type="number" class="left-weight-in" inputmode="decimal" step="0.5" min="0" value="${left.weight ?? ''}" placeholder="Izq lb" style="text-align:center;padding:8px;" />
+      ${repsOnly ? '' : `<input type="number" class="left-weight-in" inputmode="decimal" step="0.5" min="0" value="${left.weight ?? ''}" placeholder="Izq lb" style="text-align:center;padding:8px;" />`}
       <input type="number" class="right-reps-in" inputmode="numeric" min="0" value="${right.reps ?? ''}" placeholder="Der reps" style="text-align:center;padding:8px;" />
-      <input type="number" class="right-weight-in" inputmode="decimal" step="0.5" min="0" value="${right.weight ?? ''}" placeholder="Der lb" style="text-align:center;padding:8px;" />
+      ${repsOnly ? '' : `<input type="number" class="right-weight-in" inputmode="decimal" step="0.5" min="0" value="${right.weight ?? ''}" placeholder="Der lb" style="text-align:center;padding:8px;" />`}
       <button class="del-set" aria-label="Eliminar" style="padding:4px;border:none;color:var(--text-dim);background:transparent;"><i class="ti ti-x" style="font-size:14px;"></i></button>
     </div>
     <div style="display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:center;">
-      <label style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted);white-space:nowrap;">
+      <label style="display:${timeMode?'none':'inline-flex'};align-items:center;gap:5px;font-size:11px;color:var(--text-muted);white-space:nowrap;">
         <input type="checkbox" class="set-unilateral" ${isUnilateral?'checked':''} /> Uni
       </label>
       <input type="text" class="note-in" value="${set && set.note ? esc(set.note) : ''}" placeholder="${ph_n ? 'Nota anterior: '+esc(ph_n) : 'Nota del set (opcional)'}" maxlength="120" style="width:100%;font-size:12px;padding:7px 11px;" />
     </div>
+    ${timeMode ? '' : `<div style="margin-top:8px;">
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--text-muted);cursor:pointer;">
+        <input type="checkbox" class="set-drop" ${hasDrops?'checked':''} /> Drop set
+      </label>
+      <div class="drops-container" style="display:${hasDrops?'block':'none'};">${dropRows}</div>
+      <button class="add-drop" style="display:${hasDrops?'inline-flex':'none'};align-items:center;gap:5px;margin-top:7px;padding:6px 10px;font-size:11px;border-style:dashed;color:var(--accent);">
+        <i class="ti ti-plus" style="font-size:13px;"></i> Agregar drop
+      </button>
+    </div>`}
   </div>`;
 }
 
@@ -2323,6 +2433,13 @@ function openLibExerciseEditor(initial, onSave){
         <input id="libExVideo" type="text" value="${esc(ex.video || '')}" maxlength="120" placeholder="ej: lat pulldown technique" />
         <div class="muted" style="font-size:11px;margin-top:6px;margin-bottom:14px;">En inglés funciona mejor.</div>
 
+        <label class="section-label" style="margin-bottom:6px;">Tipo de registro</label>
+        <select id="libMeasurement" style="margin-bottom:14px;">
+          <option value="weight_reps" ${exerciseMeasurementType(ex)==='weight_reps'?'selected':''}>Peso × reps</option>
+          <option value="reps_only" ${exerciseMeasurementType(ex)==='reps_only'?'selected':''}>Solo reps</option>
+          <option value="time" ${exerciseMeasurementType(ex)==='time'?'selected':''}>Tiempo (min + seg)</option>
+        </select>
+
         <div class="section-label">Músculos trabajados</div>
         <div class="muted" style="font-size:12px;margin-bottom:10px;">Toca: vacío → <strong style="color:var(--accent);">principal ●●</strong> → <strong style="color:var(--warning);">secundario ●</strong> → vacío</div>
         <div class="muscle-grid" id="libMuscleGrid">${renderMuscles()}</div>
@@ -2352,6 +2469,7 @@ function openLibExerciseEditor(initial, onSave){
     document.getElementById('libSave').addEventListener('click', () => {
       ex.name = (document.getElementById('libExName').value || '').trim();
       ex.video = (document.getElementById('libExVideo').value || '').trim();
+      ex.measurement = document.getElementById('libMeasurement')?.value || 'weight_reps';
       ex.alts = Array.from(document.querySelectorAll('[data-alt-i]')).map(i => i.value.trim()).filter(Boolean);
       const wantSuggest = !!document.getElementById('libSuggest')?.checked;
       ex._suggestSimilar = wantSuggest;
@@ -2379,6 +2497,7 @@ function openLibExerciseEditor(initial, onSave){
         ex.primary = conv.primary;
         ex.secondary = conv.secondary;
         ex.alts = conv.alts;
+        ex.measurement = conv.measurement || 'weight_reps';
         rebuild();
       });
     });
@@ -3071,7 +3190,7 @@ function renderDay(){
     }).join('');
     const { primLabels } = muscleLabels(ex.primary, ex.secondary);
     const musclePill = primLabels.slice(0,2).join(' · ');
-    const lastInfo = myLatest ? `<span class="mono" style="font-size:11px;color:var(--accent);">${myLatest.sets.length}×</span> · ${myLatest.date}` : (state.currentUser ? 'Sin registros' : '');
+    const lastInfo = myLatest ? `<span class="mono" style="font-size:11px;color:var(--accent);">${entrySetCount(myLatest)}×</span> · ${myLatest.date}` : (state.currentUser ? 'Sin registros' : '');
     return `<button data-action="openEx" data-idx="${idx}" class="exercise-card fade-in" style="animation-delay:${idx*30}ms;">
       <div class="row">
         <div style="min-width:0;flex:1;">
@@ -3130,6 +3249,10 @@ function renderExercise(){
   const dayKey = state.currentDay;
   const r = getRoutineForDay(dayKey);
   const ex = r.exercises[state.currentExerciseIdx];
+  const measurement = exerciseMeasurementType(ex);
+  const repsOnly = measurement === 'reps_only';
+  const timeMode = measurement === 'time';
+  const metricLabel = timeMode ? 'Tiempo' : repsOnly ? 'Solo reps' : 'Peso × reps';
   const ek = exerciseKey(dayKey, state.currentExerciseIdx);
   const myEntries = state.currentUser ? getEntries(state.currentUser, ek).slice().sort((a,b)=>b.date.localeCompare(a.date)) : [];
   const lastEntry = myEntries[0]; const prevEntry = myEntries[1];
@@ -3148,7 +3271,7 @@ function renderExercise(){
     for (let i=0;i<initialCount;i++){
       const set = formEntry && formEntry.sets[i] ? formEntry.sets[i] : null;
       const lastSet = lastEntry && lastEntry.sets[i] ? lastEntry.sets[i] : null;
-      setRows.push(renderSetRow(i, set, lastSet, unilateralMode));
+      setRows.push(renderSetRow(i, set, lastSet, unilateralMode, measurement));
     }
     const sessionNotePh = lastEntry && lastEntry.note ? 'Nota anterior: ' + lastEntry.note.slice(0,60) : 'Cómo te sentiste, observaciones, ajustes…';
     formHtml = `<div class="card" style="margin-bottom:18px;">
@@ -3159,17 +3282,18 @@ function renderExercise(){
       </div>
       ${editing ? `<div class="banner banner-info" style="margin-bottom:12px;"><i class="ti ti-edit"></i><div>Editando la sesión del ${esc(editing.date)}. Puedes cambiar la fecha, sets, peso, reps y notas.</div></div>` : ''}
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
-        <label style="display:inline-flex;align-items:center;gap:8px;padding:8px 11px;background:var(--bg-elev-2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;cursor:pointer;">
+        <span class="badge" style="background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-border);">${esc(metricLabel)}</span>
+        <label style="display:${timeMode?'none':'inline-flex'};align-items:center;gap:8px;padding:8px 11px;background:var(--bg-elev-2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;cursor:pointer;">
           <input id="unilateralMode" type="checkbox" data-action="toggleUnilateral" ${unilateralMode?'checked':''} />
           Unilateral
         </label>
         <button data-action="copyFirstSet" style="padding:8px 11px;font-size:13px;border-color:var(--border);background:var(--bg-elev-2);">
           <i class="ti ti-copy" style="font-size:14px;vertical-align:-2px;color:var(--accent);"></i> Copiar set 1
         </button>
-        <div class="muted" style="font-size:11px;flex-basis:100%;line-height:1.35;">Puedes mezclar sets normales y unilaterales. Usa Uni por set; todo se suma al mismo progreso de este ejercicio.</div>
+        <div class="muted" style="font-size:11px;flex-basis:100%;line-height:1.35;">${timeMode ? 'Registra duración por set en minutos y segundos.' : 'Puedes mezclar sets normales, unilaterales y drop sets. Todo se suma al mismo progreso de este ejercicio.'}</div>
       </div>
-      <div class="dim" style="display:grid;grid-template-columns:30px 1fr 1fr 28px;gap:8px;margin-bottom:8px;padding:0 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;font-family:var(--font-mono);">
-        <div style="text-align:center;">SET</div><div style="text-align:center;">REPS</div><div style="text-align:center;">PESO (LB)</div><div></div>
+      <div class="dim" style="display:grid;grid-template-columns:30px ${timeMode || !repsOnly ? '1fr 1fr' : '1fr'} 28px;gap:8px;margin-bottom:8px;padding:0 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;font-family:var(--font-mono);">
+        <div style="text-align:center;">SET</div>${timeMode ? '<div style="text-align:center;">MIN</div><div style="text-align:center;">SEG</div>' : `<div style="text-align:center;">REPS</div>${repsOnly ? '' : '<div style="text-align:center;">PESO (LB)</div>'}`}<div></div>
       </div>
       <div id="setsContainer">${setRows.join('')}</div>
       <button data-action="addSet" style="margin-top:6px;width:100%;padding:11px;border-style:dashed;color:var(--text-muted);">
@@ -3194,7 +3318,7 @@ function renderExercise(){
       const best = bestSet(e); const vol = totalVolume(e);
       const setNotes = (e.sets||[]).map((s,i)=> s.note ? `Set ${i+1}: ${s.note}` : null).filter(Boolean);
       historyRows.push({ date:e.date, user:u, ek, uid:u.id,
-        summary:`${e.sets.length} sets · max ${best ? setMaxWeight(best)+'lb × '+setDisplayReps(best) : '–'} · vol ${Math.round(vol)}`,
+        summary: sessionMetricSummary(e, best, vol, e.measurement || measurement),
         sessionNote: e.note || null, setNotes });
     }
   }
@@ -3219,9 +3343,10 @@ function renderExercise(){
   if (lastEntry && prevEntry){
     const lb = bestSet(lastEntry); const pb = bestSet(prevEntry);
     if (lb && pb){
-      const diff = setMaxWeight(lb) - setMaxWeight(pb);
-      if (diff>0) progressBadge = `<span class="badge" style="background:var(--success-bg);color:var(--success);"><i class="ti ti-trending-up" style="font-size:12px;"></i>+${diff} lb</span>`;
-      else if (diff<0) progressBadge = `<span class="badge" style="background:var(--warning-bg);color:var(--warning);"><i class="ti ti-trending-down" style="font-size:12px;"></i>${diff} lb</span>`;
+      const diff = setComparableValue(lb, measurement) - setComparableValue(pb, measurement);
+      const unit = measurement === 'time' ? 's' : measurement === 'reps_only' ? ' reps' : ' lb';
+      if (diff>0) progressBadge = `<span class="badge" style="background:var(--success-bg);color:var(--success);"><i class="ti ti-trending-up" style="font-size:12px;"></i>+${diff}${unit}</span>`;
+      else if (diff<0) progressBadge = `<span class="badge" style="background:var(--warning-bg);color:var(--warning);"><i class="ti ti-trending-down" style="font-size:12px;"></i>${diff}${unit}</span>`;
       else progressBadge = `<span class="badge" style="background:var(--bg-elev-2);color:var(--text-muted);">Igual</span>`;
     }
   }
@@ -3477,20 +3602,22 @@ function renderDaily(insideProgress = false){
   rows.sort((a,b)=> a.user.name.localeCompare(b.user.name) || exerciseNameForKey(a.ek).localeCompare(exerciseNameForKey(b.ek)));
   const totals = rows.reduce((acc,r)=>{
     acc.sessions += 1;
-    acc.sets += (r.entry.sets || []).length;
+    acc.sets += entrySetCount(r.entry);
     acc.volume += r.volume;
     acc.max = Math.max(acc.max, r.best ? setMaxWeight(r.best) : 0);
     return acc;
   }, { sessions:0, sets:0, volume:0, max:0 });
   const list = rows.map(r => {
     const mine = state.currentUser && r.user.id === state.currentUser;
-    const setText = (r.entry.sets || []).map((set,i)=>formatSetLine(set, i)).join(' · ');
+    const measurement = r.entry.measurement || 'weight_reps';
+    const setText = (r.entry.sets || []).map((set,i)=>formatSetLine(set, i, measurement)).join(' · ');
+    const metricSummary = sessionMetricSummary(r.entry, r.best, r.volume, measurement);
     return `<div class="history-entry">
       <div class="row" style="align-items:flex-start;">
         <span class="dot" style="background:${r.user.color};width:14px;height:14px;margin-top:3px;"></span>
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;">${esc(r.user.name)} · ${esc(exerciseNameForKey(r.ek))}</div>
-          <div class="muted mono" style="font-size:11px;margin-top:2px;">${(r.entry.sets||[]).length} sets · max ${r.best ? setMaxWeight(r.best)+'lb × '+setDisplayReps(r.best) : '–'} · vol ${Math.round(r.volume)}</div>
+          <div class="muted mono" style="font-size:11px;margin-top:2px;">${esc(metricSummary)}</div>
           <div class="dim wrap-text" style="font-size:11px;margin-top:6px;">${esc(setText)}</div>
           ${r.entry.note ? `<div class="wrap-text" style="margin-top:7px;padding:7px 10px;background:var(--bg-elev);border-radius:8px;font-size:12px;color:var(--text-muted);font-style:italic;"><i class="ti ti-message" style="font-size:12px;"></i> ${esc(r.entry.note)}</div>` : ''}
         </div>
@@ -4110,6 +4237,12 @@ function renderEditExercise(){
       <label class="section-label" style="margin-bottom:6px;">Búsqueda del video en YouTube</label>
       <input id="exVideo" type="text" value="${esc(window._editEx.video)}" maxlength="120" placeholder="ej: lat pulldown technique" />
       <div class="muted" style="font-size:11px;margin-top:6px;">En inglés funciona mejor para encontrar videos.</div>
+      <label class="section-label" style="margin:12px 0 6px;">Tipo de registro</label>
+      <select id="exMeasurement">
+        <option value="weight_reps" ${exerciseMeasurementType(window._editEx)==='weight_reps'?'selected':''}>Peso × reps</option>
+        <option value="reps_only" ${exerciseMeasurementType(window._editEx)==='reps_only'?'selected':''}>Solo reps</option>
+        <option value="time" ${exerciseMeasurementType(window._editEx)==='time'?'selected':''}>Tiempo (min + seg)</option>
+      </select>
     </div>
 
     <div class="section-label">Músculos trabajados</div>
@@ -4135,13 +4268,19 @@ function attach(){
 function attachSetHandlers(){
   document.querySelectorAll('.del-set').forEach(b => b.addEventListener('click', e => e.target.closest('.set-row').remove()));
   document.querySelectorAll('.set-unilateral').forEach(b => b.addEventListener('change', e => setRowUnilateral(e.target.closest('.set-row'), e.target.checked)));
+  document.querySelectorAll('.set-drop').forEach(b => b.addEventListener('change', e => setRowDrop(e.target.closest('.set-row'), e.target.checked)));
+  document.querySelectorAll('.add-drop').forEach(b => b.addEventListener('click', e => addDropRow(e.target.closest('.set-row'))));
+  document.querySelectorAll('.del-drop').forEach(b => b.addEventListener('click', e => e.target.closest('.drop-row')?.remove()));
 }
 function setRowUnilateral(row, on){
   if (!row) return;
+  if (row.dataset.measurement === 'time') return;
   const normal = row.querySelector('.normal-fields');
   const uni = row.querySelector('.unilateral-fields');
   if (normal) normal.style.display = on ? 'none' : 'grid';
   if (uni) uni.style.display = on ? 'grid' : 'none';
+  row.querySelectorAll('.drop-normal-fields').forEach(el => { el.style.display = on ? 'none' : 'grid'; });
+  row.querySelectorAll('.drop-unilateral-fields').forEach(el => { el.style.display = on ? 'grid' : 'none'; });
   const cb = row.querySelector('.set-unilateral');
   if (cb) cb.checked = !!on;
   if (on){
@@ -4161,6 +4300,51 @@ function setRowUnilateral(row, on){
     if (repsIn && !repsIn.value) repsIn.value = reps;
     if (weightIn && !weightIn.value) weightIn.value = weight;
   }
+}
+function setRowDrop(row, on){
+  if (!row) return;
+  const container = row.querySelector('.drops-container');
+  const addBtn = row.querySelector('.add-drop');
+  if (container) container.style.display = on ? 'block' : 'none';
+  if (addBtn) addBtn.style.display = on ? 'inline-flex' : 'none';
+  const cb = row.querySelector('.set-drop');
+  if (cb) cb.checked = !!on;
+  if (on && container && !container.querySelector('.drop-row')) addDropRow(row);
+}
+function addDropRow(row, seed = null){
+  if (!row) return;
+  const container = row.querySelector('.drops-container');
+  if (!container) return;
+  const measurement = row.dataset.measurement || 'weight_reps';
+  const isUnilateral = !!row.querySelector('.set-unilateral')?.checked;
+  const idx = container.querySelectorAll('.drop-row').length;
+  container.insertAdjacentHTML('beforeend', renderDropRow(seed, idx, isUnilateral, measurement));
+  const added = container.lastElementChild;
+  added?.querySelectorAll('.del-drop').forEach(b => b.addEventListener('click', e => e.target.closest('.drop-row')?.remove()));
+}
+function readDropRows(row, rowUnilateral, measurement){
+  if (measurement === 'time') return [];
+  return Array.from(row.querySelectorAll('.drop-row')).map(dropRow => {
+    if (rowUnilateral){
+      const left = {
+        reps: Number(dropRow.querySelector('.drop-left-reps-in')?.value || 0),
+        weight: measurement === 'reps_only' ? 0 : Number(dropRow.querySelector('.drop-left-weight-in')?.value || 0)
+      };
+      const right = {
+        reps: Number(dropRow.querySelector('.drop-right-reps-in')?.value || 0),
+        weight: measurement === 'reps_only' ? 0 : Number(dropRow.querySelector('.drop-right-weight-in')?.value || 0)
+      };
+      if (left.reps > 0 && !(right.reps > 0)){ right.reps = left.reps; right.weight = left.weight; }
+      if (right.reps > 0 && !(left.reps > 0)){ left.reps = right.reps; left.weight = right.weight; }
+      return { unilateral:true, left, right, reps:setDisplayReps({unilateral:true,left,right}), weight:setMaxWeight({unilateral:true,left,right}) };
+    }
+    const reps = Number(dropRow.querySelector('.drop-reps-in')?.value || 0);
+    const weight = measurement === 'reps_only' ? 0 : Number(dropRow.querySelector('.drop-weight-in')?.value || 0);
+    return measurement === 'reps_only' ? { reps } : { reps, weight };
+  }).filter(drop => {
+    if (drop.unilateral) return (drop.left?.reps > 0) || (drop.right?.reps > 0);
+    return Number(drop.reps) > 0 && (measurement === 'reps_only' || Number(drop.weight) >= 0);
+  });
 }
 
 async function handle(e){
@@ -4926,6 +5110,7 @@ async function handle(e){
       window._editEx.primary = conv.primary;
       window._editEx.secondary = conv.secondary;
       window._editEx.alts = conv.alts;
+      window._editEx.measurement = conv.measurement || 'weight_reps';
       render();
     });
     return;
@@ -5189,10 +5374,23 @@ async function handle(e){
     const rows = Array.from(document.querySelectorAll('.set-row'));
     if (rows.length < 2){ toast('No hay sets para copiar'); return; }
     const first = rows[0];
+    const measurement = first.dataset.measurement || 'weight_reps';
+    if (measurement === 'time'){
+      const min = first.querySelector('.time-min-in')?.value || '';
+      const sec = first.querySelector('.time-sec-in')?.value || '';
+      rows.slice(1).forEach(row => {
+        const minIn = row.querySelector('.time-min-in');
+        const secIn = row.querySelector('.time-sec-in');
+        if (minIn && !minIn.value) minIn.value = min;
+        if (secIn && !secIn.value) secIn.value = sec;
+      });
+      toast('Set 1 copiado a los campos vacíos');
+      return;
+    }
     const firstUnilateral = !!first.querySelector('.set-unilateral')?.checked;
     const fields = firstUnilateral
-      ? ['left-reps-in','left-weight-in','right-reps-in','right-weight-in']
-      : ['reps-in','weight-in'];
+      ? (measurement === 'reps_only' ? ['left-reps-in','right-reps-in'] : ['left-reps-in','left-weight-in','right-reps-in','right-weight-in'])
+      : (measurement === 'reps_only' ? ['reps-in'] : ['reps-in','weight-in']);
     rows.slice(1).forEach(row => {
       setRowUnilateral(row, firstUnilateral);
       fields.forEach(cls => {
@@ -5207,11 +5405,16 @@ async function handle(e){
   if (a === 'addSet'){
     const c = document.getElementById('setsContainer'); const n = c.children.length + 1;
     const unilateral = !!document.getElementById('unilateralMode')?.checked;
+    const measurement = c.querySelector('.set-row')?.dataset.measurement || exerciseMeasurementType(getRoutineForDay(state.currentDay)?.exercises?.[state.currentExerciseIdx]);
     const prev = c.lastElementChild;
     let seed = null;
     if (prev){
       const prevUnilateral = !!prev.querySelector('.set-unilateral')?.checked;
-      if (prevUnilateral){
+      if (measurement === 'time'){
+        const minutes = Number(prev.querySelector('.time-min-in')?.value || 0);
+        const seconds = Number(prev.querySelector('.time-sec-in')?.value || 0);
+        seed = { durationSeconds: minutes * 60 + seconds };
+      } else if (prevUnilateral){
         seed = {
           unilateral:true,
           left:{ reps: prev.querySelector('.left-reps-in')?.value || '', weight: prev.querySelector('.left-weight-in')?.value || '' },
@@ -5221,11 +5424,13 @@ async function handle(e){
         seed = { reps: prev.querySelector('.reps-in')?.value || '', weight: prev.querySelector('.weight-in')?.value || '' };
       }
     }
-    c.insertAdjacentHTML('beforeend', renderSetRow(n - 1, seed, null, seed ? !!seed.unilateral : unilateral));
+    c.insertAdjacentHTML('beforeend', renderSetRow(n - 1, seed, null, seed ? !!seed.unilateral : unilateral, measurement));
     const added = c.lastElementChild;
     if (added) {
       added.querySelectorAll('.del-set').forEach(b => b.addEventListener('click', ()=> added.remove()));
       added.querySelector('.set-unilateral')?.addEventListener('change', e => setRowUnilateral(added, e.target.checked));
+      added.querySelector('.set-drop')?.addEventListener('change', e => setRowDrop(added, e.target.checked));
+      added.querySelector('.add-drop')?.addEventListener('click', () => addDropRow(added));
     }
     return;
   }
@@ -5235,17 +5440,29 @@ async function handle(e){
     const date = document.getElementById('sessionDate').value || today();
     const rows = document.querySelectorAll('.set-row');
     const sets = [];
+    const currentExercise = getRoutineForDay(state.currentDay)?.exercises?.[state.currentExerciseIdx];
+    const measurement = exerciseMeasurementType(currentExercise);
     rows.forEach(r => {
       const note = (r.querySelector('.note-in').value || '').trim();
       const rowUnilateral = !!r.querySelector('.set-unilateral')?.checked;
-      if (rowUnilateral){
+      const drops = readDropRows(r, rowUnilateral, measurement);
+      if (measurement === 'time'){
+        const minutes = Number(r.querySelector('.time-min-in')?.value || 0);
+        const seconds = Number(r.querySelector('.time-sec-in')?.value || 0);
+        const durationSeconds = minutes * 60 + seconds;
+        if (durationSeconds > 0){
+          const s = { durationSeconds, minutes, seconds };
+          if (note) s.note = note;
+          sets.push(s);
+        }
+      } else if (rowUnilateral){
         const left = {
           reps: Number(r.querySelector('.left-reps-in').value),
-          weight: Number(r.querySelector('.left-weight-in').value)
+          weight: measurement === 'reps_only' ? 0 : Number(r.querySelector('.left-weight-in')?.value || 0)
         };
         const right = {
           reps: Number(r.querySelector('.right-reps-in').value),
-          weight: Number(r.querySelector('.right-weight-in').value)
+          weight: measurement === 'reps_only' ? 0 : Number(r.querySelector('.right-weight-in')?.value || 0)
         };
         if (left.reps > 0 && left.weight >= 0 && !(right.reps > 0)){
           right.reps = left.reps; right.weight = left.weight;
@@ -5255,18 +5472,24 @@ async function handle(e){
         }
         if ((left.reps > 0 && left.weight >= 0) || (right.reps > 0 && right.weight >= 0)){
           const s = { unilateral:true, left, right, reps:setDisplayReps({unilateral:true,left,right}), weight:setMaxWeight({unilateral:true,left,right}) };
+          if (drops.length) s.drops = drops;
           if (note) s.note = note;
           sets.push(s);
         }
       } else {
         const reps = Number(r.querySelector('.reps-in').value);
-        const weight = Number(r.querySelector('.weight-in').value);
-        if (reps > 0 && weight >= 0){ const s = { reps, weight }; if (note) s.note = note; sets.push(s); }
+        const weight = measurement === 'reps_only' ? 0 : Number(r.querySelector('.weight-in')?.value || 0);
+        if (reps > 0 && weight >= 0){
+          const s = measurement === 'reps_only' ? { reps } : { reps, weight };
+          if (drops.length) s.drops = drops;
+          if (note) s.note = note;
+          sets.push(s);
+        }
       }
     });
     const sessionNote = (document.getElementById('sessionNote').value || '').trim();
     const status = document.getElementById('saveStatus');
-    if (!sets.length){ status.style.color = 'var(--warning)'; status.textContent = 'Ingresa al menos un set con reps y peso.'; return; }
+    if (!sets.length){ status.style.color = 'var(--warning)'; status.textContent = measurement === 'time' ? 'Ingresa al menos un set con tiempo.' : 'Ingresa al menos un set con reps.'; return; }
     const ek = exerciseKey(state.currentDay, state.currentExerciseIdx);
     const userLogs = state.logs[state.currentUser] || {};
     if (!userLogs[ek]) userLogs[ek] = [];
@@ -5274,7 +5497,7 @@ async function handle(e){
       userLogs[ek] = userLogs[ek].filter(e => e.date !== state.editingSession.date);
     }
     const idx = userLogs[ek].findIndex(e => e.date === date);
-    const entry = { date, sets }; if (sessionNote) entry.note = sessionNote;
+    const entry = { date, sets, measurement }; if (sessionNote) entry.note = sessionNote;
     if (idx >= 0) userLogs[ek][idx] = entry; else userLogs[ek].push(entry);
     state.logs[state.currentUser] = userLogs;
     await saveUserLogs(state.currentUser, userLogs);
@@ -5485,6 +5708,7 @@ async function handle(e){
     const ed = window._editEx;
     ed.name = (document.getElementById('exName').value || '').trim();
     ed.video = (document.getElementById('exVideo').value || '').trim();
+    ed.measurement = document.getElementById('exMeasurement')?.value || ed.measurement || 'weight_reps';
     ed.alts = Array.from(document.querySelectorAll('.alt-in')).map(i => i.value.trim()).filter(Boolean);
     if (!ed.name){ toast('Ingresa un nombre'); return; }
     let routine;
@@ -5644,5 +5868,3 @@ init();
 </script>
 </body>
 </html>
-
-
