@@ -489,7 +489,7 @@ function dbToAppExercise(dbEx){
   const secondary = Object.entries(dbEx.sv||{}).filter(([k,v]) => v >= 40 && v < 70).sort((a,b) => b[1]-a[1]).map(([k]) => k);
   return {
     name: dbEx.n,
-    video: (dbEx.en || dbEx.n).toLowerCase() + ' technique',
+    video: (dbEx.n || dbEx.en).toLowerCase() + ' tecnica',
     primary,
     secondary,
     alts: [],
@@ -3648,7 +3648,7 @@ function renderExerciseDetail(){
   }).join('');
 
   const similars = findSimilarExercises(ex, 5);
-  const videoQuery = (ex.en || ex.n) + ' technique';
+  const videoQuery = (ex.n || ex.en) + ' tecnica';
   const videoUrl = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(videoQuery);
   const measurementLabel = ex.m === 'time' ? '⏱️ Tiempo' : ex.m === 'reps_only' ? '🔢 Solo reps' : '🏋️ Peso × Reps';
 
