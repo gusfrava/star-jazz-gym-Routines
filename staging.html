@@ -581,6 +581,7 @@ const state = {
   exSelectedId: null,
   exAddToDay: null,  // si vienes de un día → muestra botón "Agregar a [día]"
   homeExQuery: '',  // búsqueda rápida en el home
+  muscleGradientMap: true,  // Sesión 2: usar gradient en mapa muscular (default ON)
   // ====== Library (Fase 1) ======
   library: {},            // { routineId: {id, name, focus, icon, exercises[], scope:'shared', updatedAt} }
   personalLibrary: {},    // { routineId: {... scope:'personal'} } — del usuario actual
@@ -1610,17 +1611,32 @@ function muscleLabels(prim, sec){
 function routineMuscleStats(routine){
   const scores = {};
   let total = 0;
+  const useGradient = state.muscleGradientMap;
   (routine?.exercises || []).forEach(ex => {
-    (ex.primary || []).forEach(id => {
-      if (!MUSCLES[id]) return;
-      scores[id] = (scores[id] || 0) + 1;
-      total += 1;
-    });
-    (ex.secondary || []).forEach(id => {
-      if (!MUSCLES[id]) return;
-      scores[id] = (scores[id] || 0) + 0.5;
-      total += 0.5;
-    });
+    // Try to find the DB exercise to get full svg_weights
+    const dbEx = ex._dbId ? EXERCISE_DB.find(e => e.id === ex._dbId) : null;
+    const sv = ex._svgWeights || (dbEx ? dbEx.sv : null);
+    if (useGradient && sv && Object.keys(sv).length){
+      // Use real scores: each muscle's contribution = score/100
+      for (const [id, score] of Object.entries(sv)){
+        if (!MUSCLES[id] || score < 20) continue;
+        const contribution = score / 100;
+        scores[id] = (scores[id] || 0) + contribution;
+        total += contribution;
+      }
+    } else {
+      // Fallback: binary primary/secondary (old system)
+      (ex.primary || []).forEach(id => {
+        if (!MUSCLES[id]) return;
+        scores[id] = (scores[id] || 0) + 1;
+        total += 1;
+      });
+      (ex.secondary || []).forEach(id => {
+        if (!MUSCLES[id]) return;
+        scores[id] = (scores[id] || 0) + 0.5;
+        total += 0.5;
+      });
+    }
   });
   const max = Math.max(0, ...Object.values(scores));
   const rows = Object.entries(scores)
@@ -1800,6 +1816,25 @@ function getAllDayKeys(){
 }
 
 // ====== BODY DIAGRAM SVG ======
+// Sesión 2: Build intensity map from an exercise's svg_weights (or estimate from primary/secondary)
+function exerciseIntensityMap(ex){
+  if (!state.muscleGradientMap) return null;
+  // If exercise has _svgWeights (from DB), use them directly
+  const sv = ex._svgWeights || (ex._dbId ? (EXERCISE_DB.find(e => e.id === ex._dbId)?.sv || {}) : null);
+  if (sv && Object.keys(sv).length){
+    const map = {};
+    for (const [id, score] of Object.entries(sv)){
+      if (score >= 20) map[id] = { intensity: score / 100, percent: score };
+    }
+    return map;
+  }
+  // Fallback: estimate from primary/secondary (binary → fake gradient)
+  const map = {};
+  (ex.primary || []).forEach(id => map[id] = { intensity: 0.85, percent: 85 });
+  (ex.secondary || []).forEach(id => { if (!map[id]) map[id] = { intensity: 0.5, percent: 50 }; });
+  return Object.keys(map).length ? map : null;
+}
+
 function bodyDiagram(primary = [], secondary = [], intensityMap = null){
   const isPrim = id => (primary || []).includes(id);
   const isSec = id => (secondary || []).includes(id);
@@ -1911,7 +1946,48 @@ function openModal(html, onAttach){
 }
 function closeModal(){ modalRoot.innerHTML = ''; state.modalOpen = null; }
 
-// ====== SEARCH MODAL (Sesión 1) — quick search with filters from home/day ======
+// ====== SIMILAR SUGGESTIONS MODAL (Sesión 2) ======
+function openSimilarSuggestions(savedEx, similars){
+  const cards = similars.map(ex => {
+    const tinfo = TIER_INFO[ex.t] || TIER_INFO.B;
+    const muscles = Object.entries(ex.sv||{}).sort((a,b)=>b[1]-a[1]).slice(0,2).map(([k])=>MUSCLES[k]?.label||k).join(' · ');
+    return `<button data-ssm-id="${esc(ex.id)}" style="width:100%;text-align:left;padding:11px;margin-bottom:6px;background:var(--bg-elev-2);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;gap:10px;">
+      <div style="width:32px;height:32px;border-radius:8px;background:${tinfo.color}22;color:${tinfo.color};display:flex;align-items:center;justify-content:center;font-weight:700;font-family:var(--font-mono);font-size:12px;flex-shrink:0;">${ex.t}</div>
+      <div style="min-width:0;flex:1;">
+        <div style="font-weight:500;font-size:13px;">${esc(ex.n)}</div>
+        <div class="muted" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px;">${esc(muscles || ex.g || '')}</div>
+      </div>
+      <div class="mono" style="font-size:11px;color:var(--text-dim);">${ex.s||'—'}</div>
+    </button>`;
+  }).join('');
+
+  modalRoot.innerHTML = `<div class="modal-backdrop" id="ssmb">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:480px;">
+      <div class="row" style="gap:8px;margin-bottom:6px;">
+        <h2 style="flex:1;">💡 Quizás te interese</h2>
+        <button id="ssmClose" aria-label="Cerrar" style="padding:6px 10px;font-size:18px;line-height:1;background:transparent;border:none;">×</button>
+      </div>
+      <div class="muted" style="font-size:12px;margin-bottom:14px;">
+        Ejercicios similares a <strong>${esc(savedEx.name)}</strong> según los músculos que seleccionaste.
+      </div>
+      ${cards}
+      <button id="ssmDone" style="width:100%;padding:11px;margin-top:8px;">Listo</button>
+    </div>
+  </div>`;
+  document.getElementById('ssmb').addEventListener('click', e => { if (e.target.id === 'ssmb') closeModal(); });
+  document.getElementById('ssmClose').addEventListener('click', closeModal);
+  document.getElementById('ssmDone').addEventListener('click', closeModal);
+  document.querySelectorAll('[data-ssm-id]').forEach(b => {
+    b.addEventListener('click', () => {
+      state.exSelectedId = b.dataset.ssmId;
+      closeModal();
+      state.view = 'exerciseDetail';
+      render();
+    });
+  });
+}
+
+
 function openSearchModal(opts = {}){
   const fromDay = opts.fromDay || null; // si viene de una vista de día
   let query = state.homeExQuery || '';
@@ -2226,6 +2302,14 @@ function openLibExerciseEditor(initial, onSave){
           <i class="ti ti-plus" style="font-size:14px;vertical-align:-2px;"></i> Agregar alternativa
         </button>
 
+        <label class="row" style="margin-top:18px;gap:10px;cursor:pointer;font-size:13px;">
+          <input type="checkbox" id="libSuggest" ${ex._suggestSimilar ? 'checked' : ''} style="margin:0;" />
+          <span style="flex:1;">
+            <span style="font-weight:500;">Sugerir ejercicios similares</span>
+            <span class="muted" style="display:block;font-size:11px;margin-top:1px;">Al guardar te muestra 3 alternativas con músculos parecidos.</span>
+          </span>
+        </label>
+
         <div class="row" style="gap:8px;margin-top:18px;">
           <button id="libCancel" style="flex:1;padding:12px;">Cancelar</button>
           <button class="primary" id="libSave" style="flex:1;padding:12px;font-weight:600;">Guardar</button>
@@ -2238,8 +2322,15 @@ function openLibExerciseEditor(initial, onSave){
       ex.name = (document.getElementById('libExName').value || '').trim();
       ex.video = (document.getElementById('libExVideo').value || '').trim();
       ex.alts = Array.from(document.querySelectorAll('[data-alt-i]')).map(i => i.value.trim()).filter(Boolean);
+      const wantSuggest = !!document.getElementById('libSuggest')?.checked;
+      ex._suggestSimilar = wantSuggest;
       closeModal();
       onSave(ex);
+      // Show suggestions modal AFTER save, if toggle is on and we have muscles
+      if (wantSuggest && (ex.primary?.length || ex.secondary?.length)){
+        const similars = findSimilarByMuscles(ex.primary || [], ex.secondary || [], 3);
+        if (similars.length) openSimilarSuggestions(ex, similars);
+      }
     });
     attachMuscleHandlers();
     document.getElementById('libAddAlt').addEventListener('click', () => {
@@ -3118,7 +3209,7 @@ function renderExercise(){
       ${progressBadge}
     </div>
     ${state.showMuscles ? `<div class="card" style="margin-bottom:16px;">
-      ${bodyDiagram(ex.primary, ex.secondary)}
+      ${bodyDiagram(ex.primary, ex.secondary, exerciseIntensityMap(ex))}
       <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px;">
         <div class="row" style="font-size:13px;">
           <span style="width:14px;height:14px;background:var(--accent);border-radius:4px;flex-shrink:0;"></span>
@@ -3491,6 +3582,17 @@ function renderSettings(){
           <div class="muted" style="font-size:12px;margin-top:2px;">${EXERCISE_DB.length} ejercicios con scores y ratings <span class="pill" style="font-size:9px;margin-left:4px;">NUEVO</span></div>
         </div>
         <i class="ti ti-chevron-right" style="color:var(--text-dim);"></i>
+      </button>
+      <div style="height:1px;background:var(--border);margin:0 8px;"></div>
+      <button data-action="toggleMuscleGradient" style="width:100%;padding:14px 12px;display:flex;align-items:center;gap:12px;background:transparent;border:none;text-align:left;border-radius:8px;">
+        <i class="ti ti-color-swatch" style="font-size:18px;color:var(--accent);"></i>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:500;">Mapa muscular con gradiente</div>
+          <div class="muted" style="font-size:12px;margin-top:2px;">${state.muscleGradientMap ? 'Activo: intensidades por scores' : 'Inactivo: solo principal/secundario'}</div>
+        </div>
+        <div style="width:36px;height:20px;border-radius:10px;background:${state.muscleGradientMap?'var(--accent)':'var(--bg-elev-2)'};position:relative;transition:all 0.2s;flex-shrink:0;">
+          <div style="position:absolute;top:2px;left:${state.muscleGradientMap?'18px':'2px'};width:16px;height:16px;border-radius:50%;background:white;transition:all 0.2s;"></div>
+        </div>
       </button>
     </div>
 
@@ -4749,6 +4851,12 @@ async function handle(e){
     state.view = 'exerciseExplorer';
     render(); return;
   }
+  if (a === 'toggleMuscleGradient'){
+    state.muscleGradientMap = !state.muscleGradientMap;
+    try { localStorage.setItem('muscleGradientMap', state.muscleGradientMap ? '1' : '0'); } catch(e){}
+    toast(state.muscleGradientMap ? 'Gradiente activado' : 'Gradiente desactivado', 'success');
+    render(); return;
+  }
   if (a === 'openSearchModal'){ openSearchModal({}); return; }
   if (a === 'openSearchModalForDay'){ openSearchModal({ fromDay: state.currentDay }); return; }
   if (a === 'addExerciseToDay'){
@@ -5444,6 +5552,11 @@ document.body.addEventListener('click', (e) => {
 
 async function init(){
   removeStrayBodyTextNodes();
+  // Sesión 2: restore gradient toggle from localStorage
+  try {
+    const saved = localStorage.getItem('muscleGradientMap');
+    if (saved !== null) state.muscleGradientMap = saved === '1';
+  } catch(e){}
   rememberGroup(state.currentGroup);
   if (firebaseReady && auth){
     onAuthStateChanged(auth, handleAuthState);
