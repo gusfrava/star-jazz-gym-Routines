@@ -495,20 +495,54 @@ function findSimilarByMuscles(primary = [], secondary = [], n = 5){
 }
 
 // Generar tooltip auto desde scores y notes
+// Genera una descripción del ejercicio: qué es, qué trabaja, cómo se mide.
+// NO juzga el tier — eso ya está visible en el badge.
 function buildExerciseTooltip(ex){
   if (!ex) return '';
+  const isCardio = ex.c === 'c' || ex.m === 'time';
+  const isMobility = ex.c === 'm';
+
+  // Top músculos primarios
+  const topMuscles = Object.entries(ex.sv || {})
+    .filter(([k,v]) => v >= 60)
+    .sort((a,b) => b[1]-a[1])
+    .slice(0,3)
+    .map(([k]) => (MUSCLES[k]?.label || k).toLowerCase());
+
   const parts = [];
-  if (ex.no) parts.push(ex.no);
-  
-  // Highlight strongest score
-  const factors = [
-    { k:'stretch_tension', v: ex.stretch_tension, label:'gran stretch en posición alargada' },
-    { k:'hypertrophy_bias', v: ex.hypertrophy_bias || 0, label:'fuerte sesgo de hipertrofia' },
-    { k:'progression', v: ex.progression, label:'progresión fácil' },
-    { k:'joint_comfort', v: ex.joint_comfort, label:'cómodo para las articulaciones' },
-    { k:'stability', v: ex.stability, label:'muy estable' }
-  ];
-  // We don't have these in compact DB, skip. Use 'no' as primary explanation.
+
+  // Tipo de ejercicio (cardio / movilidad / fuerza)
+  if (isCardio){
+    parts.push('Movimiento de cardio / condicionamiento.');
+    if (topMuscles.length) parts.push(`Trabaja ${topMuscles.join(', ')}.`);
+    parts.push('Se registra por tiempo.');
+  } else if (isMobility){
+    parts.push('Ejercicio de movilidad / recuperación.');
+    if (topMuscles.length) parts.push(`Enfocado en ${topMuscles.join(', ')}.`);
+  } else {
+    // Fuerza: describe el ejercicio neutralmente
+    const tags = [];
+    if (ex.co) tags.push('Compuesto');
+    else tags.push('Aislado');
+    if (ex.u) tags.push('unilateral');
+
+    if (topMuscles.length){
+      parts.push(`${tags.join(', ')} para ${topMuscles.join(', ')}.`);
+    } else {
+      parts.push(tags.join(', ') + '.');
+    }
+
+    // Nivel si no es "todos"
+    if (ex.lv && ex.lv !== 'todos'){
+      parts.push(`Nivel: ${ex.lv}.`);
+    }
+
+    // Equipo si está
+    if (ex.eq){
+      parts.push(`Equipo: ${ex.eq}.`);
+    }
+  }
+
   return parts.join(' ');
 }
 
@@ -4001,7 +4035,7 @@ function renderExerciseDetail(){
     </div>`;
   }).join('');
 
-  const similars = findSimilarExercises(ex, 5);
+  const similars = findSimilarExercises(ex, 8);
   const videoQuery = (ex.n || ex.en) + ' tecnica';
   const videoUrl = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(videoQuery);
   const measurementLabel = ex.m === 'time' ? '⏱️ Tiempo' : ex.m === 'reps_only' ? '🔢 Solo reps' : '🏋️ Peso × Reps';
@@ -4030,7 +4064,7 @@ function renderExerciseDetail(){
         <span class="pill" style="font-size:10px;">${esc(ex.lv||'todos')}</span>
       </div>
     </div>
-    ${ex.no ? `<div class="banner banner-info" style="margin-bottom:14px;"><i class="ti ti-info-circle"></i><div>${esc(ex.no)}</div></div>` : ''}
+    ${(() => { const tip = buildExerciseTooltip(ex); return tip ? `<div class="banner banner-info" style="margin-bottom:14px;"><i class="ti ti-info-circle"></i><div>${esc(tip)}</div></div>` : ''; })()}
     <div class="card" style="margin-bottom:14px;">
       <div class="section-label" style="margin-bottom:10px;">Músculos trabajados</div>
       ${muscleBars || '<div class="muted" style="font-size:13px;">Sin datos de músculos.</div>'}
@@ -4046,10 +4080,33 @@ function renderExerciseDetail(){
         Ver técnica en YouTube
       </button>
     </a>
-    ${similars.length ? `
-      <div class="section-label" style="margin-top:24px;">Ejercicios similares</div>
-      ${similars.map(s => renderExerciseCard(s)).join('')}
-    ` : ''}`;
+    ${(() => {
+      const isLowTier = ex.t === 'D' || ex.t === 'F';
+      if (!isLowTier) {
+        return similars.length ? `
+          <div class="section-label" style="margin-top:24px;">Ejercicios similares</div>
+          ${similars.map(s => renderExerciseCard(s)).join('')}
+        ` : '';
+      }
+      // Para D y F tier: mostrar alternativas MEJORES (S/A/B tier) que trabajen lo mismo
+      const betterAlts = similars.filter(s => ['S','A','B'].includes(s.t)).slice(0, 3);
+      const otherSimilars = similars.filter(s => !['S','A','B'].includes(s.t)).slice(0, 3);
+      let out = '';
+      if (betterAlts.length){
+        out += `
+          <div class="section-label" style="margin-top:24px;color:var(--accent);">💡 Alternativas mejor calificadas</div>
+          <div class="muted" style="font-size:12px;margin-bottom:10px;">Trabajan los mismos músculos con mejor estímulo o resistance profile.</div>
+          ${betterAlts.map(s => renderExerciseCard(s)).join('')}
+        `;
+      }
+      if (otherSimilars.length){
+        out += `
+          <div class="section-label" style="margin-top:18px;">Otros similares</div>
+          ${otherSimilars.map(s => renderExerciseCard(s)).join('')}
+        `;
+      }
+      return out;
+    })()}`;
   attach();
 }
 
