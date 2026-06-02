@@ -3926,18 +3926,48 @@ function renderSettings(){
 
 // ====== EXERCISE EXPLORER (Sesión 1) ======
 function renderExerciseExplorer(){
+  function buildResults(){
+    const q = state.exQuery || '';
+    const f = state.exFilters || {};
+    const results = searchExercises(q, f);
+    const total = results.length;
+    const shown = results.slice(0, 80);
+    const byGroup = {};
+    shown.forEach(ex => {
+      const g = ex.g || 'Otros';
+      if (!byGroup[g]) byGroup[g] = [];
+      byGroup[g].push(ex);
+    });
+    const groupLabel = q ? findMuscleGroup(q) : null;
+    const headerNote = groupLabel
+      ? `<div class="banner banner-info" style="margin-bottom:14px;"><i class="ti ti-info-circle"></i><div>Mostrando ejercicios que trabajan <strong>${esc(groupLabel.label)}</strong>, ordenados por intensidad muscular.</div></div>`
+      : '';
+    const resultsHtml = shown.length === 0 ? `
+      <div class="card" style="padding:40px 20px;text-align:center;">
+        <i class="ti ti-search-off" style="font-size:36px;color:var(--text-dim);display:block;margin-bottom:8px;"></i>
+        <div class="muted">Sin resultados. Probá con otro término o quitá filtros.</div>
+      </div>`
+      : Object.entries(byGroup).map(([group, exs]) => `
+        <div class="section-label" style="margin-top:18px;">${esc(group)} <span style="opacity:0.5;font-weight:400;">(${exs.length})</span></div>
+        ${exs.map(ex => renderExerciseCard(ex)).join('')}
+      `).join('');
+    const footer = total > shown.length ? `<div class="muted" style="text-align:center;font-size:12px;margin-top:12px;">Mostrando ${shown.length} de ${total}. Refiná tu búsqueda para ver más.</div>` : '';
+    return { html: headerNote + resultsHtml + footer, total };
+  }
+
+  function updateResultsOnly(){
+    const r = buildResults();
+    const el = document.getElementById('exResults');
+    if (el) el.innerHTML = r.html;
+    const counter = document.getElementById('exCounter');
+    if (counter) counter.textContent = `${r.total} ejercicios disponibles`;
+    // Re-attach handlers for newly rendered exercise cards
+    el.querySelectorAll('[data-action]').forEach(b => b.addEventListener('click', handle));
+  }
+
   const q = state.exQuery || '';
   const f = state.exFilters || {};
-  const results = searchExercises(q, f);
-  const total = results.length;
-  const shown = results.slice(0, 80);
-
-  const byGroup = {};
-  shown.forEach(ex => {
-    const g = ex.g || 'Otros';
-    if (!byGroup[g]) byGroup[g] = [];
-    byGroup[g].push(ex);
-  });
+  const r = buildResults();
 
   const filterPills = `
     <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:14px;">
@@ -3952,21 +3982,6 @@ function renderExerciseExplorer(){
         </button>`).join('')}
     </div>`;
 
-  const groupLabel = q ? findMuscleGroup(q) : null;
-  const headerNote = groupLabel
-    ? `<div class="banner banner-info" style="margin-bottom:14px;"><i class="ti ti-info-circle"></i><div>Mostrando ejercicios que trabajan <strong>${esc(groupLabel.label)}</strong>, ordenados por intensidad muscular.</div></div>`
-    : '';
-
-  const resultsHtml = shown.length === 0 ? `
-    <div class="card" style="padding:40px 20px;text-align:center;">
-      <i class="ti ti-search-off" style="font-size:36px;color:var(--text-dim);display:block;margin-bottom:8px;"></i>
-      <div class="muted">Sin resultados. Probá con otro término o quitá filtros.</div>
-    </div>`
-    : Object.entries(byGroup).map(([group, exs]) => `
-      <div class="section-label" style="margin-top:18px;">${esc(group)} <span style="opacity:0.5;font-weight:400;">(${exs.length})</span></div>
-      ${exs.map(ex => renderExerciseCard(ex)).join('')}
-    `).join('');
-
   root.innerHTML = `
     ${headerBar('Explorar Ejercicios', 'goSettings')}
     <div class="card" style="margin-bottom:14px;padding:12px;">
@@ -3974,19 +3989,20 @@ function renderExerciseExplorer(){
       ${filterPills}
       <div class="muted" style="font-size:12px;">
         <i class="ti ti-database" style="font-size:13px;vertical-align:-1px;color:var(--accent);"></i>
-        ${total} ejercicios disponibles · <a data-action="goHowRatingWorks" style="color:var(--accent);cursor:pointer;text-decoration:underline;">¿Cómo funciona el rating?</a>
+        <span id="exCounter">${r.total} ejercicios disponibles</span> · <a data-action="goHowRatingWorks" style="color:var(--accent);cursor:pointer;text-decoration:underline;">¿Cómo funciona el rating?</a>
       </div>
     </div>
-    ${headerNote}
-    ${resultsHtml}
-    ${total > shown.length ? `<div class="muted" style="text-align:center;font-size:12px;margin-top:12px;">Mostrando ${shown.length} de ${total}. Refiná tu búsqueda para ver más.</div>` : ''}`;
+    <div id="exResults">${r.html}</div>`;
   attach();
   const inp = document.getElementById('exSearch');
   if (inp){
+    inp.focus();
+    inp.setSelectionRange(inp.value.length, inp.value.length);
     let timer;
     inp.addEventListener('input', e => {
+      state.exQuery = e.target.value;
       clearTimeout(timer);
-      timer = setTimeout(() => { state.exQuery = e.target.value; render(); }, 250);
+      timer = setTimeout(updateResultsOnly, 180);
     });
   }
 }
