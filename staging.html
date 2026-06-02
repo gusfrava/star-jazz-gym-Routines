@@ -365,6 +365,31 @@ function normalizeText(s){
     .replace(/[^a-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ').trim();
 }
+const SEARCH_ALIASES = [
+  ['prensa', 'press'], ['press', 'prensa'],
+  ['banca', 'bench'], ['banco', 'bench'], ['bench', 'banca'],
+  ['sentadilla', 'squat'], ['squat', 'sentadilla'],
+  ['peso muerto', 'deadlift'], ['deadlift', 'peso muerto'],
+  ['jalon', 'pulldown'], ['pulldown', 'jalon'],
+  ['remo', 'row'], ['row', 'remo'],
+  ['pecho', 'chest'], ['chest', 'pecho'],
+  ['espalda', 'back'], ['back', 'espalda'],
+  ['piernas', 'legs'], ['pierna', 'leg'], ['legs', 'piernas'], ['leg', 'pierna'],
+  ['gluteos', 'glutes'], ['gluteo', 'glute'], ['glutes', 'gluteos'], ['glute', 'gluteo'],
+  ['hombros', 'shoulders'], ['hombro', 'shoulder'], ['shoulders', 'hombros'], ['shoulder', 'hombro'],
+  ['femorales', 'hamstrings'], ['femoral', 'hamstring'], ['hamstrings', 'femorales'], ['hamstring', 'femoral'],
+  ['pantorrillas', 'calves'], ['pantorrilla', 'calf'], ['calves', 'pantorrillas'], ['calf', 'pantorrilla'],
+  ['cuadriceps', 'quads'], ['quads', 'cuadriceps'],
+  ['biceps', 'bicep'], ['triceps', 'tricep']
+];
+function searchQueryVariants(query){
+  const base = normalizeText(query);
+  const variants = new Set(base ? [base] : []);
+  for (const [from, to] of SEARCH_ALIASES){
+    if (base.includes(from)) variants.add(base.split(from).join(to));
+  }
+  return Array.from(variants).filter(Boolean);
+}
 
 // Encuentra grupo muscular por texto (soporta sinónimos)
 function findMuscleGroup(query){
@@ -386,6 +411,7 @@ function findMuscleGroup(query){
 // músculos (CSV + SVG), categoría. Combina match de nombre con match de grupo muscular.
 function searchExercises(query, filters = {}){
   const n = normalizeText(query);
+  const variants = searchQueryVariants(query);
   let results = EXERCISE_DB;
 
   // Filtros estructurados
@@ -408,22 +434,31 @@ function searchExercises(query, filters = {}){
     const eqN = normalizeText(e.eq||'');
     let score = 0;
 
-    // Match por nombre (prioridad alta)
-    if (nameN === n) score += 1000;
-    else if (nameN.startsWith(n)) score += 500;
-    else if (nameN.includes(n)) score += 200;
-    if (enN.includes(n)) score += Math.max(score, 150) - score + 150;
+    const haystack = [nameN, enN, groupN, patternN, eqN].join(' ');
+
+    // Match por nombre (prioridad alta), con aliases ES/EN (prensa ↔ press, sentadilla ↔ squat, etc.)
+    for (const v of variants){
+      if (nameN === v) score += 1000;
+      else if (nameN.startsWith(v)) score += 500;
+      else if (nameN.includes(v)) score += 220;
+      if (enN === v) score += 850;
+      else if (enN.startsWith(v)) score += 420;
+      else if (enN.includes(v)) score += 180;
+
+      const words = v.split(' ').filter(w => w.length > 1);
+      if (words.length > 1 && words.every(w => haystack.includes(w))) score += 90 + words.length * 15;
+    }
 
     // Match por grupo / patrón / equipo
-    if (groupN.includes(n)) score += 100;
-    if (patternN.includes(n)) score += 60;
-    if (eqN.includes(n)) score += 40;
+    if (variants.some(v => groupN.includes(v))) score += 100;
+    if (variants.some(v => patternN.includes(v))) score += 60;
+    if (variants.some(v => eqN.includes(v))) score += 40;
 
     // Match contra los muscle IDs del CSV (cw) — por ejemplo "biceps_femoral", "gluteo_mayor"
     if (e.cw){
       for (const muscleId of Object.keys(e.cw)){
         const muscleNorm = normalizeText(muscleId.replace(/_/g, ' '));
-        if (muscleNorm.includes(n) || n.includes(muscleNorm)){
+        if (variants.some(v => muscleNorm.includes(v) || v.includes(muscleNorm))){
           // Score proporcional al peso del músculo en ese ejercicio
           const weight = e.cw[muscleId] || 0;
           score += Math.max(score, weight); // tope al weight
@@ -631,7 +666,6 @@ async function loadImageOverridesFromFirestore(){
   _imageOverridesLoading = (async () => {
     try {
       if (typeof db === 'undefined' || !db) return {};
-      const { collection, getDocs } = await import('https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js');
       const snap = await getDocs(collection(db, 'imageOverrides'));
       const obj = {};
       snap.forEach(d => obj[d.id] = d.data());
@@ -775,42 +809,48 @@ if (typeof window !== 'undefined'){
 // }
 // ============================================================
 
+function exerciseDbNames(ex){
+  if (!ex) return { enName: null, esName: null, exerciseId: null };
+  const dbEx = ex._dbId ? EXERCISE_DB.find(e => e.id === ex._dbId) : null;
+  return {
+    enName: dbEx?.en || ex._en || ex.en || null,
+    esName: ex.name || ex.n || dbEx?.n || null,
+    exerciseId: ex._dbId || ex.id || null
+  };
+}
 function exerciseThumbnailUrl(ex){
   if (!ex) return null;
   // 1. URL explícita en media (si la pusiste manualmente)
   if (ex.media?.thumbnail_url) return ex.media.thumbnail_url;
   if (ex.media?.main_url) return ex.media.main_url;
   // 2. Fallback: buscar en Free Exercise DB por nombre EN
-  const enName = ex._dbId ? EXERCISE_DB.find(e => e.id === ex._dbId)?.en : (ex._en || null);
-  const esName = ex.name || ex.n || null;
-  const m = findFreeExImages(enName, esName, ex?._dbId || ex?.id);
+  const { enName, esName, exerciseId } = exerciseDbNames(ex);
+  const m = findFreeExImages(enName, esName, exerciseId);
   return m?.thumbnail_url || null;
 }
 function exerciseMainImageUrl(ex){
   if (!ex) return null;
   if (ex.media?.main_url) return ex.media.main_url;
   if (ex.media?.thumbnail_url) return ex.media.thumbnail_url;
-  const enName = ex._dbId ? EXERCISE_DB.find(e => e.id === ex._dbId)?.en : (ex._en || null);
-  const esName = ex.name || ex.n || null;
-  const m = findFreeExImages(enName, esName, ex?._dbId || ex?.id);
+  const { enName, esName, exerciseId } = exerciseDbNames(ex);
+  const m = findFreeExImages(enName, esName, exerciseId);
   return m?.main_url || null;
 }
 function exerciseImageSet(ex){
   if (!ex) return null;
-  const enName = ex._dbId ? EXERCISE_DB.find(e => e.id === ex._dbId)?.en : (ex._en || null);
-  const esName = ex.name || ex.n || null;
-  const found = findFreeExImages(enName, esName, ex?._dbId || ex?.id);
-  const preview = ex.media?.thumbnail_url || found?.thumbnail_url || ex.media?.main_url || null;
-  const start = ex.media?.start_position_url || ex.media?.main_url || found?.start_url || found?.main_url || preview;
-  const finish = ex.media?.end_position_url || ex.media?.animation_url || found?.finish_url || found?.animation_url || null;
+  const { enName, esName, exerciseId } = exerciseDbNames(ex);
+  const found = findFreeExImages(enName, esName, exerciseId);
+  const media = ex.media || {};
+  const preview = media.thumbnail_url || found?.thumbnail_url || media.main_url || null;
+  const start = media.start_position_url || media.main_url || found?.start_url || found?.main_url || preview;
+  const finish = media.end_position_url || media.animation_url || found?.finish_url || found?.animation_url || null;
   if (!preview && !start && !finish) return null;
   return { preview: preview || start || finish, start: start || preview || finish, finish };
 }
 function exerciseAnimationUrl(ex){
   if (ex?.media?.animation_url) return ex.media.animation_url;
-  const enName = ex._dbId ? EXERCISE_DB.find(e => e.id === ex._dbId)?.en : (ex?._en || null);
-  const esName = ex?.name || ex?.n || null;
-  const m = findFreeExImages(enName, esName, ex?._dbId || ex?.id);
+  const { enName, esName, exerciseId } = exerciseDbNames(ex);
+  const m = findFreeExImages(enName, esName, exerciseId);
   return m?.animation_url || null;
 }
 // Render thumbnail or fallback icon (for use in exercise cards / lists)
