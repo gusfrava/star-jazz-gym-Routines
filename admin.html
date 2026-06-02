@@ -144,7 +144,7 @@ const state = {
   loading: false,
   loadCode: '',
   tab: 'active',       // 'active' | 'archived' | 'trashed' | 'images'
-  imageOverrides: {},  // { exerciseId: { preview_url, start_url, finish_url, image_url, free_db_match_id, updatedAt } }
+  imageOverrides: {},  // { exerciseId: { image_url, free_db_match_id, updatedAt } }
   imageOverridesLoaded: false,
   imageSearchQuery: '',
   imageEditingId: null,  // exercise_id being edited
@@ -229,19 +229,10 @@ function searchFreeExDb(query, limit = 20){
 // Compute current image source for an exercise: override > auto-match > none
 function resolveExerciseImage(ex){
   const ov = state.imageOverrides[ex.id];
-  if (ov && (ov.preview_url || ov.start_url || ov.finish_url || ov.image_url)){
-    const preview = ov.preview_url || ov.image_url || ov.start_url || ov.finish_url;
-    const start = ov.start_url || ov.image_url || ov.preview_url || ov.finish_url;
-    const finish = ov.finish_url || null;
-    return { source: 'override', url: preview, startUrl: start, finishUrl: finish, freeDbId: ov.free_db_match_id || null };
-  }
+  if (ov && ov.image_url) return { source: 'override', url: ov.image_url, freeDbId: ov.free_db_match_id || null };
   const auto = findFreeExImages(ex.en, ex.n);
-  if (auto){
-    const start = freeExImageUrl(auto.images[0]);
-    const finish = auto.images.length > 1 ? freeExImageUrl(auto.images[1]) : null;
-    return { source: 'auto', url: start, startUrl: start, finishUrl: finish, freeDbId: auto.id };
-  }
-  return { source: 'none', url: null, startUrl: null, finishUrl: null, freeDbId: null };
+  if (auto) return { source: 'auto', url: freeExImageUrl(auto.images[0]), freeDbId: auto.id };
+  return { source: 'none', url: null, freeDbId: null };
 }
 
 const root = document.getElementById('app');
@@ -828,7 +819,7 @@ async function doLogout(){
 // ============================================================
 // IMAGE OVERRIDES (Firestore)
 // ============================================================
-// Stored in: imageOverrides/{exerciseId} = { preview_url, start_url, finish_url, image_url, free_db_match_id, updatedAt, updatedBy }
+// Stored in: imageOverrides/{exerciseId} = { image_url, free_db_match_id, updatedAt, updatedBy }
 async function loadImageOverrides(){
   if (state.imageOverridesLoaded) return state.imageOverrides;
   try {
@@ -846,13 +837,8 @@ async function loadImageOverrides(){
   }
 }
 async function saveImageOverride(exerciseId, data){
-  const preview = data.preview_url || data.image_url || data.start_url || data.finish_url || null;
-  const start = data.start_url || data.image_url || data.preview_url || data.finish_url || null;
   const payload = {
-    image_url: data.image_url || preview,
-    preview_url: preview,
-    start_url: start,
-    finish_url: data.finish_url || null,
+    image_url: data.image_url || null,
     free_db_match_id: data.free_db_match_id || null,
     updatedAt: Date.now(),
     updatedBy: state.authUser?.email || 'unknown'
@@ -1005,9 +991,14 @@ function renderDashboard(){
       <button class="${state.tab==='images'?'active':''}" data-tab="images">
         <i class="ti ti-photo" style="font-size:13px;vertical-align:-1px;"></i> Imágenes
       </button>
+      <button class="${state.tab==='migrations'?'active':''}" data-tab="migrations">
+        <i class="ti ti-arrows-exchange" style="font-size:13px;vertical-align:-1px;"></i> Migraciones
+      </button>
     </div>
 
-    ${state.tab === 'images' ? renderImageAudit() : `<div class="two-col">
+    ${state.tab === 'images' ? renderImageAudit()
+      : state.tab === 'migrations' ? renderMigrations()
+      : `<div class="two-col">
       <div>
         ${renderGroupList(tabGroups)}
         ${state.tab === 'active' ? renderLoadByCode() : ''}
@@ -1173,27 +1164,20 @@ function openImageEditor(exerciseId){
   const r = resolveExerciseImage(ex);
   let mode = 'search';
   let pickedFreeId = r.freeDbId;
-  const existingOverride = state.imageOverrides[exerciseId] || {};
-  let customPreviewUrl = existingOverride.preview_url || existingOverride.image_url || '';
-  let customStartUrl = existingOverride.start_url || existingOverride.image_url || '';
-  let customFinishUrl = existingOverride.finish_url || '';
+  let customUrl = (r.source === 'override' && r.url && !r.url.includes('githubusercontent.com')) ? r.url : '';
   let searchQuery = ex.en || ex.n;
 
   function build(){
     const matches = mode === 'search' ? searchFreeExDb(searchQuery, 8) : [];
     const matchCards = matches.map(m => {
       const imgUrl = freeExImageUrl(m.images[0]);
-      const finishUrl = m.images.length > 1 ? freeExImageUrl(m.images[1]) : null;
       const isPicked = pickedFreeId === m.id;
-      return `<div data-pick-free="${esc(m.id)}" style="display:grid;grid-template-columns:88px 1fr;gap:10px;padding:8px;border-radius:8px;cursor:pointer;background:${isPicked?'rgba(59,158,255,0.18)':'var(--bg-elev-2)'};border:1px solid ${isPicked?'var(--accent)':'transparent'};margin-bottom:6px;">
-        <div style="display:grid;grid-template-columns:${finishUrl?'1fr 1fr':'1fr'};gap:4px;">
-          <img src="${esc(imgUrl)}" loading="lazy" style="width:100%;height:54px;object-fit:cover;border-radius:6px;background:var(--bg-elev);" onerror="this.style.opacity=0.2" />
-          ${finishUrl ? `<img src="${esc(finishUrl)}" loading="lazy" style="width:100%;height:54px;object-fit:cover;border-radius:6px;background:var(--bg-elev);" onerror="this.style.opacity=0.2" />` : ''}
-        </div>
+      return `<div data-pick-free="${esc(m.id)}" style="display:grid;grid-template-columns:54px 1fr;gap:10px;padding:8px;border-radius:8px;cursor:pointer;background:${isPicked?'rgba(59,158,255,0.18)':'var(--bg-elev-2)'};border:1px solid ${isPicked?'var(--accent)':'transparent'};margin-bottom:6px;">
+        <img src="${esc(imgUrl)}" loading="lazy" style="width:54px;height:54px;object-fit:cover;border-radius:6px;background:var(--bg-elev);" onerror="this.style.opacity=0.2" />
         <div style="min-width:0;">
           <div style="font-weight:500;font-size:12px;">${esc(m.name)}</div>
           <div class="muted" style="font-size:10px;margin-top:2px;">
-            ${esc((m.primaryMuscles||[]).join(', '))} ${m.equipment ? '� '+esc(m.equipment) : ''}
+            ${esc((m.primaryMuscles||[]).join(', '))} ${m.equipment ? '· '+esc(m.equipment) : ''}
           </div>
         </div>
       </div>`;
@@ -1201,7 +1185,7 @@ function openImageEditor(exerciseId){
 
     openModal(`
       <h2 style="margin-bottom:8px;">Editar imagen</h2>
-      <div class="muted" style="font-size:12px;margin-bottom:14px;"><strong>${esc(ex.n)}</strong> � ${esc(ex.g||'')}</div>
+      <div class="muted" style="font-size:12px;margin-bottom:14px;"><strong>${esc(ex.n)}</strong> · ${esc(ex.g||'')}</div>
 
       <div class="tab-bar" style="margin-bottom:14px;">
         <button data-mode-tab="search" style="${mode==='search'?'background:var(--accent);color:white;':''}">Buscar en Free DB</button>
@@ -1210,21 +1194,13 @@ function openImageEditor(exerciseId){
 
       ${mode === 'search' ? `
         <input id="modalSearchInput" type="text" placeholder="Buscar..." value="${esc(searchQuery)}" style="width:100%;padding:10px;margin-bottom:10px;background:var(--bg-elev);border:1px solid var(--border);color:var(--text);" />
-        <div class="muted" style="font-size:11px;margin-bottom:8px;">Al guardar: imagen 1 = preview/inicio, imagen 2 = final si existe.</div>
         <div style="max-height:340px;overflow-y:auto;">
-          ${matchCards || `<div class="muted" style="text-align:center;padding:20px;font-size:13px;">Sin matches. Proba con otro termino.</div>`}
+          ${matchCards || `<div class="muted" style="text-align:center;padding:20px;font-size:13px;">Sin matches. Probá con otro término.</div>`}
         </div>
       ` : `
-        <label class="muted" style="font-size:11px;display:block;margin-bottom:4px;">Preview / thumbnail URL</label>
-        <input id="modalPreviewUrlInput" type="text" placeholder="https://..." value="${esc(customPreviewUrl)}" style="width:100%;padding:10px;margin-bottom:8px;background:var(--bg-elev);border:1px solid var(--border);color:var(--text);" />
-        <label class="muted" style="font-size:11px;display:block;margin-bottom:4px;">Inicio URL</label>
-        <input id="modalStartUrlInput" type="text" placeholder="https://..." value="${esc(customStartUrl)}" style="width:100%;padding:10px;margin-bottom:8px;background:var(--bg-elev);border:1px solid var(--border);color:var(--text);" />
-        <label class="muted" style="font-size:11px;display:block;margin-bottom:4px;">Final URL (opcional)</label>
-        <input id="modalFinishUrlInput" type="text" placeholder="https://..." value="${esc(customFinishUrl)}" style="width:100%;padding:10px;margin-bottom:10px;background:var(--bg-elev);border:1px solid var(--border);color:var(--text);" />
-        <div style="display:grid;grid-template-columns:${customFinishUrl?'1fr 1fr':'1fr'};gap:8px;margin-bottom:10px;">
-          ${customStartUrl || customPreviewUrl ? `<img src="${esc(customStartUrl || customPreviewUrl)}" style="width:100%;max-height:170px;object-fit:contain;border-radius:8px;background:var(--bg-elev-2);" onerror="this.style.display='none'" />` : ''}
-          ${customFinishUrl ? `<img src="${esc(customFinishUrl)}" style="width:100%;max-height:170px;object-fit:contain;border-radius:8px;background:var(--bg-elev-2);" onerror="this.style.display='none'" />` : ''}
-        </div>
+        <label class="muted" style="font-size:11px;display:block;margin-bottom:4px;">URL de la imagen (ej: Cloudinary, Imgur, Firebase Storage)</label>
+        <input id="modalUrlInput" type="text" placeholder="https://..." value="${esc(customUrl)}" style="width:100%;padding:10px;margin-bottom:10px;background:var(--bg-elev);border:1px solid var(--border);color:var(--text);" />
+        ${customUrl ? `<div style="text-align:center;margin-bottom:10px;"><img src="${esc(customUrl)}" style="max-width:100%;max-height:200px;border-radius:8px;" onerror="this.style.display='none'" /></div>` : ''}
       `}
 
       <div class="row" style="margin-top:14px;gap:8px;">
@@ -1245,19 +1221,15 @@ function openImageEditor(exerciseId){
         let t;
         si.addEventListener('input', e => { searchQuery = e.target.value; clearTimeout(t); t = setTimeout(build, 200); });
       }
-      const pui = document.getElementById('modalPreviewUrlInput');
-      if (pui) pui.addEventListener('input', e => { customPreviewUrl = e.target.value.trim(); });
-      const sui = document.getElementById('modalStartUrlInput');
-      if (sui) sui.addEventListener('input', e => { customStartUrl = e.target.value.trim(); });
-      const fui = document.getElementById('modalFinishUrlInput');
-      if (fui) fui.addEventListener('input', e => { customFinishUrl = e.target.value.trim(); });
+      const ui = document.getElementById('modalUrlInput');
+      if (ui) ui.addEventListener('input', e => { customUrl = e.target.value.trim(); });
 
       document.querySelectorAll('[data-pick-free]').forEach(b => b.addEventListener('click', () => { pickedFreeId = b.dataset.pickFree; build(); }));
 
       document.getElementById('modalCancel').addEventListener('click', closeModal);
       const rm = document.getElementById('modalRemove');
       if (rm) rm.addEventListener('click', async () => {
-        if (!confirm('Quitar el override de este ejercicio?')) return;
+        if (!confirm('¿Quitar el override de este ejercicio?')) return;
         try {
           await deleteImageOverride(exerciseId);
           toast('Override eliminado', 'success');
@@ -1267,22 +1239,13 @@ function openImageEditor(exerciseId){
       document.getElementById('modalSave').addEventListener('click', async () => {
         let payload;
         if (mode === 'search'){
-          if (!pickedFreeId){ toast('Selecciona un ejercicio del Free DB', 'error'); return; }
+          if (!pickedFreeId){ toast('Seleccioná un ejercicio del Free DB', 'error'); return; }
           const m = _freeExById.get(pickedFreeId);
           if (!m){ toast('Match no encontrado', 'error'); return; }
-          const start = freeExImageUrl(m.images[0]);
-          const finish = m.images.length > 1 ? freeExImageUrl(m.images[1]) : null;
-          payload = { image_url: start, preview_url: start, start_url: start, finish_url: finish, free_db_match_id: pickedFreeId };
+          payload = { image_url: freeExImageUrl(m.images[0]), free_db_match_id: pickedFreeId };
         } else {
-          const firstUrl = customPreviewUrl || customStartUrl || customFinishUrl;
-          if (!firstUrl){ toast('Ingresa al menos una URL', 'error'); return; }
-          payload = {
-            image_url: firstUrl,
-            preview_url: customPreviewUrl || firstUrl,
-            start_url: customStartUrl || firstUrl,
-            finish_url: customFinishUrl || null,
-            free_db_match_id: null
-          };
+          if (!customUrl){ toast('Ingresá una URL', 'error'); return; }
+          payload = { image_url: customUrl, free_db_match_id: null };
         }
         try {
           await saveImageOverride(exerciseId, payload);
@@ -1294,6 +1257,7 @@ function openImageEditor(exerciseId){
   }
   build();
 }
+
 
 function renderGroupDetail(g){
   const st = groupStatus(g);
@@ -1372,6 +1336,105 @@ function renderGroupDetail(g){
 }
 
 // ============================================================
+// MIGRATIONS — Fase 0 de restructure (personal/grupo)
+// ============================================================
+async function migrateUserPersonalLibrary(userId, fromGroupId){
+  // Lee la library vieja
+  const oldRef = doc(db, 'salas', fromGroupId, 'personalLibraries', userId);
+  const oldSnap = await getDoc(oldRef);
+  if (!oldSnap.exists()) return { migrated: false, reason: 'No tiene library en este grupo' };
+  const routines = oldSnap.data().routines || {};
+  if (!Object.keys(routines).length) return { migrated: false, reason: 'Library vacía' };
+
+  // Lee si ya hay nueva (para no sobrescribir)
+  const newRef = doc(db, 'users', userId, 'personalLibrary', 'data');
+  const newSnap = await getDoc(newRef);
+  if (newSnap.exists()){
+    const existing = newSnap.data().routines || {};
+    if (Object.keys(existing).length){
+      return { migrated: false, reason: `Ya tiene ${Object.keys(existing).length} rutinas en la nueva ubicación. Skip por seguridad.` };
+    }
+  }
+
+  // Escribe en la nueva
+  await setDoc(newRef, { routines, updatedAt: Date.now(), migratedFrom: fromGroupId, migratedAt: Date.now() });
+  return { migrated: true, count: Object.keys(routines).length };
+}
+
+function renderMigrations(){
+  // Construir lista de TODOS los users encontrados en TODOS los grupos
+  const userMap = new Map();  // userId → { name, groups: [{groupId, groupName}] }
+  for (const groupId of Object.keys(state.groups || {})){
+    const g = state.groups[groupId];
+    const users = (g.users && g.users.users) || [];
+    const gName = groupName(g);
+    for (const u of users){
+      if (!u.id) continue;
+      if (!userMap.has(u.id)){
+        userMap.set(u.id, { id: u.id, name: u.name || u.id, groups: [] });
+      }
+      userMap.get(u.id).groups.push({ groupId, groupName: gName });
+    }
+  }
+
+  const usersList = Array.from(userMap.values());
+
+  const rows = usersList.map(u => {
+    const groupOpts = u.groups.map(g =>
+      `<button data-migrate-user="${esc(u.id)}" data-migrate-from="${esc(g.groupId)}" class="small" style="font-size:11px;padding:5px 10px;margin:2px;">
+        ${esc(g.groupName)}
+      </button>`
+    ).join('');
+    return `<div style="padding:12px;border-bottom:1px solid var(--border);">
+      <div class="row" style="margin-bottom:6px;">
+        <div style="flex:1;">
+          <div style="font-weight:500;">${esc(u.name)}</div>
+          <div class="muted mono" style="font-size:10px;">${esc(u.id)}</div>
+        </div>
+      </div>
+      <div class="muted" style="font-size:11px;margin-bottom:6px;">Migrar personalLibrary desde:</div>
+      <div>${groupOpts}</div>
+    </div>`;
+  }).join('');
+
+  return `<div class="card" style="padding:14px;margin-bottom:14px;border-left:3px solid var(--accent);">
+    <div class="row" style="margin-bottom:8px;">
+      <i class="ti ti-arrows-exchange" style="font-size:18px;color:var(--accent);"></i>
+      <div style="flex:1;">
+        <div style="font-weight:600;">Fase 0 — Migración personal/grupo</div>
+        <div class="muted" style="font-size:12px;margin-top:2px;">
+          Mueve <code>salas/{g}/personalLibraries/{u}</code> → <code>users/{u}/personalLibrary/data</code>
+        </div>
+      </div>
+    </div>
+    <div class="muted" style="font-size:11px;">
+      <strong>Seguro:</strong> No borra la data vieja. Solo copia. Skip si la nueva ya tiene contenido.<br/>
+      <strong>Recomendado:</strong> Migra primero tu propia cuenta y verifica que todo funciona antes de migrar a otros usuarios.
+    </div>
+  </div>
+
+  <div class="card" style="padding:0;overflow:hidden;">
+    ${rows || `<div style="padding:40px;text-align:center;color:var(--text-muted);">No hay usuarios cargados. Ve a "Activos" y abre algún grupo para cargarlos.</div>`}
+  </div>`;
+}
+
+async function handleMigratePersonalLibrary(userId, fromGroupId){
+  if (!confirm(`Migrar personalLibrary de ${userId} desde grupo ${fromGroupId}?\n\nEsto SOLO copia. NO borra nada de la ubicación vieja.`)) return;
+  try {
+    toast('Migrando...');
+    const r = await migrateUserPersonalLibrary(userId, fromGroupId);
+    if (r.migrated){
+      toast(`✅ Migradas ${r.count} rutinas`, 'success');
+    } else {
+      toast(`⚠️ ${r.reason}`);
+    }
+  } catch(e){
+    console.error(e);
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+// ============================================================
 // HANDLERS
 // ============================================================
 function attachDashboardHandlers(){
@@ -1426,6 +1489,11 @@ function attachDashboardHandlers(){
   });
   document.querySelectorAll('[data-edit-img]').forEach(b => {
     b.addEventListener('click', () => openImageEditor(b.dataset.editImg));
+  });
+
+  // Migrations handlers (Fase 0)
+  document.querySelectorAll('[data-migrate-user]').forEach(b => {
+    b.addEventListener('click', () => handleMigratePersonalLibrary(b.dataset.migrateUser, b.dataset.migrateFrom));
   });
 }
 
