@@ -865,6 +865,26 @@ function exerciseVisual(ex, size = 38, fallbackIcon = 'ti-barbell', accentColor 
     <i class="ti ${fallbackIcon}" style="font-size:${Math.round(size*0.55)}px;color:${accentColor};"></i>
   </div>`;
 }
+function looksLikeOldEnglishVideoQuery(query){
+  const q = normalizeText(query);
+  if (!q) return true;
+  if (q.includes('http') || q.includes('tecnica')) return false;
+  return [
+    'how to','machine','standing','seated','lying','bench','press','squat','deadlift',
+    'pulldown','row','curl','raise','technique','dumbbell','barbell','cable','calf',
+    'leg','chest','shoulder','tricep','bicep','glute','hamstring','inner thigh',
+    'wide grip','close grip','overhead','incline','flat'
+  ].some(term => q.includes(term));
+}
+function exerciseVideoQuery(ex){
+  const dbEx = ex?._dbId ? EXERCISE_DB.find(e => e.id === ex._dbId) : null;
+  if (dbEx?.n) return `${dbEx.n} tecnica`;
+  const current = (ex?.video || '').trim();
+  const name = (ex?.name || ex?.n || '').trim();
+  if (!name) return current;
+  if (!current || looksLikeOldEnglishVideoQuery(current)) return `${name} tecnica`;
+  return current;
+}
 
 // Convertir un ejercicio del DB al formato del editor de la app
 function dbToAppExercise(dbEx){
@@ -922,6 +942,7 @@ function enrichLegacyExerciseWithDb(legacy, dbEx){
   const mapped = dbToAppExercise(dbEx);
   return {
     ...legacy,
+    video: mapped.video,
     primary: mapped.primary,
     secondary: mapped.secondary,
     measurement: legacy.measurement || mapped.measurement || 'weight_reps',
@@ -2942,8 +2963,8 @@ function openLibExerciseEditor(initial, onSave){
         <label class="section-label" style="margin-bottom:6px;">Nombre</label>
         <input id="libExName" type="text" value="${esc(ex.name)}" maxlength="80" style="margin-bottom:12px;" />
         <label class="section-label" style="margin-bottom:6px;">Búsqueda del video en YouTube</label>
-        <input id="libExVideo" type="text" value="${esc(ex.video || '')}" maxlength="120" placeholder="ej: lat pulldown technique" />
-        <div class="muted" style="font-size:11px;margin-top:6px;margin-bottom:14px;">En inglés funciona mejor.</div>
+        <input id="libExVideo" type="text" value="${esc(exerciseVideoQuery(ex))}" maxlength="120" placeholder="ej: press de banca tecnica" />
+        <div class="muted" style="font-size:11px;margin-top:6px;margin-bottom:14px;">Se usa para abrir una búsqueda de técnica en YouTube.</div>
 
         <label class="section-label" style="margin-bottom:6px;">Tipo de registro</label>
         <select id="libMeasurement" style="margin-bottom:14px;">
@@ -3876,13 +3897,14 @@ function renderExercise(){
   }
 
   const altsList = (ex.alts||[]).map(a=> `<li style="padding:8px 0;font-size:14px;color:var(--text-muted);border-bottom:1px solid var(--border);list-style:none;"><i class="ti ti-arrow-right" style="font-size:12px;color:var(--accent);margin-right:6px;"></i>${esc(a)}</li>`).join('');
-  const videoUrl = ex.video ? `https://www.youtube.com/results?search_query=${encodeURIComponent(ex.video)}` : '#';
+  const videoQuery = exerciseVideoQuery(ex);
+  const videoUrl = videoQuery ? `https://www.youtube.com/results?search_query=${encodeURIComponent(videoQuery)}` : '#';
   const { primLabels, secLabels } = muscleLabels(ex.primary, ex.secondary);
 
   root.innerHTML = `
     ${headerBar(ex.name, 'goDay')}
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
-      ${ex.video ? `<a href="${videoUrl}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;padding:9px 14px;background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;text-decoration:none;color:var(--text);font-weight:500;">
+      ${videoQuery ? `<a href="${videoUrl}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;padding:9px 14px;background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;text-decoration:none;color:var(--text);font-weight:500;">
         <i class="ti ti-brand-youtube" style="font-size:16px;color:#ff0000;"></i> Ver técnica
       </a>` : ''}
       <button data-action="toggleMuscles" style="background:${state.showMuscles?'var(--accent-bg-strong)':'var(--bg-elev)'};color:${state.showMuscles?'var(--accent)':'var(--text)'};border-color:${state.showMuscles?'var(--accent-border)':'var(--border)'};">
@@ -4828,8 +4850,8 @@ function renderEditExercise(){
       <label class="section-label" style="margin-bottom:6px;">Nombre</label>
       <input id="exName" type="text" value="${esc(window._editEx.name)}" maxlength="80" style="margin-bottom:12px;" />
       <label class="section-label" style="margin-bottom:6px;">Búsqueda del video en YouTube</label>
-      <input id="exVideo" type="text" value="${esc(window._editEx.video)}" maxlength="120" placeholder="ej: lat pulldown technique" />
-      <div class="muted" style="font-size:11px;margin-top:6px;">En inglés funciona mejor para encontrar videos.</div>
+      <input id="exVideo" type="text" value="${esc(exerciseVideoQuery(window._editEx))}" maxlength="120" placeholder="ej: press de banca tecnica" />
+      <div class="muted" style="font-size:11px;margin-top:6px;">Se usa para abrir una búsqueda de técnica en YouTube.</div>
       <label class="section-label" style="margin:12px 0 6px;">Tipo de registro</label>
       <select id="exMeasurement">
         <option value="weight_reps" ${exerciseMeasurementType(window._editEx)==='weight_reps'?'selected':''}>Peso × reps</option>
