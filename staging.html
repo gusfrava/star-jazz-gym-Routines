@@ -3673,7 +3673,7 @@ function renderDay(){
     const thumbUrl = exerciseThumbnailUrl(ex);
     return `<button data-action="openEx" data-idx="${idx}" class="exercise-card fade-in" style="animation-delay:${idx*30}ms;">
       <div class="row">
-        ${thumbUrl ? `<div style="width:46px;height:46px;border-radius:10px;background:var(--bg-elev-2);overflow:hidden;flex-shrink:0;">
+        ${thumbUrl ? `<div data-preview-image="1" title="Ver imagen de técnica" style="width:46px;height:46px;border-radius:10px;background:var(--bg-elev-2);overflow:hidden;flex-shrink:0;cursor:zoom-in;">
           <img src="${esc(thumbUrl)}" alt="${esc(ex.name)}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.parentElement.style.display='none'" />
         </div>` : ''}
         <div style="min-width:0;flex:1;">
@@ -5648,7 +5648,15 @@ async function handle(e){
   }
   if (a === 'goHome'){ state.view = 'home'; state.currentDay = null; state.currentExerciseIdx = null; state.showAlts = false; state.showMuscles = false; state.showRoutineMuscles = false; render(); return; }
   if (a === 'goDay'){ state.view = 'day'; state.currentExerciseIdx = null; state.showAlts = false; state.showMuscles = false; render(); return; }
-  if (a === 'openEx'){ state.currentExerciseIdx = Number(btn.dataset.idx); state.view = 'exercise'; state.showAlts = false; state.showMuscles = false; render(); return; }
+  if (a === 'openEx'){
+    const idx = Number(btn.dataset.idx);
+    if (e.target.closest('[data-preview-image]')){
+      const ex = getRoutineForDay(state.currentDay)?.exercises?.[idx];
+      if (ex && exerciseImageSet(ex)) openExerciseImageModal(ex);
+      return;
+    }
+    state.currentExerciseIdx = idx; state.view = 'exercise'; state.showAlts = false; state.showMuscles = false; render(); return;
+  }
   if (a === 'goCompare'){ state.view = 'compare'; state.currentDay = null; state.currentExerciseIdx = null; render(); return; }
   if (a === 'goCompareEx'){ state.view = 'compare'; render(); return; }
   if (a === 'goSettings'){ closeModal(); state.view = 'settings'; render(); return; }
