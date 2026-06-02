@@ -1400,10 +1400,30 @@ async function migrateUserPersonalLibrary(userId, fromGroupId){
 }
 
 function renderMigrations(){
+  // Auto-cargar usuarios de TODOS los grupos si todavía no se cargaron
+  const groupIds = Object.keys(state.groups || {});
+  const ungroupedIds = groupIds.filter(gid => !state.groups[gid].users || state.groups[gid].users === null);
+  if (ungroupedIds.length > 0 && !state._migrationLoading){
+    state._migrationLoading = true;
+    Promise.all(ungroupedIds.map(gid => loadGroupById(gid))).then(() => {
+      state._migrationLoading = false;
+      render();
+    }).catch(e => {
+      console.error('Error cargando grupos para migración:', e);
+      state._migrationLoading = false;
+    });
+    return `<div class="card" style="padding:40px;text-align:center;color:var(--text-muted);">
+      <i class="ti ti-loader" style="font-size:36px;display:block;margin-bottom:10px;"></i>
+      Cargando usuarios de los ${ungroupedIds.length} grupos...
+    </div>`;
+  }
+
+  // Construir mapa: userId → { name, groups: [{groupId, groupName}] }
   const userMap = new Map();
-  for (const groupId of Object.keys(state.groups || {})){
+  for (const groupId of groupIds){
     const g = state.groups[groupId];
-    const users = (g.users && g.users.users) || [];
+    // g.users es un ARRAY directamente (no g.users.users)
+    const users = Array.isArray(g.users) ? g.users : [];
     const gName = groupName(g);
     for (const u of users){
       if (!u.id) continue;
@@ -1414,7 +1434,7 @@ function renderMigrations(){
     }
   }
 
-  const usersList = Array.from(userMap.values());
+  const usersList = Array.from(userMap.values()).sort((a,b) => a.name.localeCompare(b.name));
 
   const rows = usersList.map(u => {
     const groupOpts = u.groups.map(g =>
@@ -1451,7 +1471,7 @@ function renderMigrations(){
   </div>
 
   <div class="card" style="padding:0;overflow:hidden;">
-    ${rows || `<div style="padding:40px;text-align:center;color:var(--text-muted);">No hay usuarios cargados. Ve a "Activos" y abre algún grupo para cargarlos.</div>`}
+    ${rows || `<div style="padding:40px;text-align:center;color:var(--text-muted);">No se encontraron usuarios.</div>`}
   </div>`;
 }
 
