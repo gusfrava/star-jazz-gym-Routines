@@ -651,11 +651,16 @@ function findFreeExImages(nameEn, nameEs, exerciseId){
   // 1. Override de admin (Firestore)
   if (exerciseId){
     const ov = getImageOverride(exerciseId);
-    if (ov && ov.image_url){
+    if (ov && (ov.preview_url || ov.start_url || ov.finish_url || ov.image_url)){
+      const preview = ov.preview_url || ov.image_url || ov.start_url || ov.finish_url;
+      const start = ov.start_url || ov.image_url || ov.preview_url || ov.finish_url;
+      const finish = ov.finish_url || ov.animation_url || null;
       return {
-        thumbnail_url: ov.image_url,
-        main_url: ov.image_url,
-        animation_url: null
+        thumbnail_url: preview,
+        main_url: start,
+        start_url: start,
+        finish_url: finish,
+        animation_url: finish
       };
     }
   }
@@ -667,10 +672,14 @@ function findFreeExImages(nameEn, nameEs, exerciseId){
   for (const key of tryKeys){
     if (_freeExIndex.has(key)){
       const m = _freeExIndex.get(key);
+      const start = freeExImageUrl(m.images[0]);
+      const finish = m.images.length > 1 ? freeExImageUrl(m.images[1]) : null;
       return {
-        thumbnail_url: freeExImageUrl(m.images[0]),
-        main_url: freeExImageUrl(m.images[0]),
-        animation_url: m.images.length > 1 ? freeExImageUrl(m.images[1]) : null
+        thumbnail_url: start,
+        main_url: start,
+        start_url: start,
+        finish_url: finish,
+        animation_url: finish
       };
     }
   }
@@ -785,6 +794,17 @@ function exerciseMainImageUrl(ex){
   const esName = ex.name || ex.n || null;
   const m = findFreeExImages(enName, esName, ex?._dbId || ex?.id);
   return m?.main_url || null;
+}
+function exerciseImageSet(ex){
+  if (!ex) return null;
+  const enName = ex._dbId ? EXERCISE_DB.find(e => e.id === ex._dbId)?.en : (ex._en || null);
+  const esName = ex.name || ex.n || null;
+  const found = findFreeExImages(enName, esName, ex?._dbId || ex?.id);
+  const preview = ex.media?.thumbnail_url || found?.thumbnail_url || ex.media?.main_url || null;
+  const start = ex.media?.start_position_url || ex.media?.main_url || found?.start_url || found?.main_url || preview;
+  const finish = ex.media?.end_position_url || ex.media?.animation_url || found?.finish_url || found?.animation_url || null;
+  if (!preview && !start && !finish) return null;
+  return { preview: preview || start || finish, start: start || preview || finish, finish };
 }
 function exerciseAnimationUrl(ex){
   if (ex?.media?.animation_url) return ex.media.animation_url;
@@ -914,6 +934,7 @@ const state = {
   exAddToDay: null,  // si vienes de un día → muestra botón "Agregar a [día]"
   exReturnView: null,  // vista a la que volver desde el detalle del ejercicio
   exReturnDay: null,   // día al que volver desde el detalle
+  exImagePose: 'start', // 'start' | 'finish' for exercise detail preview
   homeExQuery: '',  // búsqueda rápida en el home
   muscleGradientMap: true,  // Sesión 2: usar gradient en mapa muscular (default ON)
   // ====== Library (Fase 1) ======
@@ -2420,6 +2441,28 @@ function openModal(html, onAttach){
 }
 function closeModal(){ modalRoot.innerHTML = ''; state.modalOpen = null; }
 
+function openExerciseImageModal(ex){
+  const set = exerciseImageSet(ex);
+  if (!set) return;
+  const start = set.start || set.preview;
+  const finish = set.finish;
+  openModal(`
+    <h2 style="margin-bottom:8px;">Imagen de técnica</h2>
+    <div class="muted" style="font-size:12px;margin-bottom:14px;">${esc(ex.n || ex.name || '')}</div>
+    <div style="display:grid;grid-template-columns:${finish ? '1fr 1fr' : '1fr'};gap:10px;margin-bottom:14px;">
+      ${start ? `<div>
+        <div class="section-label" style="margin-bottom:6px;">Inicio</div>
+        <img src="${esc(start)}" alt="Inicio" style="width:100%;max-height:360px;object-fit:contain;border-radius:12px;background:var(--bg-elev-2);" />
+      </div>` : ''}
+      ${finish ? `<div>
+        <div class="section-label" style="margin-bottom:6px;">Final</div>
+        <img src="${esc(finish)}" alt="Final" style="width:100%;max-height:360px;object-fit:contain;border-radius:12px;background:var(--bg-elev-2);" />
+      </div>` : ''}
+    </div>
+    <button class="primary" data-action="closeModal" style="width:100%;padding:12px;">Listo</button>
+  `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+}
+
 // ====== SIMILAR SUGGESTIONS MODAL (Sesión 2) ======
 function openSimilarSuggestions(savedEx, similars){
   const cards = similars.map(ex => {
@@ -2454,6 +2497,7 @@ function openSimilarSuggestions(savedEx, similars){
   document.querySelectorAll('[data-ssm-id]').forEach(b => {
     b.addEventListener('click', () => {
       state.exSelectedId = b.dataset.ssmId;
+      state.exImagePose = 'start';
       closeModal();
       state.view = 'exerciseDetail';
       render();
@@ -2496,6 +2540,7 @@ function openSearchModal(opts = {}){
     document.querySelectorAll('#smResults [data-sm-open]').forEach(b => {
       b.addEventListener('click', () => {
         state.exSelectedId = b.dataset.smOpen;
+        state.exImagePose = 'start';
         if (fromDay) state.exAddToDay = fromDay;
         state.exReturnView = returnView;
         state.exReturnDay = returnDay;
@@ -4333,16 +4378,31 @@ function renderExerciseDetail(){
   const backAction = state.exReturnView === 'day' ? 'exDetailBackToDay' :
                      state.exReturnView === 'home' ? 'exDetailBackHome' :
                      'goExerciseExplorer';
-  // Image hooks — Sesión 3. Si el ejercicio del DB tiene media (en el futuro), mostrar arriba.
-  const dbMainUrl = ex.media?.main_url || ex.media?.thumbnail_url || (findFreeExImages(ex.en, ex.n, ex.id)?.main_url);
-  const mainImageBlock = dbMainUrl ? `
-    <div class="card" style="margin-bottom:14px;padding:0;overflow:hidden;">
-      <img src="${esc(dbMainUrl)}" alt="${esc(ex.n||'')}" loading="lazy" style="width:100%;display:block;max-height:360px;object-fit:cover;" onerror="this.parentElement.style.display='none'" />
+  const imageSet = exerciseImageSet(ex);
+  if (state.exImagePose !== 'finish') state.exImagePose = 'start';
+  const imagePose = state.exImagePose === 'finish' && imageSet?.finish ? 'finish' : 'start';
+  const activeImageUrl = imagePose === 'finish' ? imageSet?.finish : imageSet?.start;
+  const imageLabel = imagePose === 'finish' ? 'Final' : 'Inicio';
+  const detailImageBlock = imageSet && activeImageUrl ? `
+    <div class="card" style="margin-bottom:14px;padding:12px;">
+      <div class="row" style="gap:12px;align-items:center;">
+        <button data-action="toggleExerciseImagePose" title="Tocar para ver ${imageSet.finish ? (imagePose === 'finish' ? 'inicio' : 'final') : 'imagen'}" style="padding:0;border:none;background:transparent;border-radius:12px;overflow:hidden;width:96px;height:72px;flex-shrink:0;position:relative;">
+          <img src="${esc(activeImageUrl)}" alt="${esc(ex.n||'')}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.closest('.card').style.display='none'" />
+          <span style="position:absolute;left:6px;bottom:6px;background:rgba(5,10,25,0.72);color:white;border-radius:999px;padding:2px 7px;font-size:10px;font-weight:700;">${imageLabel}</span>
+        </button>
+        <div style="min-width:0;flex:1;">
+          <div style="font-size:13px;font-weight:600;margin-bottom:2px;">Imagen de técnica</div>
+          <div class="muted" style="font-size:12px;line-height:1.4;">${imageSet.finish ? 'Toca la imagen para alternar inicio/final.' : 'Vista previa compacta del ejercicio.'}</div>
+        </div>
+        <button data-action="openExerciseImageModal" aria-label="Ampliar imagen" style="padding:9px 11px;border-color:var(--border);background:var(--bg-elev-2);">
+          <i class="ti ti-arrows-maximize" style="font-size:16px;color:var(--accent);"></i>
+        </button>
+      </div>
     </div>` : '';
 
   root.innerHTML = `
     ${headerBar(ex.n, backAction)}
-    ${mainImageBlock}
+    ${detailImageBlock}
     <div class="card" style="margin-bottom:14px;">
       <div class="row" style="gap:12px;margin-bottom:14px;">
         <div style="display:flex;align-items:center;justify-content:center;width:60px;height:60px;border-radius:14px;background:${tinfo.color}22;color:${tinfo.color};font-weight:700;font-family:var(--font-mono);font-size:24px;flex-shrink:0;">${ex.t}</div>
@@ -5627,6 +5687,17 @@ async function handle(e){
   }
   if (a === 'openSearchModal'){ openSearchModal({}); return; }
   if (a === 'openSearchModalForDay'){ openSearchModal({ fromDay: state.currentDay }); return; }
+  if (a === 'toggleExerciseImagePose'){
+    const ex = EXERCISE_DB.find(e => e.id === state.exSelectedId);
+    const set = exerciseImageSet(ex);
+    if (set?.finish) state.exImagePose = state.exImagePose === 'finish' ? 'start' : 'finish';
+    render(); return;
+  }
+  if (a === 'openExerciseImageModal'){
+    const ex = EXERCISE_DB.find(e => e.id === state.exSelectedId);
+    if (ex) openExerciseImageModal(ex);
+    return;
+  }
   if (a === 'addExerciseToDay'){
     const dk = state.exAddToDay;
     const dbEx = EXERCISE_DB.find(e => e.id === state.exSelectedId);
@@ -5679,7 +5750,7 @@ async function handle(e){
     return;
   }
   if (a === 'goHowRatingWorks'){ closeModal(); state.view = 'howRatingWorks'; render(); return; }
-  if (a === 'exOpen'){ state.exSelectedId = btn.dataset.id; state.view = 'exerciseDetail'; render(); return; }
+  if (a === 'exOpen'){ state.exSelectedId = btn.dataset.id; state.exImagePose = 'start'; state.view = 'exerciseDetail'; render(); return; }
   if (a === 'exFilter'){
     const k = btn.dataset.filter, v = btn.dataset.val;
     state.exFilters = state.exFilters || {};
