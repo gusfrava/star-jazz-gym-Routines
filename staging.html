@@ -546,6 +546,266 @@ function buildExerciseTooltip(ex){
   return parts.join(' ');
 }
 
+// Image helpers — Sesión 3 groundwork.
+// Returnan URL si existe, null si no. Cuando llenes media en los ejercicios,
+// aparecen automáticamente en las cards y vista detalle.
+// ============================================================
+// FREE EXERCISE DB IMAGE MATCHER (Sesión 3 — real images)
+// ============================================================
+// Conecta con yuhonas/free-exercise-db (dominio público, 800+ ejercicios con 2 imágenes c/u).
+// Descarga JSON una sola vez, lo cachea en localStorage por 30 días, y matchea
+// los ejercicios de tu CSV por nombre en inglés.
+
+const FREE_EX_DB_URL = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json';
+const FREE_EX_IMG_BASE = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/';
+const FREE_EX_CACHE_KEY = 'free_exercise_db_v1';
+const FREE_EX_CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 días
+
+let _freeExIndex = null;   // Map<normalized_name, {id, images}>
+let _freeExLoading = null; // Promise activa de carga
+
+function normalizeExerciseName(s){
+  return String(s||'').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function freeExImageUrl(imagePath){
+  return imagePath ? FREE_EX_IMG_BASE + imagePath : null;
+}
+
+async function loadFreeExerciseDb(){
+  if (_freeExIndex) return _freeExIndex;
+  if (_freeExLoading) return _freeExLoading;
+
+  _freeExLoading = (async () => {
+    // Intentar leer de localStorage
+    try {
+      const cached = localStorage.getItem(FREE_EX_CACHE_KEY);
+      if (cached){
+        const { data, t } = JSON.parse(cached);
+        if (Date.now() - t < FREE_EX_CACHE_TTL && Array.isArray(data)){
+          buildFreeExIndex(data);
+          return _freeExIndex;
+        }
+      }
+    } catch(e){ /* ignorar */ }
+
+    // Descargar
+    try {
+      const res = await fetch(FREE_EX_DB_URL);
+      if (!res.ok) throw new Error('No se pudo descargar');
+      const data = await res.json();
+      try { localStorage.setItem(FREE_EX_CACHE_KEY, JSON.stringify({ data, t: Date.now() })); }
+      catch(e){ /* localStorage lleno, ignorar cache */ }
+      buildFreeExIndex(data);
+      return _freeExIndex;
+    } catch(e){
+      console.warn('Free Exercise DB unavailable:', e);
+      _freeExIndex = new Map();
+      return _freeExIndex;
+    }
+  })();
+
+  return _freeExLoading;
+}
+
+function buildFreeExIndex(data){
+  _freeExIndex = new Map();
+  for (const ex of data){
+    if (!ex.name || !Array.isArray(ex.images) || !ex.images.length) continue;
+    const key = normalizeExerciseName(ex.name);
+    if (!_freeExIndex.has(key)){
+      _freeExIndex.set(key, { id: ex.id, images: ex.images });
+    }
+  }
+}
+
+// Image overrides (admin-managed, stored in Firestore imageOverrides collection)
+// Cached in memory, loaded once per session
+let _imageOverrides = {};
+let _imageOverridesLoading = null;
+async function loadImageOverridesFromFirestore(){
+  if (_imageOverridesLoading) return _imageOverridesLoading;
+  _imageOverridesLoading = (async () => {
+    try {
+      if (typeof db === 'undefined' || !db) return {};
+      const { collection, getDocs } = await import('https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js');
+      const snap = await getDocs(collection(db, 'imageOverrides'));
+      const obj = {};
+      snap.forEach(d => obj[d.id] = d.data());
+      _imageOverrides = obj;
+      return obj;
+    } catch(e){ console.warn('imageOverrides:', e); return {}; }
+  })();
+  return _imageOverridesLoading;
+}
+function getImageOverride(exerciseId){
+  return _imageOverrides[exerciseId] || null;
+}
+
+// Busca una imagen para un ejercicio dado su nombre EN (o ES como fallback).
+// Prioriza overrides de admin (Firestore), luego auto-match en Free Exercise DB.
+function findFreeExImages(nameEn, nameEs, exerciseId){
+  // 1. Override de admin (Firestore)
+  if (exerciseId){
+    const ov = getImageOverride(exerciseId);
+    if (ov && ov.image_url){
+      return {
+        thumbnail_url: ov.image_url,
+        main_url: ov.image_url,
+        animation_url: null
+      };
+    }
+  }
+  // 2. Auto-match en Free Exercise DB
+  if (!_freeExIndex) return null;
+  const tryKeys = [];
+  if (nameEn) tryKeys.push(normalizeExerciseName(nameEn));
+  if (nameEs) tryKeys.push(normalizeExerciseName(nameEs));
+  for (const key of tryKeys){
+    if (_freeExIndex.has(key)){
+      const m = _freeExIndex.get(key);
+      return {
+        thumbnail_url: freeExImageUrl(m.images[0]),
+        main_url: freeExImageUrl(m.images[0]),
+        animation_url: m.images.length > 1 ? freeExImageUrl(m.images[1]) : null
+      };
+    }
+  }
+  return null;
+}
+
+// Carga la DB al iniciar la app (en background, no bloquea)
+function initFreeExerciseDb(){
+  // En paralelo: free-db + admin overrides
+  Promise.all([loadFreeExerciseDb(), loadImageOverridesFromFirestore()]).then(() => {
+    // Después de cargar, re-render si la vista actual muestra ejercicios
+    const exerciseViews = ['exerciseDetail','exerciseExplorer','day','exercise','home'];
+    if (exerciseViews.includes(state.view)){
+      try { render(); } catch(e){}
+    }
+  });
+}
+
+// Stats de cobertura — útil para ver qué ejercicios tienen imagen y cuáles no
+function getImageCoverageStats(){
+  if (!_freeExIndex) return null;
+  const total = EXERCISE_DB.length;
+  let matched = 0;
+  const matchedList = [];
+  const unmatchedList = [];
+  for (const ex of EXERCISE_DB){
+    const m = findFreeExImages(ex.en, ex.n, ex.id);
+    if (m){
+      matched++;
+      matchedList.push({ id: ex.id, name: ex.n, en: ex.en });
+    } else {
+      unmatchedList.push({ id: ex.id, name: ex.n, en: ex.en, group: ex.g, category: ex.c });
+    }
+  }
+  return { total, matched, unmatched: total - matched, pct: Math.round((matched/total)*100), matchedList, unmatchedList };
+}
+
+// Exponer globalmente para usar desde la consola
+if (typeof window !== 'undefined'){
+  window.showImageStats = async function(){
+    if (!_freeExIndex) await loadFreeExerciseDb();
+    const s = getImageCoverageStats();
+    console.log(`%c📷 Image Coverage Stats`, 'font-size:14px;font-weight:bold;color:#3b9eff;');
+    console.log(`Total ejercicios: ${s.total}`);
+    console.log(`Con imagen: ${s.matched} (${s.pct}%)`);
+    console.log(`Sin imagen: ${s.unmatched}`);
+    console.log(`%cEjercicios SIN imagen:`, 'font-weight:bold;color:#f87171;');
+    console.table(s.unmatched > 50 ? s.unmatchedList.slice(0, 50).concat([{name: `... y ${s.unmatched-50} más`}]) : s.unmatchedList);
+    console.log(`%cEjercicios CON imagen (muestra):`, 'font-weight:bold;color:#22d3a3;');
+    console.table(s.matchedList.slice(0, 20));
+    return s;
+  };
+  window.refreshImageDb = async function(){
+    try { localStorage.removeItem(FREE_EX_CACHE_KEY); } catch(e){}
+    _freeExIndex = null;
+    _freeExLoading = null;
+    console.log('🔄 Re-descargando Free Exercise DB...');
+    await loadFreeExerciseDb();
+    console.log('✅ Done. Coverage:', getImageCoverageStats().pct + '%');
+  };
+}
+
+// ============================================================
+// IMAGE HOOKS — Sesión 3 groundwork (sin assets aún)
+// ============================================================
+// Cuando quieras agregar imágenes a los ejercicios, hay 3 opciones:
+//
+// 1. URLs en línea (más simple, sin código nuevo):
+//    Editar manualmente exercise.media.thumbnail_url = 'https://...'
+//    en Firestore o en el editor del ejercicio.
+//
+// 2. Mapping centralizado por exercise_id:
+//    Crear un objeto EXERCISE_IMAGES = { 'ex_001': { thumbnail_url: '...' } }
+//    y hacer que dbToAppExercise lea de ahí. Bueno para llenar muchos a la vez.
+//
+// 3. Firebase Storage / GitHub repo / Cloudinary / Imgur:
+//    Subir las imágenes a un host gratis y poner las URLs en el campo media.
+//    Recomendado: Firebase Storage (ya tienes Firebase configurado).
+//
+// Helpers disponibles:
+// - exerciseThumbnailUrl(ex) → URL o null
+// - exerciseMainImageUrl(ex) → URL o null
+// - exerciseAnimationUrl(ex) → URL o null
+// - exerciseVisual(ex, size, fallbackIcon, color) → HTML con imagen o icono fallback
+//
+// Schema:
+// exercise.media = {
+//   thumbnail_url: '...',   // chica, para listas/cards
+//   main_url: '...',        // grande, para detalle
+//   animation_url: '...',   // GIF/video corto
+//   start_position_url: '...',
+//   end_position_url: '...'
+// }
+// ============================================================
+
+function exerciseThumbnailUrl(ex){
+  if (!ex) return null;
+  // 1. URL explícita en media (si la pusiste manualmente)
+  if (ex.media?.thumbnail_url) return ex.media.thumbnail_url;
+  if (ex.media?.main_url) return ex.media.main_url;
+  // 2. Fallback: buscar en Free Exercise DB por nombre EN
+  const enName = ex._dbId ? EXERCISE_DB.find(e => e.id === ex._dbId)?.en : (ex._en || null);
+  const esName = ex.name || ex.n || null;
+  const m = findFreeExImages(enName, esName, ex?._dbId || ex?.id);
+  return m?.thumbnail_url || null;
+}
+function exerciseMainImageUrl(ex){
+  if (!ex) return null;
+  if (ex.media?.main_url) return ex.media.main_url;
+  if (ex.media?.thumbnail_url) return ex.media.thumbnail_url;
+  const enName = ex._dbId ? EXERCISE_DB.find(e => e.id === ex._dbId)?.en : (ex._en || null);
+  const esName = ex.name || ex.n || null;
+  const m = findFreeExImages(enName, esName, ex?._dbId || ex?.id);
+  return m?.main_url || null;
+}
+function exerciseAnimationUrl(ex){
+  if (ex?.media?.animation_url) return ex.media.animation_url;
+  const enName = ex._dbId ? EXERCISE_DB.find(e => e.id === ex._dbId)?.en : (ex?._en || null);
+  const esName = ex?.name || ex?.n || null;
+  const m = findFreeExImages(enName, esName, ex?._dbId || ex?.id);
+  return m?.animation_url || null;
+}
+// Render thumbnail or fallback icon (for use in exercise cards / lists)
+function exerciseVisual(ex, size = 38, fallbackIcon = 'ti-barbell', accentColor = 'var(--accent)'){
+  const url = exerciseThumbnailUrl(ex);
+  if (url){
+    return `<div style="width:${size}px;height:${size}px;border-radius:10px;background:var(--bg-elev-2);overflow:hidden;flex-shrink:0;">
+      <img src="${esc(url)}" alt="${esc(ex.name||'')}" loading="lazy" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='<i class=&quot;ti ${fallbackIcon}&quot; style=&quot;font-size:${Math.round(size*0.55)}px;color:${accentColor};display:flex;align-items:center;justify-content:center;width:100%;height:100%;&quot;></i>'" />
+    </div>`;
+  }
+  return `<div style="display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:10px;background:var(--bg-elev-2);flex-shrink:0;">
+    <i class="ti ${fallbackIcon}" style="font-size:${Math.round(size*0.55)}px;color:${accentColor};"></i>
+  </div>`;
+}
+
 // Convertir un ejercicio del DB al formato del editor de la app
 function dbToAppExercise(dbEx){
   const primary = Object.entries(dbEx.sv||{}).filter(([k,v]) => v >= 70).sort((a,b) => b[1]-a[1]).map(([k]) => k);
@@ -557,7 +817,15 @@ function dbToAppExercise(dbEx){
     primary,
     secondary,
     alts: [],
-    // Metadata extra (compatible con app actual, ignorada si no se usa)
+    // Image hooks — schema preparado para futuro. Cuando se llenen URLs, aparecen solas.
+    media: {
+      thumbnail_url: null,  // imagen pequeña para listas y cards
+      main_url: null,       // imagen principal del ejercicio
+      animation_url: null,  // GIF / video corto demostrativo
+      start_position_url: null,
+      end_position_url: null,
+    },
+    // Metadata extra
     _dbId: dbEx.id,
     _tier: dbEx.t,
     _score: dbEx.s,
@@ -4010,11 +4278,17 @@ function renderExerciseExplorer(){
 function renderExerciseCard(ex){
   const tinfo = TIER_INFO[ex.t] || TIER_INFO.B;
   const primaryMuscles = Object.entries(ex.sv||{}).sort((a,b) => b[1]-a[1]).slice(0,2).map(([k,v]) => MUSCLES[k]?.label || k).join(' · ');
+  // Image hooks: si media existe O hay match en free-exercise-db
+  const thumbUrl = ex.media?.thumbnail_url || ex.media?.main_url || (findFreeExImages(ex.en, ex.n, ex.id)?.thumbnail_url);
+  const visualBlock = thumbUrl
+    ? `<div style="width:38px;height:38px;border-radius:10px;background:var(--bg-elev-2);overflow:hidden;flex-shrink:0;position:relative;">
+        <img src="${esc(thumbUrl)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='<div style=&quot;display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:${tinfo.color}22;color:${tinfo.color};font-weight:700;font-family:var(--font-mono);font-size:14px;&quot;>${ex.t}</div>'" />
+        <div style="position:absolute;bottom:0;right:0;background:${tinfo.color};color:white;font-size:9px;font-weight:700;padding:1px 4px;border-top-left-radius:6px;font-family:var(--font-mono);">${ex.t}</div>
+      </div>`
+    : `<div style="display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:10px;background:${tinfo.color}22;color:${tinfo.color};font-weight:700;font-family:var(--font-mono);font-size:14px;flex-shrink:0;">${ex.t}</div>`;
   return `<button class="day-card fade-in" data-action="exOpen" data-id="${esc(ex.id)}" style="text-align:left;margin-bottom:6px;">
     <div class="row" style="position:relative;z-index:1;gap:10px;">
-      <div style="display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:10px;background:${tinfo.color}22;color:${tinfo.color};font-weight:700;font-family:var(--font-mono);font-size:14px;flex-shrink:0;">
-        ${ex.t}
-      </div>
+      ${visualBlock}
       <div style="min-width:0;flex:1;">
         <div style="font-size:14px;font-weight:600;">${esc(ex.n)}</div>
         <div class="muted" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">${esc(primaryMuscles || ex.g || '')}</div>
@@ -4059,8 +4333,16 @@ function renderExerciseDetail(){
   const backAction = state.exReturnView === 'day' ? 'exDetailBackToDay' :
                      state.exReturnView === 'home' ? 'exDetailBackHome' :
                      'goExerciseExplorer';
+  // Image hooks — Sesión 3. Si el ejercicio del DB tiene media (en el futuro), mostrar arriba.
+  const dbMainUrl = ex.media?.main_url || ex.media?.thumbnail_url || (findFreeExImages(ex.en, ex.n, ex.id)?.main_url);
+  const mainImageBlock = dbMainUrl ? `
+    <div class="card" style="margin-bottom:14px;padding:0;overflow:hidden;">
+      <img src="${esc(dbMainUrl)}" alt="${esc(ex.n||'')}" loading="lazy" style="width:100%;display:block;max-height:360px;object-fit:cover;" onerror="this.parentElement.style.display='none'" />
+    </div>` : '';
+
   root.innerHTML = `
     ${headerBar(ex.n, backAction)}
+    ${mainImageBlock}
     <div class="card" style="margin-bottom:14px;">
       <div class="row" style="gap:12px;margin-bottom:14px;">
         <div style="display:flex;align-items:center;justify-content:center;width:60px;height:60px;border-radius:14px;background:${tinfo.color}22;color:${tinfo.color};font-weight:700;font-family:var(--font-mono);font-size:24px;flex-shrink:0;">${ex.t}</div>
@@ -5292,6 +5574,26 @@ async function handle(e){
     toast(state.muscleGradientMap ? 'Gradiente activado' : 'Gradiente desactivado', 'success');
     render(); return;
   }
+  if (a === 'showImageStatsConsole'){
+    const s = getImageCoverageStats();
+    if (!s){ toast('Cargando base de datos...'); return; }
+    const sample = s.unmatchedList.slice(0, 30).map(x => `• ${x.name}${x.en ? ' (' + x.en + ')' : ''}`).join('\n');
+    const more = s.unmatched > 30 ? `\n\n... y ${s.unmatched - 30} más. Abre la consola y escribe showImageStats() para ver todos.` : '';
+    alert(`📷 Imágenes de ejercicios\n\n${s.matched} de ${s.total} ejercicios tienen imagen (${s.pct}%)\n\nEjercicios SIN imagen (primeros 30):\n${sample}${more}`);
+    return;
+  }
+  if (a === 'refreshImageDb'){
+    try { localStorage.removeItem(FREE_EX_CACHE_KEY); } catch(e){}
+    _freeExIndex = null;
+    _freeExLoading = null;
+    toast('Re-descargando base de imágenes...', 'success');
+    loadFreeExerciseDb().then(() => {
+      const s = getImageCoverageStats();
+      toast(`✅ ${s.matched}/${s.total} ejercicios con imagen (${s.pct}%)`, 'success');
+      render();
+    });
+    return;
+  }
   if (a === 'exDetailBackToDay'){
     closeModal();
     const dk = state.exReturnDay;
@@ -6062,6 +6364,8 @@ document.body.addEventListener('click', (e) => {
 
 async function init(){
   removeStrayBodyTextNodes();
+  // Sesión 3: Cargar Free Exercise DB en background para imágenes
+  initFreeExerciseDb();
   // Sesión 2: restore gradient toggle from localStorage
   try {
     const saved = localStorage.getItem('muscleGradientMap');
