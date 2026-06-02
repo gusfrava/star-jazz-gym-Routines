@@ -5719,13 +5719,42 @@ async function handle(e){
   if (a === 'openExEditorSearch'){
     openDbPicker((dbEx) => {
       const conv = dbToAppExercise(dbEx);
-      window._editEx.name = conv.name;
-      window._editEx.video = conv.video;
-      window._editEx.primary = conv.primary;
-      window._editEx.secondary = conv.secondary;
-      window._editEx.alts = conv.alts;
-      window._editEx.measurement = conv.measurement || 'weight_reps';
-      render();
+      window._editEx = {
+        ...(window._editEx || {}),
+        ...conv,
+        primary: conv.primary || [],
+        secondary: conv.secondary || [],
+        alts: conv.alts || []
+      };
+      const nameInput = document.getElementById('exName');
+      const videoInput = document.getElementById('exVideo');
+      const measurementInput = document.getElementById('exMeasurement');
+      if (nameInput) nameInput.value = window._editEx.name || '';
+      if (videoInput) videoInput.value = window._editEx.video || '';
+      if (measurementInput) measurementInput.value = window._editEx.measurement || 'weight_reps';
+      const grid = document.getElementById('muscleGrid');
+      if (grid){
+        grid.innerHTML = MUSCLE_IDS.map(m => {
+          const isP = (window._editEx.primary || []).includes(m);
+          const isS = (window._editEx.secondary || []).includes(m);
+          const cls = isP ? 'primary' : isS ? 'secondary' : '';
+          return `<div class="muscle-chip ${cls}" data-action="cycleMuscle" data-mid="${m}">
+            <span>${MUSCLES[m].label}</span>
+            <span style="font-size:10px;font-weight:600;">${isP?'●●':isS?'●':''}</span>
+          </div>`;
+        }).join('');
+        grid.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle));
+      }
+      const altsContainer = document.getElementById('altsContainer');
+      if (altsContainer){
+        altsContainer.innerHTML = (window._editEx.alts || []).map((alt, i) => `
+          <div class="alt-row">
+            <input type="text" class="alt-in" data-i="${i}" value="${esc(alt)}" maxlength="80" placeholder="Alternativa..." />
+            <button data-action="removeAlt" data-i="${i}" class="ghost-danger" style="padding:6px;border:none;"><i class="ti ti-x" style="font-size:14px;"></i></button>
+          </div>`).join('');
+        altsContainer.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle));
+      }
+      toast('Ejercicio cargado. Toca Crear ejercicio para agregarlo.', 'success');
     });
     return;
   }
