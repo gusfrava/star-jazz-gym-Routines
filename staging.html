@@ -895,6 +895,47 @@ function dbToAppExercise(dbEx){
     _svgWeights: dbEx.sv || {}
   };
 }
+function legacyExerciseDbMatch(ex){
+  if (!ex || ex._dbId) return ex?._dbId ? EXERCISE_DB.find(e => e.id === ex._dbId) || null : null;
+  const q = normalizeText(ex.name || '');
+  if (!q) return null;
+  const qWords = q.split(' ').filter(w => w.length > 2 && !['con','para','los','las','del','una','uno','pies','medio'].includes(w));
+  let best = null;
+  for (const dbEx of searchExercises(q).slice(0, 10)){
+    const es = normalizeText(dbEx.n || '');
+    const en = normalizeText(dbEx.en || '');
+    const haystack = `${es} ${en}`;
+    let score = 0;
+    if (q === es || q === en) score += 100;
+    if (es.includes(q) || q.includes(es)) score += 75;
+    if (en.includes(q) || q.includes(en)) score += 70;
+    if (qWords.length){
+      const hits = qWords.filter(w => haystack.includes(w)).length;
+      score += (hits / qWords.length) * 65;
+    }
+    score += Math.min(10, (dbEx.s || 0) / 10);
+    if (!best || score > best.score) best = { dbEx, score };
+  }
+  return best && best.score >= 45 ? best.dbEx : null;
+}
+function enrichLegacyExerciseWithDb(legacy, dbEx){
+  const mapped = dbToAppExercise(dbEx);
+  return {
+    ...legacy,
+    primary: mapped.primary,
+    secondary: mapped.secondary,
+    measurement: legacy.measurement || mapped.measurement || 'weight_reps',
+    alts: Array.isArray(legacy.alts) && legacy.alts.length ? legacy.alts : mapped.alts,
+    media: { ...(mapped.media || {}), ...(legacy.media || {}) },
+    _dbId: mapped._dbId,
+    _tier: mapped._tier,
+    _score: mapped._score,
+    _measurement: mapped._measurement,
+    _group: mapped._group,
+    _notes: mapped._notes,
+    _svgWeights: mapped._svgWeights
+  };
+}
 
 
 const DAY_ORDER = ['lunes','martes','miercoles','jueves','viernes','sabado','domingo'];
@@ -4714,9 +4755,10 @@ function renderEditRoutine(){
   const exList = routine.exercises.map((ex, idx) => `
     <div class="history-entry" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
       <div style="flex:1;min-width:0;">
-        <div style="font-size:14px;font-weight:500;">${esc(ex.name)}</div>
+        <div style="font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px;">${esc(ex.name)} ${ex._dbId ? '<span class="pill" style="font-size:9px;">DB</span>' : ''}</div>
         <div class="muted" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc((ex.primary||[]).map(m=>MUSCLES[m]?.label).filter(Boolean).slice(0,3).join(' · ')) || 'Sin músculos asignados'}</div>
       </div>
+      ${!ex._dbId ? `<button data-action="mapLegacyExercise" data-idx="${idx}" aria-label="Vincular con DB" title="Vincular con base de ejercicios" style="padding:6px;border-color:var(--border);color:var(--accent);"><i class="ti ti-link" style="font-size:14px;"></i></button>` : ''}
       <button data-action="moveExUp" data-idx="${idx}" aria-label="Subir" style="padding:6px;border-color:var(--border);" ${idx===0?'disabled':''}><i class="ti ti-arrow-up" style="font-size:14px;"></i></button>
       <button data-action="moveExDown" data-idx="${idx}" aria-label="Bajar" style="padding:6px;border-color:var(--border);" ${idx===routine.exercises.length-1?'disabled':''}><i class="ti ti-arrow-down" style="font-size:14px;"></i></button>
       <button data-action="editExFromList" data-idx="${idx}" aria-label="Editar" style="padding:6px;border-color:var(--border);"><i class="ti ti-edit" style="font-size:14px;color:var(--accent);"></i></button>
@@ -6221,6 +6263,90 @@ async function handle(e){
   if (a === 'editExFromList'){
     state.currentExerciseIdx = Number(btn.dataset.idx);
     state.view = 'editExercise'; render(); return;
+  }
+  if (a === 'mapLegacyExercise'){
+    const idx = Number(btn.dataset.idx);
+    const dayKey = state.currentDay;
+    const src = getCurrentSource(dayKey);
+    if (src === 'shared' && !isAdmin()){ toast('Solo admins pueden editar la rutina compartida'); return; }
+    openDbPicker(async (dbEx) => {
+      const pr = state.personalRoutines[state.currentUser] || {};
+      let routine = src === 'personal' ? pr[dayKey] : (state.sharedRoutine && state.sharedRoutine[dayKey]);
+      if (!routine && src === 'personal'){
+        const shared = state.sharedRoutine && state.sharedRoutine[dayKey];
+        routine = shared ? JSON.parse(JSON.stringify(shared)) : { label:'Día', focus:'', icon:'ti-barbell', exercises:[] };
+        pr[dayKey] = routine;
+        state.personalRoutines[state.currentUser] = pr;
+      }
+      if (!routine || !routine.exercises[idx]){ toast('No encontré ese ejercicio'); return; }
+      const previous = routine.exercises[idx];
+      routine.exercises[idx] = enrichLegacyExerciseWithDb(previous, dbEx);
+      if (src === 'personal') await savePersonalRoutine(state.currentUser, state.personalRoutines[state.currentUser]);
+      else await saveSharedRoutine(state.sharedRoutine);
+      toast(`Vinculado con ${dbEx.n}. Progreso conservado.`, 'success');
+      render();
+    });
+    return;
+  }
+  if (a === 'mapLegacyExercises'){
+    const dayKey = state.currentDay;
+    const src = getCurrentSource(dayKey);
+    if (src === 'shared' && !isAdmin()){ toast('Solo admins pueden editar la rutina compartida'); return; }
+    const pr = state.personalRoutines[state.currentUser] || {};
+    let routine = src === 'personal' ? pr[dayKey] : (state.sharedRoutine && state.sharedRoutine[dayKey]);
+    if (!routine && src === 'personal'){
+      const shared = state.sharedRoutine && state.sharedRoutine[dayKey];
+      routine = shared ? JSON.parse(JSON.stringify(shared)) : null;
+    }
+    if (!routine){ toast('No encontré esta rutina'); return; }
+    const matches = (routine.exercises || []).map((ex, idx) => ({ idx, ex, dbEx: legacyExerciseDbMatch(ex) }))
+      .filter(m => !m.ex._dbId && m.dbEx);
+    if (!matches.length){ toast('No encontré matches seguros'); return; }
+    const rows = matches.slice(0, 10).map(m => `
+      <div style="padding:9px 0;border-bottom:1px solid var(--border);">
+        <div style="font-size:13px;font-weight:600;">${esc(m.ex.name)}</div>
+        <div class="muted" style="font-size:12px;">→ ${esc(m.dbEx.n)} <span class="pill" style="font-size:9px;margin-left:4px;">${esc(m.dbEx.t || '')}</span></div>
+      </div>`).join('');
+    openModal(`
+      <h2 style="margin-bottom:8px;">Vincular ejercicios con DB</h2>
+      <div class="banner banner-info" style="margin-bottom:12px;">
+        <i class="ti ti-info-circle"></i>
+        <div>Esto agrega metadata e imágenes a los ejercicios actuales. No mueve ejercicios ni borra progreso; los logs siguen ligados a la misma posición del día.</div>
+      </div>
+      <div style="margin-bottom:14px;">${rows}${matches.length > 10 ? `<div class="muted" style="font-size:12px;margin-top:8px;">...y ${matches.length - 10} más</div>` : ''}</div>
+      <div style="display:flex;gap:8px;">
+        <button data-action="closeModal" style="flex:1;padding:10px;">Cancelar</button>
+        <button class="primary" data-action="confirmMapLegacyExercises" style="flex:1;padding:10px;font-weight:600;">Vincular</button>
+      </div>
+    `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
+    return;
+  }
+  if (a === 'confirmMapLegacyExercises'){
+    const dayKey = state.currentDay;
+    const src = getCurrentSource(dayKey);
+    if (src === 'shared' && !isAdmin()){ toast('Solo admins pueden editar la rutina compartida'); return; }
+    const pr = state.personalRoutines[state.currentUser] || {};
+    let routine = src === 'personal' ? pr[dayKey] : (state.sharedRoutine && state.sharedRoutine[dayKey]);
+    if (!routine && src === 'personal'){
+      const shared = state.sharedRoutine && state.sharedRoutine[dayKey];
+      routine = shared ? JSON.parse(JSON.stringify(shared)) : { label:'Día', focus:'', icon:'ti-barbell', exercises:[] };
+      pr[dayKey] = routine;
+      state.personalRoutines[state.currentUser] = pr;
+    }
+    if (!routine){ closeModal(); toast('No encontré esta rutina'); return; }
+    let count = 0;
+    routine.exercises = (routine.exercises || []).map(ex => {
+      if (ex._dbId) return ex;
+      const match = legacyExerciseDbMatch(ex);
+      if (!match) return ex;
+      count += 1;
+      return enrichLegacyExerciseWithDb(ex, match);
+    });
+    if (src === 'personal') await savePersonalRoutine(state.currentUser, state.personalRoutines[state.currentUser]);
+    else await saveSharedRoutine(state.sharedRoutine);
+    closeModal();
+    toast(`Vinculados ${count} ejercicios. Progreso conservado.`, 'success');
+    render(); return;
   }
   if (a === 'moveExUp' || a === 'moveExDown'){
     const idx = Number(btn.dataset.idx);
