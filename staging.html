@@ -365,31 +365,6 @@ function normalizeText(s){
     .replace(/[^a-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ').trim();
 }
-const SEARCH_ALIASES = [
-  ['prensa', 'press'], ['press', 'prensa'],
-  ['banca', 'bench'], ['banco', 'bench'], ['bench', 'banca'],
-  ['sentadilla', 'squat'], ['squat', 'sentadilla'],
-  ['peso muerto', 'deadlift'], ['deadlift', 'peso muerto'],
-  ['jalon', 'pulldown'], ['pulldown', 'jalon'],
-  ['remo', 'row'], ['row', 'remo'],
-  ['pecho', 'chest'], ['chest', 'pecho'],
-  ['espalda', 'back'], ['back', 'espalda'],
-  ['piernas', 'legs'], ['pierna', 'leg'], ['legs', 'piernas'], ['leg', 'pierna'],
-  ['gluteos', 'glutes'], ['gluteo', 'glute'], ['glutes', 'gluteos'], ['glute', 'gluteo'],
-  ['hombros', 'shoulders'], ['hombro', 'shoulder'], ['shoulders', 'hombros'], ['shoulder', 'hombro'],
-  ['femorales', 'hamstrings'], ['femoral', 'hamstring'], ['hamstrings', 'femorales'], ['hamstring', 'femoral'],
-  ['pantorrillas', 'calves'], ['pantorrilla', 'calf'], ['calves', 'pantorrillas'], ['calf', 'pantorrilla'],
-  ['cuadriceps', 'quads'], ['quads', 'cuadriceps'],
-  ['biceps', 'bicep'], ['triceps', 'tricep']
-];
-function searchQueryVariants(query){
-  const base = normalizeText(query);
-  const variants = new Set(base ? [base] : []);
-  for (const [from, to] of SEARCH_ALIASES){
-    if (base.includes(from)) variants.add(base.split(from).join(to));
-  }
-  return Array.from(variants).filter(Boolean);
-}
 
 // Encuentra grupo muscular por texto (soporta sinónimos)
 function findMuscleGroup(query){
@@ -411,7 +386,6 @@ function findMuscleGroup(query){
 // músculos (CSV + SVG), categoría. Combina match de nombre con match de grupo muscular.
 function searchExercises(query, filters = {}){
   const n = normalizeText(query);
-  const variants = searchQueryVariants(query);
   let results = EXERCISE_DB;
 
   // Filtros estructurados
@@ -434,31 +408,22 @@ function searchExercises(query, filters = {}){
     const eqN = normalizeText(e.eq||'');
     let score = 0;
 
-    const haystack = [nameN, enN, groupN, patternN, eqN].join(' ');
-
-    // Match por nombre (prioridad alta), con aliases ES/EN (prensa ↔ press, sentadilla ↔ squat, etc.)
-    for (const v of variants){
-      if (nameN === v) score += 1000;
-      else if (nameN.startsWith(v)) score += 500;
-      else if (nameN.includes(v)) score += 220;
-      if (enN === v) score += 850;
-      else if (enN.startsWith(v)) score += 420;
-      else if (enN.includes(v)) score += 180;
-
-      const words = v.split(' ').filter(w => w.length > 1);
-      if (words.length > 1 && words.every(w => haystack.includes(w))) score += 90 + words.length * 15;
-    }
+    // Match por nombre (prioridad alta)
+    if (nameN === n) score += 1000;
+    else if (nameN.startsWith(n)) score += 500;
+    else if (nameN.includes(n)) score += 200;
+    if (enN.includes(n)) score += Math.max(score, 150) - score + 150;
 
     // Match por grupo / patrón / equipo
-    if (variants.some(v => groupN.includes(v))) score += 100;
-    if (variants.some(v => patternN.includes(v))) score += 60;
-    if (variants.some(v => eqN.includes(v))) score += 40;
+    if (groupN.includes(n)) score += 100;
+    if (patternN.includes(n)) score += 60;
+    if (eqN.includes(n)) score += 40;
 
     // Match contra los muscle IDs del CSV (cw) — por ejemplo "biceps_femoral", "gluteo_mayor"
     if (e.cw){
       for (const muscleId of Object.keys(e.cw)){
         const muscleNorm = normalizeText(muscleId.replace(/_/g, ' '));
-        if (variants.some(v => muscleNorm.includes(v) || v.includes(muscleNorm))){
+        if (muscleNorm.includes(n) || n.includes(muscleNorm)){
           // Score proporcional al peso del músculo en ese ejercicio
           const weight = e.cw[muscleId] || 0;
           score += Math.max(score, weight); // tope al weight
@@ -666,6 +631,7 @@ async function loadImageOverridesFromFirestore(){
   _imageOverridesLoading = (async () => {
     try {
       if (typeof db === 'undefined' || !db) return {};
+      const { collection, getDocs } = await import('https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js');
       const snap = await getDocs(collection(db, 'imageOverrides'));
       const obj = {};
       snap.forEach(d => obj[d.id] = d.data());
@@ -685,16 +651,11 @@ function findFreeExImages(nameEn, nameEs, exerciseId){
   // 1. Override de admin (Firestore)
   if (exerciseId){
     const ov = getImageOverride(exerciseId);
-    if (ov && (ov.preview_url || ov.start_url || ov.finish_url || ov.image_url)){
-      const preview = ov.preview_url || ov.image_url || ov.start_url || ov.finish_url;
-      const start = ov.start_url || ov.image_url || ov.preview_url || ov.finish_url;
-      const finish = ov.finish_url || ov.animation_url || null;
+    if (ov && ov.image_url){
       return {
-        thumbnail_url: preview,
-        main_url: start,
-        start_url: start,
-        finish_url: finish,
-        animation_url: finish
+        thumbnail_url: ov.image_url,
+        main_url: ov.image_url,
+        animation_url: null
       };
     }
   }
@@ -706,14 +667,10 @@ function findFreeExImages(nameEn, nameEs, exerciseId){
   for (const key of tryKeys){
     if (_freeExIndex.has(key)){
       const m = _freeExIndex.get(key);
-      const start = freeExImageUrl(m.images[0]);
-      const finish = m.images.length > 1 ? freeExImageUrl(m.images[1]) : null;
       return {
-        thumbnail_url: start,
-        main_url: start,
-        start_url: start,
-        finish_url: finish,
-        animation_url: finish
+        thumbnail_url: freeExImageUrl(m.images[0]),
+        main_url: freeExImageUrl(m.images[0]),
+        animation_url: m.images.length > 1 ? freeExImageUrl(m.images[1]) : null
       };
     }
   }
@@ -809,48 +766,31 @@ if (typeof window !== 'undefined'){
 // }
 // ============================================================
 
-function exerciseDbNames(ex){
-  if (!ex) return { enName: null, esName: null, exerciseId: null };
-  const dbEx = ex._dbId ? EXERCISE_DB.find(e => e.id === ex._dbId) : null;
-  return {
-    enName: dbEx?.en || ex._en || ex.en || null,
-    esName: ex.name || ex.n || dbEx?.n || null,
-    exerciseId: ex._dbId || ex.id || null
-  };
-}
 function exerciseThumbnailUrl(ex){
   if (!ex) return null;
   // 1. URL explícita en media (si la pusiste manualmente)
   if (ex.media?.thumbnail_url) return ex.media.thumbnail_url;
   if (ex.media?.main_url) return ex.media.main_url;
   // 2. Fallback: buscar en Free Exercise DB por nombre EN
-  const { enName, esName, exerciseId } = exerciseDbNames(ex);
-  const m = findFreeExImages(enName, esName, exerciseId);
+  const enName = ex._dbId ? EXERCISE_DB.find(e => e.id === ex._dbId)?.en : (ex._en || null);
+  const esName = ex.name || ex.n || null;
+  const m = findFreeExImages(enName, esName, ex?._dbId || ex?.id);
   return m?.thumbnail_url || null;
 }
 function exerciseMainImageUrl(ex){
   if (!ex) return null;
   if (ex.media?.main_url) return ex.media.main_url;
   if (ex.media?.thumbnail_url) return ex.media.thumbnail_url;
-  const { enName, esName, exerciseId } = exerciseDbNames(ex);
-  const m = findFreeExImages(enName, esName, exerciseId);
+  const enName = ex._dbId ? EXERCISE_DB.find(e => e.id === ex._dbId)?.en : (ex._en || null);
+  const esName = ex.name || ex.n || null;
+  const m = findFreeExImages(enName, esName, ex?._dbId || ex?.id);
   return m?.main_url || null;
-}
-function exerciseImageSet(ex){
-  if (!ex) return null;
-  const { enName, esName, exerciseId } = exerciseDbNames(ex);
-  const found = findFreeExImages(enName, esName, exerciseId);
-  const media = ex.media || {};
-  const preview = media.thumbnail_url || found?.thumbnail_url || media.main_url || null;
-  const start = media.start_position_url || media.main_url || found?.start_url || found?.main_url || preview;
-  const finish = media.end_position_url || media.animation_url || found?.finish_url || found?.animation_url || null;
-  if (!preview && !start && !finish) return null;
-  return { preview: preview || start || finish, start: start || preview || finish, finish };
 }
 function exerciseAnimationUrl(ex){
   if (ex?.media?.animation_url) return ex.media.animation_url;
-  const { enName, esName, exerciseId } = exerciseDbNames(ex);
-  const m = findFreeExImages(enName, esName, exerciseId);
+  const enName = ex._dbId ? EXERCISE_DB.find(e => e.id === ex._dbId)?.en : (ex?._en || null);
+  const esName = ex?.name || ex?.n || null;
+  const m = findFreeExImages(enName, esName, ex?._dbId || ex?.id);
   return m?.animation_url || null;
 }
 // Render thumbnail or fallback icon (for use in exercise cards / lists)
@@ -864,26 +804,6 @@ function exerciseVisual(ex, size = 38, fallbackIcon = 'ti-barbell', accentColor 
   return `<div style="display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:10px;background:var(--bg-elev-2);flex-shrink:0;">
     <i class="ti ${fallbackIcon}" style="font-size:${Math.round(size*0.55)}px;color:${accentColor};"></i>
   </div>`;
-}
-function looksLikeOldEnglishVideoQuery(query){
-  const q = normalizeText(query);
-  if (!q) return true;
-  if (q.includes('http') || q.includes('tecnica')) return false;
-  return [
-    'how to','machine','standing','seated','lying','bench','press','squat','deadlift',
-    'pulldown','row','curl','raise','technique','dumbbell','barbell','cable','calf',
-    'leg','chest','shoulder','tricep','bicep','glute','hamstring','inner thigh',
-    'wide grip','close grip','overhead','incline','flat'
-  ].some(term => q.includes(term));
-}
-function exerciseVideoQuery(ex){
-  const dbEx = ex?._dbId ? EXERCISE_DB.find(e => e.id === ex._dbId) : null;
-  if (dbEx?.n) return `${dbEx.n} tecnica`;
-  const current = (ex?.video || '').trim();
-  const name = (ex?.name || ex?.n || '').trim();
-  if (!name) return current;
-  if (!current || looksLikeOldEnglishVideoQuery(current)) return `${name} tecnica`;
-  return current;
 }
 
 // Convertir un ejercicio del DB al formato del editor de la app
@@ -913,48 +833,6 @@ function dbToAppExercise(dbEx){
     _group: dbEx.g,
     _notes: dbEx.no || '',
     _svgWeights: dbEx.sv || {}
-  };
-}
-function legacyExerciseDbMatch(ex){
-  if (!ex || ex._dbId) return ex?._dbId ? EXERCISE_DB.find(e => e.id === ex._dbId) || null : null;
-  const q = normalizeText(ex.name || '');
-  if (!q) return null;
-  const qWords = q.split(' ').filter(w => w.length > 2 && !['con','para','los','las','del','una','uno','pies','medio'].includes(w));
-  let best = null;
-  for (const dbEx of searchExercises(q).slice(0, 10)){
-    const es = normalizeText(dbEx.n || '');
-    const en = normalizeText(dbEx.en || '');
-    const haystack = `${es} ${en}`;
-    let score = 0;
-    if (q === es || q === en) score += 100;
-    if (es.includes(q) || q.includes(es)) score += 75;
-    if (en.includes(q) || q.includes(en)) score += 70;
-    if (qWords.length){
-      const hits = qWords.filter(w => haystack.includes(w)).length;
-      score += (hits / qWords.length) * 65;
-    }
-    score += Math.min(10, (dbEx.s || 0) / 10);
-    if (!best || score > best.score) best = { dbEx, score };
-  }
-  return best && best.score >= 45 ? best.dbEx : null;
-}
-function enrichLegacyExerciseWithDb(legacy, dbEx){
-  const mapped = dbToAppExercise(dbEx);
-  return {
-    ...legacy,
-    video: mapped.video,
-    primary: mapped.primary,
-    secondary: mapped.secondary,
-    measurement: legacy.measurement || mapped.measurement || 'weight_reps',
-    alts: Array.isArray(legacy.alts) && legacy.alts.length ? legacy.alts : mapped.alts,
-    media: { ...(mapped.media || {}), ...(legacy.media || {}) },
-    _dbId: mapped._dbId,
-    _tier: mapped._tier,
-    _score: mapped._score,
-    _measurement: mapped._measurement,
-    _group: mapped._group,
-    _notes: mapped._notes,
-    _svgWeights: mapped._svgWeights
   };
 }
 
@@ -1036,7 +914,6 @@ const state = {
   exAddToDay: null,  // si vienes de un día → muestra botón "Agregar a [día]"
   exReturnView: null,  // vista a la que volver desde el detalle del ejercicio
   exReturnDay: null,   // día al que volver desde el detalle
-  exImagePose: 'start', // 'start' | 'finish' for exercise detail preview
   homeExQuery: '',  // búsqueda rápida en el home
   muscleGradientMap: true,  // Sesión 2: usar gradient en mapa muscular (default ON)
   // ====== Library (Fase 1) ======
@@ -1414,10 +1291,19 @@ async function loadPersonalLibrary(userId, groupId = groupPath()){
     return JSON.parse(localStorage.getItem(groupLocalKey('personalLibrary:'+userId, groupId))||'{}');
   }
   try {
-    const snap = await getDoc(doc(db,'salas',groupId,'personalLibraries',userId));
-    return snap.exists() ? (snap.data().routines || {}) : {};
+    // 1. Intentar leer de la nueva ubicación (global, por user)
+    const newSnap = await getDoc(doc(db,'users',userId,'personalLibrary','data'));
+    if (newSnap.exists()){
+      return newSnap.data().routines || {};
+    }
+    // 2. Fallback a la ubicación vieja (atada al grupo)
+    const oldSnap = await getDoc(doc(db,'salas',groupId,'personalLibraries',userId));
+    return oldSnap.exists() ? (oldSnap.data().routines || {}) : {};
   } catch(e){ console.error(e); return {}; }
 }
+
+// FASE 0 — Escritura dual: escribe en AMBAS ubicaciones (vieja para compat, nueva para futuro).
+// Cuando todos los users estén migrados, se quita la escritura vieja.
 async function savePersonalLibrary(userId, routines){
   if (!userId) return;
   if (!firebaseReady){
@@ -1425,8 +1311,13 @@ async function savePersonalLibrary(userId, routines){
     return;
   }
   state.syncing = true;
-  try { await setDoc(doc(db,'salas',groupPath(),'personalLibraries',userId), { routines }); }
-  catch(e){ console.error(e); toast('Error al guardar biblioteca'); }
+  try {
+    // Escritura dual: vieja + nueva
+    await Promise.all([
+      setDoc(doc(db,'salas',groupPath(),'personalLibraries',userId), { routines }),
+      setDoc(doc(db,'users',userId,'personalLibrary','data'), { routines, updatedAt: Date.now() })
+    ]);
+  } catch(e){ console.error(e); toast('Error al guardar biblioteca'); }
   state.syncing = false;
 }
 async function migrateSharedRoutineToLibrary(){
@@ -2543,32 +2434,6 @@ function openModal(html, onAttach){
 }
 function closeModal(){ modalRoot.innerHTML = ''; state.modalOpen = null; }
 
-function openExerciseImageModal(ex){
-  const set = exerciseImageSet(ex);
-  if (!set) return;
-  const start = set.start || set.preview;
-  const finish = set.finish;
-  modalRoot.innerHTML = `<div class="modal-backdrop" id="imgModal">
-    <div class="modal" onclick="event.stopPropagation()" style="max-width:760px;">
-      <h2 style="margin-bottom:8px;">Imagen de técnica</h2>
-      <div class="muted" style="font-size:12px;margin-bottom:14px;">${esc(ex.n || ex.name || '')}</div>
-      <div style="display:grid;grid-template-columns:${finish ? '1fr 1fr' : '1fr'};gap:14px;margin-bottom:16px;">
-      ${start ? `<div>
-        <div class="section-label" style="margin-bottom:6px;">Inicio</div>
-        <img src="${esc(start)}" alt="Inicio" style="width:100%;height:260px;object-fit:cover;border-radius:12px;background:var(--bg-elev-2);" />
-      </div>` : ''}
-      ${finish ? `<div>
-        <div class="section-label" style="margin-bottom:6px;">Final</div>
-        <img src="${esc(finish)}" alt="Final" style="width:100%;height:260px;object-fit:cover;border-radius:12px;background:var(--bg-elev-2);" />
-      </div>` : ''}
-      </div>
-      <button class="primary" data-action="closeModal" style="width:100%;padding:12px;">Listo</button>
-    </div>
-  </div>`;
-  document.getElementById('imgModal').addEventListener('click', e => { if (e.target.id === 'imgModal') closeModal(); });
-  modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle));
-}
-
 // ====== SIMILAR SUGGESTIONS MODAL (Sesión 2) ======
 function openSimilarSuggestions(savedEx, similars){
   const cards = similars.map(ex => {
@@ -2603,7 +2468,6 @@ function openSimilarSuggestions(savedEx, similars){
   document.querySelectorAll('[data-ssm-id]').forEach(b => {
     b.addEventListener('click', () => {
       state.exSelectedId = b.dataset.ssmId;
-      state.exImagePose = 'start';
       closeModal();
       state.view = 'exerciseDetail';
       render();
@@ -2646,7 +2510,6 @@ function openSearchModal(opts = {}){
     document.querySelectorAll('#smResults [data-sm-open]').forEach(b => {
       b.addEventListener('click', () => {
         state.exSelectedId = b.dataset.smOpen;
-        state.exImagePose = 'start';
         if (fromDay) state.exAddToDay = fromDay;
         state.exReturnView = returnView;
         state.exReturnDay = returnDay;
@@ -2963,8 +2826,8 @@ function openLibExerciseEditor(initial, onSave){
         <label class="section-label" style="margin-bottom:6px;">Nombre</label>
         <input id="libExName" type="text" value="${esc(ex.name)}" maxlength="80" style="margin-bottom:12px;" />
         <label class="section-label" style="margin-bottom:6px;">Búsqueda del video en YouTube</label>
-        <input id="libExVideo" type="text" value="${esc(exerciseVideoQuery(ex))}" maxlength="120" placeholder="ej: press de banca tecnica" />
-        <div class="muted" style="font-size:11px;margin-top:6px;margin-bottom:14px;">Se usa para abrir una búsqueda de técnica en YouTube.</div>
+        <input id="libExVideo" type="text" value="${esc(ex.video || '')}" maxlength="120" placeholder="ej: lat pulldown technique" />
+        <div class="muted" style="font-size:11px;margin-top:6px;margin-bottom:14px;">En inglés funciona mejor.</div>
 
         <label class="section-label" style="margin-bottom:6px;">Tipo de registro</label>
         <select id="libMeasurement" style="margin-bottom:14px;">
@@ -3732,12 +3595,8 @@ function renderDay(){
     const { primLabels } = muscleLabels(ex.primary, ex.secondary);
     const musclePill = primLabels.slice(0,2).join(' · ');
     const lastInfo = myLatest ? `<span class="mono" style="font-size:11px;color:var(--accent);">${entrySetCount(myLatest)}×</span> · ${myLatest.date}` : (state.currentUser ? 'Sin registros' : '');
-    const thumbUrl = exerciseThumbnailUrl(ex);
     return `<button data-action="openEx" data-idx="${idx}" class="exercise-card fade-in" style="animation-delay:${idx*30}ms;">
       <div class="row">
-        ${thumbUrl ? `<div data-preview-image="1" title="Ver imagen de técnica" style="width:46px;height:46px;border-radius:10px;background:var(--bg-elev-2);overflow:hidden;flex-shrink:0;cursor:zoom-in;">
-          <img src="${esc(thumbUrl)}" alt="${esc(ex.name)}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.parentElement.style.display='none'" />
-        </div>` : ''}
         <div style="min-width:0;flex:1;">
           <div style="font-size:14px;font-weight:500;margin-bottom:3px;">${esc(ex.name)}</div>
           <div class="muted" style="font-size:12px;">${esc(musclePill)}${lastInfo ? ' · '+lastInfo : ''}</div>
@@ -3897,14 +3756,13 @@ function renderExercise(){
   }
 
   const altsList = (ex.alts||[]).map(a=> `<li style="padding:8px 0;font-size:14px;color:var(--text-muted);border-bottom:1px solid var(--border);list-style:none;"><i class="ti ti-arrow-right" style="font-size:12px;color:var(--accent);margin-right:6px;"></i>${esc(a)}</li>`).join('');
-  const videoQuery = exerciseVideoQuery(ex);
-  const videoUrl = videoQuery ? `https://www.youtube.com/results?search_query=${encodeURIComponent(videoQuery)}` : '#';
+  const videoUrl = ex.video ? `https://www.youtube.com/results?search_query=${encodeURIComponent(ex.video)}` : '#';
   const { primLabels, secLabels } = muscleLabels(ex.primary, ex.secondary);
 
   root.innerHTML = `
     ${headerBar(ex.name, 'goDay')}
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
-      ${videoQuery ? `<a href="${videoUrl}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;padding:9px 14px;background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;text-decoration:none;color:var(--text);font-weight:500;">
+      ${ex.video ? `<a href="${videoUrl}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;padding:9px 14px;background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;text-decoration:none;color:var(--text);font-weight:500;">
         <i class="ti ti-brand-youtube" style="font-size:16px;color:#ff0000;"></i> Ver técnica
       </a>` : ''}
       <button data-action="toggleMuscles" style="background:${state.showMuscles?'var(--accent-bg-strong)':'var(--bg-elev)'};color:${state.showMuscles?'var(--accent)':'var(--text)'};border-color:${state.showMuscles?'var(--accent-border)':'var(--border)'};">
@@ -4489,31 +4347,16 @@ function renderExerciseDetail(){
   const backAction = state.exReturnView === 'day' ? 'exDetailBackToDay' :
                      state.exReturnView === 'home' ? 'exDetailBackHome' :
                      'goExerciseExplorer';
-  const imageSet = exerciseImageSet(ex);
-  if (state.exImagePose !== 'finish') state.exImagePose = 'start';
-  const imagePose = state.exImagePose === 'finish' && imageSet?.finish ? 'finish' : 'start';
-  const activeImageUrl = imagePose === 'finish' ? imageSet?.finish : imageSet?.start;
-  const imageLabel = imagePose === 'finish' ? 'Final' : 'Inicio';
-  const detailImageBlock = imageSet && activeImageUrl ? `
-    <div class="card" style="margin-bottom:14px;padding:12px;">
-      <div class="row" style="gap:12px;align-items:center;">
-        <button data-action="toggleExerciseImagePose" title="Tocar para ver ${imageSet.finish ? (imagePose === 'finish' ? 'inicio' : 'final') : 'imagen'}" style="padding:0;border:none;background:transparent;border-radius:12px;overflow:hidden;width:96px;height:72px;flex-shrink:0;position:relative;">
-          <img src="${esc(activeImageUrl)}" alt="${esc(ex.n||'')}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.closest('.card').style.display='none'" />
-          <span style="position:absolute;left:6px;bottom:6px;background:rgba(5,10,25,0.72);color:white;border-radius:999px;padding:2px 7px;font-size:10px;font-weight:700;">${imageLabel}</span>
-        </button>
-        <div style="min-width:0;flex:1;">
-          <div style="font-size:13px;font-weight:600;margin-bottom:2px;">Imagen de técnica</div>
-          <div class="muted" style="font-size:12px;line-height:1.4;">${imageSet.finish ? 'Toca la imagen para alternar inicio/final.' : 'Vista previa compacta del ejercicio.'}</div>
-        </div>
-        <button data-action="openExerciseImageModal" aria-label="Ampliar imagen" style="padding:9px 11px;border-color:var(--border);background:var(--bg-elev-2);">
-          <i class="ti ti-arrows-maximize" style="font-size:16px;color:var(--accent);"></i>
-        </button>
-      </div>
+  // Image hooks — Sesión 3. Si el ejercicio del DB tiene media (en el futuro), mostrar arriba.
+  const dbMainUrl = ex.media?.main_url || ex.media?.thumbnail_url || (findFreeExImages(ex.en, ex.n, ex.id)?.main_url);
+  const mainImageBlock = dbMainUrl ? `
+    <div class="card" style="margin-bottom:14px;padding:0;overflow:hidden;">
+      <img src="${esc(dbMainUrl)}" alt="${esc(ex.n||'')}" loading="lazy" style="width:100%;display:block;max-height:360px;object-fit:cover;" onerror="this.parentElement.style.display='none'" />
     </div>` : '';
 
   root.innerHTML = `
     ${headerBar(ex.n, backAction)}
-    ${detailImageBlock}
+    ${mainImageBlock}
     <div class="card" style="margin-bottom:14px;">
       <div class="row" style="gap:12px;margin-bottom:14px;">
         <div style="display:flex;align-items:center;justify-content:center;width:60px;height:60px;border-radius:14px;background:${tinfo.color}22;color:${tinfo.color};font-weight:700;font-family:var(--font-mono);font-size:24px;flex-shrink:0;">${ex.t}</div>
@@ -4777,10 +4620,9 @@ function renderEditRoutine(){
   const exList = routine.exercises.map((ex, idx) => `
     <div class="history-entry" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
       <div style="flex:1;min-width:0;">
-        <div style="font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px;">${esc(ex.name)} ${ex._dbId ? '<span class="pill" style="font-size:9px;">DB</span>' : ''}</div>
+        <div style="font-size:14px;font-weight:500;">${esc(ex.name)}</div>
         <div class="muted" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc((ex.primary||[]).map(m=>MUSCLES[m]?.label).filter(Boolean).slice(0,3).join(' · ')) || 'Sin músculos asignados'}</div>
       </div>
-      ${!ex._dbId ? `<button data-action="mapLegacyExercise" data-idx="${idx}" aria-label="Vincular con DB" title="Vincular con base de ejercicios" style="padding:6px;border-color:var(--border);color:var(--accent);"><i class="ti ti-link" style="font-size:14px;"></i></button>` : ''}
       <button data-action="moveExUp" data-idx="${idx}" aria-label="Subir" style="padding:6px;border-color:var(--border);" ${idx===0?'disabled':''}><i class="ti ti-arrow-up" style="font-size:14px;"></i></button>
       <button data-action="moveExDown" data-idx="${idx}" aria-label="Bajar" style="padding:6px;border-color:var(--border);" ${idx===routine.exercises.length-1?'disabled':''}><i class="ti ti-arrow-down" style="font-size:14px;"></i></button>
       <button data-action="editExFromList" data-idx="${idx}" aria-label="Editar" style="padding:6px;border-color:var(--border);"><i class="ti ti-edit" style="font-size:14px;color:var(--accent);"></i></button>
@@ -4850,8 +4692,8 @@ function renderEditExercise(){
       <label class="section-label" style="margin-bottom:6px;">Nombre</label>
       <input id="exName" type="text" value="${esc(window._editEx.name)}" maxlength="80" style="margin-bottom:12px;" />
       <label class="section-label" style="margin-bottom:6px;">Búsqueda del video en YouTube</label>
-      <input id="exVideo" type="text" value="${esc(exerciseVideoQuery(window._editEx))}" maxlength="120" placeholder="ej: press de banca tecnica" />
-      <div class="muted" style="font-size:11px;margin-top:6px;">Se usa para abrir una búsqueda de técnica en YouTube.</div>
+      <input id="exVideo" type="text" value="${esc(window._editEx.video)}" maxlength="120" placeholder="ej: lat pulldown technique" />
+      <div class="muted" style="font-size:11px;margin-top:6px;">En inglés funciona mejor para encontrar videos.</div>
       <label class="section-label" style="margin:12px 0 6px;">Tipo de registro</label>
       <select id="exMeasurement">
         <option value="weight_reps" ${exerciseMeasurementType(window._editEx)==='weight_reps'?'selected':''}>Peso × reps</option>
@@ -5712,15 +5554,7 @@ async function handle(e){
   }
   if (a === 'goHome'){ state.view = 'home'; state.currentDay = null; state.currentExerciseIdx = null; state.showAlts = false; state.showMuscles = false; state.showRoutineMuscles = false; render(); return; }
   if (a === 'goDay'){ state.view = 'day'; state.currentExerciseIdx = null; state.showAlts = false; state.showMuscles = false; render(); return; }
-  if (a === 'openEx'){
-    const idx = Number(btn.dataset.idx);
-    if (e.target.closest('[data-preview-image]')){
-      const ex = getRoutineForDay(state.currentDay)?.exercises?.[idx];
-      if (ex && exerciseImageSet(ex)) openExerciseImageModal(ex);
-      return;
-    }
-    state.currentExerciseIdx = idx; state.view = 'exercise'; state.showAlts = false; state.showMuscles = false; render(); return;
-  }
+  if (a === 'openEx'){ state.currentExerciseIdx = Number(btn.dataset.idx); state.view = 'exercise'; state.showAlts = false; state.showMuscles = false; render(); return; }
   if (a === 'goCompare'){ state.view = 'compare'; state.currentDay = null; state.currentExerciseIdx = null; render(); return; }
   if (a === 'goCompareEx'){ state.view = 'compare'; render(); return; }
   if (a === 'goSettings'){ closeModal(); state.view = 'settings'; render(); return; }
@@ -5795,58 +5629,18 @@ async function handle(e){
   if (a === 'openExEditorSearch'){
     openDbPicker((dbEx) => {
       const conv = dbToAppExercise(dbEx);
-      window._editEx = {
-        ...(window._editEx || {}),
-        ...conv,
-        primary: conv.primary || [],
-        secondary: conv.secondary || [],
-        alts: conv.alts || []
-      };
-      const nameInput = document.getElementById('exName');
-      const videoInput = document.getElementById('exVideo');
-      const measurementInput = document.getElementById('exMeasurement');
-      if (nameInput) nameInput.value = window._editEx.name || '';
-      if (videoInput) videoInput.value = window._editEx.video || '';
-      if (measurementInput) measurementInput.value = window._editEx.measurement || 'weight_reps';
-      const grid = document.getElementById('muscleGrid');
-      if (grid){
-        grid.innerHTML = MUSCLE_IDS.map(m => {
-          const isP = (window._editEx.primary || []).includes(m);
-          const isS = (window._editEx.secondary || []).includes(m);
-          const cls = isP ? 'primary' : isS ? 'secondary' : '';
-          return `<div class="muscle-chip ${cls}" data-action="cycleMuscle" data-mid="${m}">
-            <span>${MUSCLES[m].label}</span>
-            <span style="font-size:10px;font-weight:600;">${isP?'●●':isS?'●':''}</span>
-          </div>`;
-        }).join('');
-        grid.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle));
-      }
-      const altsContainer = document.getElementById('altsContainer');
-      if (altsContainer){
-        altsContainer.innerHTML = (window._editEx.alts || []).map((alt, i) => `
-          <div class="alt-row">
-            <input type="text" class="alt-in" data-i="${i}" value="${esc(alt)}" maxlength="80" placeholder="Alternativa..." />
-            <button data-action="removeAlt" data-i="${i}" class="ghost-danger" style="padding:6px;border:none;"><i class="ti ti-x" style="font-size:14px;"></i></button>
-          </div>`).join('');
-        altsContainer.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle));
-      }
-      toast('Ejercicio cargado. Toca Crear ejercicio para agregarlo.', 'success');
+      window._editEx.name = conv.name;
+      window._editEx.video = conv.video;
+      window._editEx.primary = conv.primary;
+      window._editEx.secondary = conv.secondary;
+      window._editEx.alts = conv.alts;
+      window._editEx.measurement = conv.measurement || 'weight_reps';
+      render();
     });
     return;
   }
   if (a === 'openSearchModal'){ openSearchModal({}); return; }
   if (a === 'openSearchModalForDay'){ openSearchModal({ fromDay: state.currentDay }); return; }
-  if (a === 'toggleExerciseImagePose'){
-    const ex = EXERCISE_DB.find(e => e.id === state.exSelectedId);
-    const set = exerciseImageSet(ex);
-    if (set?.finish) state.exImagePose = state.exImagePose === 'finish' ? 'start' : 'finish';
-    render(); return;
-  }
-  if (a === 'openExerciseImageModal'){
-    const ex = EXERCISE_DB.find(e => e.id === state.exSelectedId);
-    if (ex) openExerciseImageModal(ex);
-    return;
-  }
   if (a === 'addExerciseToDay'){
     const dk = state.exAddToDay;
     const dbEx = EXERCISE_DB.find(e => e.id === state.exSelectedId);
@@ -5899,7 +5693,7 @@ async function handle(e){
     return;
   }
   if (a === 'goHowRatingWorks'){ closeModal(); state.view = 'howRatingWorks'; render(); return; }
-  if (a === 'exOpen'){ state.exSelectedId = btn.dataset.id; state.exImagePose = 'start'; state.view = 'exerciseDetail'; render(); return; }
+  if (a === 'exOpen'){ state.exSelectedId = btn.dataset.id; state.view = 'exerciseDetail'; render(); return; }
   if (a === 'exFilter'){
     const k = btn.dataset.filter, v = btn.dataset.val;
     state.exFilters = state.exFilters || {};
@@ -6285,90 +6079,6 @@ async function handle(e){
   if (a === 'editExFromList'){
     state.currentExerciseIdx = Number(btn.dataset.idx);
     state.view = 'editExercise'; render(); return;
-  }
-  if (a === 'mapLegacyExercise'){
-    const idx = Number(btn.dataset.idx);
-    const dayKey = state.currentDay;
-    const src = getCurrentSource(dayKey);
-    if (src === 'shared' && !isAdmin()){ toast('Solo admins pueden editar la rutina compartida'); return; }
-    openDbPicker(async (dbEx) => {
-      const pr = state.personalRoutines[state.currentUser] || {};
-      let routine = src === 'personal' ? pr[dayKey] : (state.sharedRoutine && state.sharedRoutine[dayKey]);
-      if (!routine && src === 'personal'){
-        const shared = state.sharedRoutine && state.sharedRoutine[dayKey];
-        routine = shared ? JSON.parse(JSON.stringify(shared)) : { label:'Día', focus:'', icon:'ti-barbell', exercises:[] };
-        pr[dayKey] = routine;
-        state.personalRoutines[state.currentUser] = pr;
-      }
-      if (!routine || !routine.exercises[idx]){ toast('No encontré ese ejercicio'); return; }
-      const previous = routine.exercises[idx];
-      routine.exercises[idx] = enrichLegacyExerciseWithDb(previous, dbEx);
-      if (src === 'personal') await savePersonalRoutine(state.currentUser, state.personalRoutines[state.currentUser]);
-      else await saveSharedRoutine(state.sharedRoutine);
-      toast(`Vinculado con ${dbEx.n}. Progreso conservado.`, 'success');
-      render();
-    });
-    return;
-  }
-  if (a === 'mapLegacyExercises'){
-    const dayKey = state.currentDay;
-    const src = getCurrentSource(dayKey);
-    if (src === 'shared' && !isAdmin()){ toast('Solo admins pueden editar la rutina compartida'); return; }
-    const pr = state.personalRoutines[state.currentUser] || {};
-    let routine = src === 'personal' ? pr[dayKey] : (state.sharedRoutine && state.sharedRoutine[dayKey]);
-    if (!routine && src === 'personal'){
-      const shared = state.sharedRoutine && state.sharedRoutine[dayKey];
-      routine = shared ? JSON.parse(JSON.stringify(shared)) : null;
-    }
-    if (!routine){ toast('No encontré esta rutina'); return; }
-    const matches = (routine.exercises || []).map((ex, idx) => ({ idx, ex, dbEx: legacyExerciseDbMatch(ex) }))
-      .filter(m => !m.ex._dbId && m.dbEx);
-    if (!matches.length){ toast('No encontré matches seguros'); return; }
-    const rows = matches.slice(0, 10).map(m => `
-      <div style="padding:9px 0;border-bottom:1px solid var(--border);">
-        <div style="font-size:13px;font-weight:600;">${esc(m.ex.name)}</div>
-        <div class="muted" style="font-size:12px;">→ ${esc(m.dbEx.n)} <span class="pill" style="font-size:9px;margin-left:4px;">${esc(m.dbEx.t || '')}</span></div>
-      </div>`).join('');
-    openModal(`
-      <h2 style="margin-bottom:8px;">Vincular ejercicios con DB</h2>
-      <div class="banner banner-info" style="margin-bottom:12px;">
-        <i class="ti ti-info-circle"></i>
-        <div>Esto agrega metadata e imágenes a los ejercicios actuales. No mueve ejercicios ni borra progreso; los logs siguen ligados a la misma posición del día.</div>
-      </div>
-      <div style="margin-bottom:14px;">${rows}${matches.length > 10 ? `<div class="muted" style="font-size:12px;margin-top:8px;">...y ${matches.length - 10} más</div>` : ''}</div>
-      <div style="display:flex;gap:8px;">
-        <button data-action="closeModal" style="flex:1;padding:10px;">Cancelar</button>
-        <button class="primary" data-action="confirmMapLegacyExercises" style="flex:1;padding:10px;font-weight:600;">Vincular</button>
-      </div>
-    `, () => { modalRoot.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handle)); });
-    return;
-  }
-  if (a === 'confirmMapLegacyExercises'){
-    const dayKey = state.currentDay;
-    const src = getCurrentSource(dayKey);
-    if (src === 'shared' && !isAdmin()){ toast('Solo admins pueden editar la rutina compartida'); return; }
-    const pr = state.personalRoutines[state.currentUser] || {};
-    let routine = src === 'personal' ? pr[dayKey] : (state.sharedRoutine && state.sharedRoutine[dayKey]);
-    if (!routine && src === 'personal'){
-      const shared = state.sharedRoutine && state.sharedRoutine[dayKey];
-      routine = shared ? JSON.parse(JSON.stringify(shared)) : { label:'Día', focus:'', icon:'ti-barbell', exercises:[] };
-      pr[dayKey] = routine;
-      state.personalRoutines[state.currentUser] = pr;
-    }
-    if (!routine){ closeModal(); toast('No encontré esta rutina'); return; }
-    let count = 0;
-    routine.exercises = (routine.exercises || []).map(ex => {
-      if (ex._dbId) return ex;
-      const match = legacyExerciseDbMatch(ex);
-      if (!match) return ex;
-      count += 1;
-      return enrichLegacyExerciseWithDb(ex, match);
-    });
-    if (src === 'personal') await savePersonalRoutine(state.currentUser, state.personalRoutines[state.currentUser]);
-    else await saveSharedRoutine(state.sharedRoutine);
-    closeModal();
-    toast(`Vinculados ${count} ejercicios. Progreso conservado.`, 'success');
-    render(); return;
   }
   if (a === 'moveExUp' || a === 'moveExDown'){
     const idx = Number(btn.dataset.idx);
