@@ -3670,8 +3670,12 @@ function renderDay(){
     const { primLabels } = muscleLabels(ex.primary, ex.secondary);
     const musclePill = primLabels.slice(0,2).join(' · ');
     const lastInfo = myLatest ? `<span class="mono" style="font-size:11px;color:var(--accent);">${entrySetCount(myLatest)}×</span> · ${myLatest.date}` : (state.currentUser ? 'Sin registros' : '');
+    const thumbUrl = exerciseThumbnailUrl(ex);
     return `<button data-action="openEx" data-idx="${idx}" class="exercise-card fade-in" style="animation-delay:${idx*30}ms;">
       <div class="row">
+        ${thumbUrl ? `<div style="width:46px;height:46px;border-radius:10px;background:var(--bg-elev-2);overflow:hidden;flex-shrink:0;">
+          <img src="${esc(thumbUrl)}" alt="${esc(ex.name)}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.parentElement.style.display='none'" />
+        </div>` : ''}
         <div style="min-width:0;flex:1;">
           <div style="font-size:14px;font-weight:500;margin-bottom:3px;">${esc(ex.name)}</div>
           <div class="muted" style="font-size:12px;">${esc(musclePill)}${lastInfo ? ' · '+lastInfo : ''}</div>
