@@ -1416,12 +1416,10 @@ async function loadPersonalLibrary(userId, groupId = groupPath()){
     return JSON.parse(localStorage.getItem(groupLocalKey('personalLibrary:'+userId, groupId))||'{}');
   }
   try {
-    // 1. Intentar leer de la nueva ubicación (global, por user)
     const newSnap = await getDoc(doc(db,'users',userId,'personalLibrary','data'));
     if (newSnap.exists()){
       return newSnap.data().routines || {};
     }
-    // 2. Fallback a la ubicación vieja (atada al grupo)
     const oldSnap = await getDoc(doc(db,'salas',groupId,'personalLibraries',userId));
     return oldSnap.exists() ? (oldSnap.data().routines || {}) : {};
   } catch(e){ console.error(e); return {}; }
@@ -2350,16 +2348,16 @@ function renderSetRow(i, set = null, lastSet = null, unilateralMode = false, mea
       ${repsOnly ? '' : `<input type="number" class="right-weight-in" inputmode="decimal" step="0.5" min="0" value="${right.weight ?? ''}" placeholder="Der lb" style="text-align:center;padding:8px;" />`}
       <button class="del-set" aria-label="Eliminar" style="padding:4px;border:none;color:var(--text-dim);background:transparent;"><i class="ti ti-x" style="font-size:14px;"></i></button>
     </div>
-    <div style="display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:center;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;">
       <label style="display:${timeMode?'none':'inline-flex'};align-items:center;gap:5px;font-size:11px;color:var(--text-muted);white-space:nowrap;">
         <input type="checkbox" class="set-unilateral" ${isUnilateral?'checked':''} /> Uni
       </label>
-      <input type="text" class="note-in" value="${set && set.note ? esc(set.note) : ''}" placeholder="${ph_n ? 'Nota anterior: '+esc(ph_n) : 'Nota del set (opcional)'}" maxlength="120" style="width:100%;font-size:12px;padding:7px 11px;" />
-    </div>
-    ${timeMode ? '' : `<div style="margin-top:8px;">
-      <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--text-muted);cursor:pointer;">
+      ${timeMode ? '' : `<label style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted);white-space:nowrap;cursor:pointer;">
         <input type="checkbox" class="set-drop" ${hasDrops?'checked':''} /> Drop set
-      </label>
+      </label>`}
+    </div>
+    <input type="text" class="note-in" value="${set && set.note ? esc(set.note) : ''}" placeholder="${ph_n ? 'Nota anterior: '+esc(ph_n) : '✎ Nota del set (opcional)'}" maxlength="120" style="width:100%;font-size:12px;padding:7px 11px;margin-bottom:4px;opacity:0.85;" />
+    ${timeMode ? '' : `<div style="margin-top:4px;">
       <div class="drops-container" style="display:${hasDrops?'block':'none'};">${dropRows}</div>
       <button class="add-drop" style="display:${hasDrops?'inline-flex':'none'};align-items:center;gap:5px;margin-top:7px;padding:6px 10px;font-size:11px;border-style:dashed;color:var(--accent);">
         <i class="ti ti-plus" style="font-size:13px;"></i> Agregar drop
@@ -4944,7 +4942,19 @@ function setRowDrop(row, on){
   if (addBtn) addBtn.style.display = on ? 'inline-flex' : 'none';
   const cb = row.querySelector('.set-drop');
   if (cb) cb.checked = !!on;
-  if (on && container && !container.querySelector('.drop-row')) addDropRow(row);
+  // Auto-add primer drop row al activar (UX: no obligar tap extra)
+  if (on && container){
+    const existingDrops = container.querySelectorAll('.drop-row');
+    if (existingDrops.length === 0){
+      addDropRow(row);
+      // Doble check: si por algún motivo no se añadió, reintenta
+      setTimeout(() => {
+        if (container.querySelectorAll('.drop-row').length === 0){
+          addDropRow(row);
+        }
+      }, 50);
+    }
+  }
 }
 function addDropRow(row, seed = null){
   if (!row) return;
