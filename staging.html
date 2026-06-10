@@ -3731,14 +3731,18 @@ function renderDay(){
 
   const me = state.users.find(u=>u.id===state.currentUser);
   const meColor = me ? me.color : 'var(--border)';
+  // Reset semanal: dots solo se prenden si hay log esta semana (lunes-domingo)
+  const ws = new Date(); ws.setDate(ws.getDate()-((ws.getDay()+6)%7));
+  const weekStart = dateKey(ws);
   const exList = r.exercises.map((ex,idx)=>{
     const ek = exerciseKey(dayKey, idx);
     const myLatest = state.currentUser ? latestEntry(state.currentUser, ek) : null;
+    const myThisWeek = state.currentUser ? getEntries(state.currentUser, ek).some(e => e.date >= weekStart) : false;
     const others = state.users.filter(u=>u.id!==state.currentUser);
-    const meDot = state.currentUser ? `<span class="dot" title="Tú" style="background:${myLatest?meColor:'transparent'};border:1.5px solid ${myLatest?meColor:'var(--border-strong)'};"></span>` : '';
+    const meDot = state.currentUser ? `<span class="dot" title="Tú (esta semana)" style="background:${myThisWeek?meColor:'transparent'};border:1.5px solid ${myThisWeek?meColor:'var(--border-strong)'};"></span>` : '';
     const otherDots = others.map(u=>{
-      const has = getEntries(u.id, ek).length > 0;
-      return `<span class="dot" title="${esc(u.name)}" style="background:${has?u.color:'transparent'};border:1.5px solid ${has?u.color:'var(--border-strong)'};"></span>`;
+      const has = getEntries(u.id, ek).some(e => e.date >= weekStart);
+      return `<span class="dot" title="${esc(u.name)} (esta semana)" style="background:${has?u.color:'transparent'};border:1.5px solid ${has?u.color:'var(--border-strong)'};"></span>`;
     }).join('');
     const { primLabels } = muscleLabels(ex.primary, ex.secondary);
     const musclePill = primLabels.slice(0,2).join(' · ');
